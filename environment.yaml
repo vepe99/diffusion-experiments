@@ -12,3 +12,8 @@ dependencies:
       - jupyterlab
       - ipython
       - ipykernel
+      - keras
+      - numpy
+      - matplotlib
+      - tqdm
+      - scipy
