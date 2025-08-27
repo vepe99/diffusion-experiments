@@ -6,14 +6,9 @@ dependencies:
   - python >=3.11,<3.13
   - pip
   - pip:
-      - bayesflow
-      - jax
       - jupyter
       - jupyterlab
       - ipython
       - ipykernel
-      - keras
-      - numpy
-      - matplotlib
-      - tqdm
-      - scipy
+      - bayesflow
+      - jax

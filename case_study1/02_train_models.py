@@ -1,14 +1,16 @@
 import pickle
 
-from keras.utils import clear_session
-
 import bayesflow as bf
 
+from keras.utils import clear_session
+
+EPOCHS = 1
+BATCH_SIZE = 128
 
 MODELS = {
         "flow_matching": (bf.networks.FlowMatching, {}),
         "ot_flow_matching": (bf.networks.FlowMatching, {"use_optimal_transport": True}),
-        "consistency_model": (bf.networks.ConsistencyModel, {}),
+        "consistency_model": (bf.networks.ConsistencyModel, {"total_steps": EPOCHS*BATCH_SIZE}),
         "diffusion_edm_vp": (bf.networks.DiffusionModel, {
             "noise_schedule": "edm", 
             "prediction_type": "F", 
@@ -23,13 +25,10 @@ MODELS = {
         "diffusion_cosine_v": (bf.networks.DiffusionModel, {
             "noise_schedule": "cosine", 
             "prediction_type": "velocity"}),   
-        "diffusion_cosine_epsilon": (bf.networks.DiffusionModel, {
+        "diffusion_cosine_noise": (bf.networks.DiffusionModel, {
             "noise_schedule": "cosine", 
-            "prediction_type": "epsilon"}),
+            "prediction_type": "noise"}),
     }
-
-EPOCHS = 1
-BATCH_SIZE = 128
 
 
 def train_model(model_name, conf_tuple, data):
@@ -37,13 +36,13 @@ def train_model(model_name, conf_tuple, data):
     adapter = (
         bf.adapters.Adapter()
         .convert_dtype("float64", "float32")
-        .rename("theta", "inference_variables")
-        .rename("x", "inference_conditions")
+        .rename("parameters", "inference_variables")
+        .rename("observables", "inference_conditions")
     )
 
     inference_net = conf_tuple[0](**conf_tuple[1])
 
-    workflow = bf.workflows.Workflow(
+    workflow = bf.workflows.BasicWorkflow(
         adapter=adapter,
         inference_network=inference_net,
         checkpoint_filepath=f"checkpoints/{model_name}",
@@ -52,8 +51,12 @@ def train_model(model_name, conf_tuple, data):
 
     _ = workflow.fit_offline(
         data=data["train"],
+        epochs=EPOCHS,
+        batch_size=BATCH_SIZE,
         validation_data=data["validation"]
     )
+
+    
 
 
 if __name__ == '__main__':
@@ -61,9 +64,10 @@ if __name__ == '__main__':
     data_dict = {
         "train": pickle.load(open("data/two_moons_train_data.pkl", "rb")),
         "validation": pickle.load(open("data/two_moons_validation_data.pkl", "rb")),
-        "test": pickle.load(open("data/two_moons_test_data.pkl", "rb"))
     }
 
     for model_name, conf_tuple in MODELS.items():
+
+        bf.utils.logging.info(f"Training {model_name}")
         train_model(model_name, conf_tuple, data_dict)
         clear_session()
