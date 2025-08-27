@@ -1,3 +1,8 @@
+# Custom ignores
+data/
+checkpoints/
+results/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
