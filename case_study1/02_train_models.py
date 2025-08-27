@@ -8,7 +8,7 @@ from keras.utils import clear_session
 
 EPOCHS = 100
 BATCH_SIZE = 128
-NUM_SAMPLES_INFERENCE = 1000
+NUM_SAMPLES_INFERENCE = 10
 MODELS = {
         "flow_matching": (bf.networks.FlowMatching, {}),
         "ot_flow_matching": (bf.networks.FlowMatching, {"use_optimal_transport": True}),
@@ -66,8 +66,10 @@ def train_model(model_name, dataset_name, conf_tuple, data):
         # Posterior samples for position (0, 1.5) from https://arxiv.org/abs/2101.10763
         obs = np.array([[0, 1.5]], dtype=np.float32)
 
+    bf.utils.logging.info(f"Sampling {NUM_SAMPLES_INFERENCE} samples using {model_name} on {dataset}...")
     samples = workflow.sample(conditions={"observables": obs}, num_samples=NUM_SAMPLES_INFERENCE)
     np.save(f"samples/{model_name}_{dataset_name}.npy", samples["parameters"].squeeze())
+
 
 if __name__ == "__main__":
     
@@ -79,7 +81,7 @@ if __name__ == "__main__":
         }
 
         for model_name, conf_tuple in MODELS.items():
-            bf.utils.logging.info(f"Training {model_name} on {dataset}")
+            bf.utils.logging.info(f"Training {model_name} on {dataset}...")
 
             train_model(model_name, dataset, conf_tuple, data_dict)
             clear_session()
