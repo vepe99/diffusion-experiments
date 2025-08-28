@@ -6,13 +6,14 @@ import bayesflow as bf
 from keras.utils import clear_session
 
 
-EPOCHS = 100
+EPOCHS = 1000
 BATCH_SIZE = 128
-NUM_SAMPLES_INFERENCE = 10
+NUM_SAMPLES_INFERENCE = 3000
 MODELS = {
         "flow_matching": (bf.networks.FlowMatching, {}),
         "ot_flow_matching": (bf.networks.FlowMatching, {"use_optimal_transport": True}),
         "consistency_model": (bf.networks.ConsistencyModel, {"total_steps": EPOCHS*BATCH_SIZE}),
+        "stable_consistency_model": (bf.experimental.StableConsistencyModel, {"embedding_kwargs": {"embed_dim": 2}}),
         "diffusion_edm_vp": (bf.networks.DiffusionModel, {
             "noise_schedule": "edm", 
             "prediction_type": "F", 
@@ -48,7 +49,6 @@ def train_model(model_name, dataset_name, conf_tuple, data):
         adapter=adapter,
         inference_network=inference_net,
         checkpoint_filepath=f"checkpoints/{model_name}_{dataset_name}",
-        standardize="all"
     )
 
     _ = workflow.fit_offline(
@@ -65,6 +65,8 @@ def train_model(model_name, dataset_name, conf_tuple, data):
     elif dataset_name == "inverse_kinematics":
         # Posterior samples for position (0, 1.5) from https://arxiv.org/abs/2101.10763
         obs = np.array([[0, 1.5]], dtype=np.float32)
+    else:
+        raise NotImplementedError("Dataset should be in ['two_moons', 'inverse_kinematics']")
 
     bf.utils.logging.info(f"Sampling {NUM_SAMPLES_INFERENCE} samples using {model_name} on {dataset}...")
     samples = workflow.sample(conditions={"observables": obs}, num_samples=NUM_SAMPLES_INFERENCE)
