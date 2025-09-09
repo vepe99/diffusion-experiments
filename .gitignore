@@ -217,3 +217,5 @@ __marimo__/
 
 # Other files to ignore
 /amici_models/
+/case_study2/amici_models/
+/models/
