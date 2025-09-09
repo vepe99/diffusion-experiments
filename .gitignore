@@ -3,6 +3,10 @@ data/
 checkpoints/
 results/
 samples/
+/amici_models/
+/case_study2/amici_models/
+/models/
+**pkl
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -215,7 +219,3 @@ __marimo__/
 # MacOS
 *.DS_Store
 
-# Other files to ignore
-/amici_models/
-/case_study2/amici_models/
-/models/
