@@ -200,6 +200,7 @@ if not os.path.exists(model_path):
         epochs=epochs,
         batch_size=batch_size,
         validation_data=validation_data,
+        verbose=2,
     )
     workflow_global.approximator.save(model_path)
 else:
@@ -260,6 +261,7 @@ if not os.path.exists(model_path):
         epochs=epochs,
         batch_size=batch_size,
         validation_data=validation_data,
+        verbose=2,
     )
     workflow_local.approximator.save(model_path)
 else:
