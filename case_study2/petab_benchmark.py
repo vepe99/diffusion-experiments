@@ -341,18 +341,20 @@ def run_mcmc_single(petab_prob, pypesto_prob, true_params, n_starts, n_mcmc_samp
     idx = np.random.choice(ps.shape[0], size=n_final_samples)
     return ps[idx]
 
-mcmc_posterior_samples = run_mcmc_single(
-            petab_prob=petab_problem,
-            pypesto_prob=pypesto_problem,
-            true_params=validation_data['amici_params'][job_id],
-            n_starts=100,
-            n_mcmc_samples=1e5,
-            n_final_samples=num_samples,
-            n_chains=10
-)
 mcmc_path = f'{storage}mcmc_samples_{problem_name}_{job_id}.pkl'
-with open(mcmc_path, 'wb') as f:
-    pickle.dump(mcmc_posterior_samples, f)
+if not os.path.exists(mcmc_path):
+    mcmc_posterior_samples = run_mcmc_single(
+                petab_prob=petab_problem,
+                pypesto_prob=pypesto_problem,
+                true_params=validation_data['amici_params'][job_id],
+                n_starts=100,
+                n_mcmc_samples=1e5,
+                n_final_samples=num_samples,
+                n_chains=10
+    )
+
+    with open(mcmc_path, 'wb') as f:
+        pickle.dump(mcmc_posterior_samples, f)
 #%%
 # mcmc_path = f'{storage}mcmc_samples_{problem_name}.pkl'
 # if os.path.exists(mcmc_path):
@@ -435,3 +437,5 @@ with open(mcmc_path, 'wb') as f:
 # #%%
 # #diagnostics = workflow.compute_default_diagnostics(test_data=validation_data, num_samples=num_samples)
 # #diagnostics.median(axis=1)
+
+print('Done')
