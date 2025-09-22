@@ -15,6 +15,7 @@ for i in range(100):
         all_samples.append(mcmc_samples)
     except FileNotFoundError:
         print(f"File not found: {mcmc_path}")
+        all_samples.append(mcmc_samples*np.nan)
 
 all_samples = np.array(all_samples)
 print(all_samples.shape)

@@ -41,7 +41,7 @@ print(benchmark_models.MODELS)
 # generate petab problem
 job_id = int(os.environ.get('SLURM_ARRAY_TASK_ID', 0))
 n_cpus = int(os.environ.get('SLURM_CPUS_PER_TASK', 1))
-problem_name = sys.argv[1] if len(sys.argv) > 1 else "Boehm_JProteomeRes2014"
+problem_name = sys.argv[1] if len(sys.argv) > 1 else "Beer_MolBioSystems2014"
 print(problem_name)
 storage = f'plots/{problem_name}/'
 petab_problem = benchmark_models.get_problem(problem_name)
@@ -58,6 +58,24 @@ if problem_name == "Raimundez_PCB2020":
     petab_problem.parameter_df.loc[scale_params_id, 'objectivePriorType'] = "normal"
     petab_problem.parameter_df.loc[scale_params_id, 'objectivePriorParameters'] = "1;10"
     petab_problem.parameter_df.loc[scale_params_id, 'parameterScale'] = "lin"
+
+# add normal prior (on scale) around real parameters values
+real_data_params = petab_problem.parameter_df.nominalValue
+real_data_params = real_data_params[petab_problem.parameter_df['estimate'] == 1]
+std = 0.5
+for i in real_data_params.index:
+    if petab_problem.parameter_df.loc[i, 'estimate'] == 0:
+        continue
+    # set prior mean depending on scale
+    if petab_problem.parameter_df.loc[i, 'parameterScale'] == 'log':
+        mean = np.log(real_data_params.loc[i])
+    elif petab_problem.parameter_df.loc[i, 'parameterScale'] == 'log10':
+        mean = np.log10(real_data_params.loc[i])
+    else:
+        mean = real_data_params.loc[i]
+    if not 'objectivePriorType' in petab_problem.parameter_df or pd.isna(petab_problem.parameter_df.loc[i, 'objectivePriorType']):
+        petab_problem.parameter_df.loc[i, 'objectivePriorType'] = "parameterScaleNormal"
+        petab_problem.parameter_df.loc[i, 'objectivePriorParameters'] = f"{mean};{std}"
 
 
 for i, row in petab_problem.parameter_df.iterrows():
@@ -102,21 +120,23 @@ def prior():
             prior_dict[name] = np.random.uniform(low=lb[i], high=ub[i])
         elif prior_type[i] == 'parameterScaleUniform' or pd.isna(prior_type[i]):
             # scale bounds to scaled space
-            val = np.random.uniform(low=scale_values(lb[i], param_scale[i]), high=scale_values(ub[i], param_scale[i]))
+            lb_scaled_i = scale_values(lb[i], param_scale[i])
+            ub_scaled_i = scale_values(ub[i], param_scale[i])
+            val = np.random.uniform(low=lb_scaled_i, high=ub_scaled_i)
             # scale to linear space
             prior_dict[name] = values_to_linear_scale(val, param_scale[i])
         elif prior_type[i] == 'parameterScaleNormal':
             mean, std = petab_problem.parameter_df['objectivePriorParameters'].values[i].split(';')
-            val = np.random.normal(float(mean), float(std))
+            lb_scaled_i = scale_values(lb[i], param_scale[i])
+            ub_scaled_i = scale_values(ub[i], param_scale[i])
+            a, b = (lb_scaled_i - float(mean)) / float(std), (ub_scaled_i - float(mean)) / float(std)
+            rv = stats.truncnorm.rvs(loc=float(mean), scale=float(std), a=a, b=b)
             # scale to linear space
-            prior_dict[name] = values_to_linear_scale(val, param_scale[i])
+            prior_dict[name] = values_to_linear_scale(rv, param_scale[i])
         elif prior_type[i] == 'normal':
             mean, std = petab_problem.parameter_df['objectivePriorParameters'].values[i].split(';')
             a, b = (lb[i] - float(mean)) / float(std), (ub[i] - float(mean)) / float(std)
-            for t in range(10):
-                rv = stats.truncnorm.rvs(a=a, b=b)
-                if lb[i] <= rv <= ub[i]:  # sample from truncated normal (sometimes it fails and then we try again)
-                    break
+            rv = stats.truncnorm.rvs(loc=float(mean), scale=float(std), a=a, b=b)
             prior_dict[name] = rv
         elif prior_type[i] == 'laplace':
             loc, scale = petab_problem.parameter_df['objectivePriorParameters'].values[i].split(';')
@@ -193,27 +213,19 @@ def run_mcmc(petab_problem, pypesto_problem, true_params=None, n_optimization_st
             engine=pypesto.engine.MultiProcessEngine(n_procs=n_procs) if n_procs > 1 else None,
             progress_bar=verbose
         )
-        x0 = [_pypesto_problem.get_reduced_vector(_result.optimize_result.x[i_c]) for i_c in range(n_optimization_starts)]
-        x0 = x0[:n_chains]  # use only as many as we have chains
-        if n_optimization_starts < n_chains:
-            x0 += [_pypesto_problem.get_reduced_vector(prior()['amici_params']) for _ in range(n_chains - n_optimization_starts)]
-        else:
-            # add at least one prior sample
-            x0[-1] = _pypesto_problem.get_reduced_vector(prior()['amici_params'])
-        # check each x0 if nan
-        for x_i in range(len(x0)):
-            if x0[x_i] is None:
-                print("Warning: x0 contains nan, replace with prior sample")
-                x0[x_i] = _pypesto_problem.get_reduced_vector(prior()['amici_params'])
+        x0 = [_pypesto_problem.get_reduced_vector(_result.optimize_result.x[0])]
+        if x0[0] is None:
+            print("Warning: x0 contains nan, replace with prior sample")
+            x0[0] = _pypesto_problem.get_reduced_vector(prior()['amici_params'])
+        x0 += [_pypesto_problem.get_reduced_vector(prior()['amici_params']) for _ in range(n_chains - 1)]
 
     _sampler = sample.AdaptiveParallelTemperingSampler(
-        internal_sampler=sample.AdaptiveMetropolisSampler(),
-        #internal_sampler=sample.MetropolisSampler(),
+        internal_sampler=sample.AdaptiveMetropolisSampler(
+            options=dict(decay_constant=0.7, threshold_sample=2000)
+        ),
         n_chains=n_chains,
         options=dict(show_progress=verbose)
     )
-    #_sampler = sample.AdaptiveMetropolisSampler()
-    #x0 = x0[0]
 
     _result = sample.sample(
         problem=_pypesto_problem,
@@ -290,6 +302,7 @@ else:
         pickle.dump(training_data, f)
     with open(f'{storage}validation_data_petab_{problem_name}.pkl', 'wb') as f:
         pickle.dump(validation_data, f)
+    exit()
 
 # remove failed simulations
 train_mask = ~training_data['sim_failed']
@@ -309,7 +322,7 @@ param_names = [name for i, name in enumerate(pypesto_problem.x_names) if i in py
 lbs = np.array([lb for i, lb in enumerate(petab_problem.lb_scaled) if i in pypesto_problem.x_free_indices])
 ubs = np.array([ub for i, ub in enumerate(petab_problem.ub_scaled) if i in pypesto_problem.x_free_indices])
 
-num_samples = 100
+num_samples = 1000
 #%% md
 # # MCMC sampling for comparison
 #%%
@@ -341,101 +354,74 @@ def run_mcmc_single(petab_prob, pypesto_prob, true_params, n_starts, n_mcmc_samp
     idx = np.random.choice(ps.shape[0], size=n_final_samples)
     return ps[idx]
 
-mcmc_path = f'{storage}mcmc_samples_{problem_name}_{job_id}.pkl'
-if not os.path.exists(mcmc_path):
-    mcmc_posterior_samples = run_mcmc_single(
-                petab_prob=petab_problem,
-                pypesto_prob=pypesto_problem,
-                true_params=validation_data['amici_params'][job_id],
-                n_starts=100,
-                n_mcmc_samples=1e5,
-                n_final_samples=num_samples,
-                n_chains=10
-    )
-
-    with open(mcmc_path, 'wb') as f:
-        pickle.dump(mcmc_posterior_samples, f)
-#%%
-# mcmc_path = f'{storage}mcmc_samples_{problem_name}.pkl'
-# if os.path.exists(mcmc_path):
-#     with open(mcmc_path, 'rb') as f:
-#         mcmc_posterior_samples = pickle.load(f)
-# else:
-#     mcmc_posterior_samples = Parallel(n_jobs=n_cpus, verbose=10)(
-#         delayed(run_mcmc_single)(
-#             petab_prob=petab_problem,
-#             pypesto_prob=pypesto_problem,
-#             true_params=params,
-#             n_starts=25,
-#             n_mcmc_samples=1e5,
-#             n_final_samples=num_samples,
-#             n_chains=10
-#         ) for params in validation_data['amici_params']
+# mcmc_path = f'{storage}mcmc_samples_{problem_name}_{job_id}.pkl'
+# if not os.path.exists(mcmc_path):
+#     mcmc_posterior_samples = run_mcmc_single(
+#                 petab_prob=petab_problem,
+#                 pypesto_prob=pypesto_problem,
+#                 true_params=validation_data['amici_params'][job_id],
+#                 n_starts=10,
+#                 n_mcmc_samples=1e5,
+#                 n_final_samples=num_samples,
+#                 n_chains=10
 #     )
-#     mcmc_posterior_samples = np.array(mcmc_posterior_samples)
 #
 #     with open(mcmc_path, 'wb') as f:
 #         pickle.dump(mcmc_posterior_samples, f)
+
 #%%
-# fig = bf.diagnostics.recovery(
-#     estimates=mcmc_posterior_samples,
-#     targets=pypesto_problem.get_reduced_vector(validation_data['amici_params'].T).T,
-#     variable_names=param_names,
-# )
-# fig.savefig(f"{storage}petab_benchmark_{problem_name}_mcmc_recovery.png")
-#
-# fig = bf.diagnostics.calibration_ecdf(
-#     estimates=mcmc_posterior_samples,
-#     targets=pypesto_problem.get_reduced_vector(validation_data['amici_params'].T).T,
-#     variable_names=param_names,
-#     difference=True,
-#     stacked=True
-# )
-# fig.savefig(f"{storage}petab_benchmark_{problem_name}_mcmc_calibration.png")
-#
-#
-# adapter = (
-#     bf.adapters.Adapter()
-#     .drop('amici_params')  # only used for simulation
-#     .to_array()
-#     .convert_dtype("float64", "float32")
-#     .concatenate(param_names, into="inference_variables")
-#     .constrain("inference_variables", lower=lbs, upper=ubs, inclusive='both')  # after concatenate such that we can apply an array as constraint
-#
-#     .as_time_series("sim_data")
-#     .log("sim_data", p1=True)
-#     .standardize("sim_data", mean=test_mean, std=test_std)
-#     .nan_to_num("sim_data", default_value=-3.0)
-#     .rename("sim_data", "summary_variables")
-# )
-#
-# #%%
-# workflow = bf.BasicWorkflow(
-#     simulator=simulator,
-#     adapter=adapter,
-#     summary_network=bf.networks.FusionTransformer(summary_dim=len(param_names)*2),
-#     inference_network=bf.networks.DiffusionModel(),
-# )
-# #%%
-# model_path = f'{storage}petab_benchmark_diffusion_model_{problem_name}.keras'
-# if not os.path.exists(model_path):
-#     history = workflow.fit_offline(
-#         training_data,
-#         epochs=epochs,
-#         batch_size=batch_size,
-#         validation_data=validation_data,
-#         verbose=2
-#     )
-#     workflow.approximator.save(model_path)
-# else:
-#     workflow.approximator = keras.models.load_model(model_path)
-# #%%
-# diagnostics_plots = workflow.plot_default_diagnostics(test_data=validation_data, num_samples=num_samples,
-#                                                       calibration_ecdf_kwargs={"difference": True, 'stacked': True})
-# for k in diagnostics_plots.keys():
-#     diagnostics_plots[k].savefig(f"{storage}petab_benchmark_{problem_name}_{k}.png")
-# #%%
-# #diagnostics = workflow.compute_default_diagnostics(test_data=validation_data, num_samples=num_samples)
-# #diagnostics.median(axis=1)
+adapter = (
+    bf.adapters.Adapter()
+    .drop('amici_params')  # only used for simulation
+    .to_array()
+    .convert_dtype("float64", "float32")
+    .concatenate(param_names, into="inference_variables")
+    .constrain("inference_variables", lower=lbs, upper=ubs, inclusive='both')  # after concatenate such that we can apply an array as constraint
+
+    .as_time_series("sim_data")
+    .log("sim_data", p1=True)
+    #.standardize("sim_data", mean=test_mean, std=test_std)
+    #.nan_to_num("sim_data", default_value=-3.0)
+    .rename("sim_data", "summary_variables")
+)
+
+#%%
+from model_settings import EPOCHS, BATCH_SIZE, MODELS, NUM_SAMPLES_INFERENCE, SAMPLER_SETTINGS
+model_name = list(MODELS.keys())[job_id]
+conf_tuple = MODELS[model_name]
+print(model_name)
+
+workflow = bf.BasicWorkflow(
+    simulator=simulator,
+    adapter=adapter,
+    summary_network=bf.networks.FusionTransformer(summary_dim=len(param_names)*2),  # FusionTransformer
+    inference_network=conf_tuple[0](**conf_tuple[1]),
+    standardize='all'
+)
+#%%
+model_path = f'{storage}petab_benchmark_diffusion_model_{problem_name}_{model_name}.keras'
+if not os.path.exists(model_path):
+    history = workflow.fit_offline(
+        training_data,
+        epochs=EPOCHS,
+        batch_size=BATCH_SIZE,
+        validation_data=validation_data,
+        verbose=2
+    )
+    workflow.approximator.save(model_path)
+else:
+    workflow.approximator = keras.models.load_model(model_path)
+#%%
+diagnostics_plots = workflow.plot_default_diagnostics(test_data=validation_data, num_samples=NUM_SAMPLES_INFERENCE,
+                                                      calibration_ecdf_kwargs={"difference": True, 'stacked': True})
+for k in diagnostics_plots.keys():
+    diagnostics_plots[k].savefig(f"{storage}petab_benchmark_{problem_name}_{model_name}_{k}.pdf")
+
+if model_name.startswith('diffusion'):
+    for solver_name in SAMPLER_SETTINGS:
+        diagnostics = workflow.compute_default_diagnostics(test_data=validation_data, num_samples=NUM_SAMPLES_INFERENCE, approximator_kwargs=SAMPLER_SETTINGS[solver_name])
+        print(solver_name)
+        print(diagnostics.median(axis=1))
+        print('\n')
 
 print('Done')
