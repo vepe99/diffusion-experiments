@@ -5,6 +5,7 @@ results/
 samples/
 /amici_models/
 /case_study2/amici_models/
+/case_study2/models/
 /models/
 **pkl
 
@@ -218,4 +219,3 @@ __marimo__/
 
 # MacOS
 *.DS_Store
-

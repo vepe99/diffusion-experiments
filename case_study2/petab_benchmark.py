@@ -7,7 +7,7 @@
 import os
 import sys
 if "KERAS_BACKEND" not in os.environ:
-    os.environ["KERAS_BACKEND"] = "torch"
+    os.environ["KERAS_BACKEND"] = "tensorflow"
 else:
     print(f"Using '{os.environ['KERAS_BACKEND']}' backend")
 
@@ -26,13 +26,17 @@ import pypesto.sample as sample
 import pypesto.petab
 from scipy import stats
 
-import keras
 import bayesflow as bf
 
-import amici
-import logging
-amici.swig_wrappers.logger.setLevel(logging.CRITICAL)
-pypesto.logging.log(level=logging.ERROR, name="pypesto.petab", console=True)
+from model_settings import MODELS, NUM_SAMPLES_INFERENCE, load_model, compute_metrics
+
+
+RUN_ON_GPU = True
+if not RUN_ON_GPU:
+    import amici  # needed only for MCMC, not on the GPU
+    import logging
+    amici.swig_wrappers.logger.setLevel(logging.CRITICAL)
+    pypesto.logging.log(level=logging.ERROR, name="pypesto.petab", console=True)
 
 from petab_helper import scale_values, values_to_linear_scale, amici_pred_to_array, apply_noise_to_data
 
@@ -45,6 +49,13 @@ problem_name = sys.argv[1] if len(sys.argv) > 1 else "Beer_MolBioSystems2014"
 print(problem_name)
 storage = f'plots/{problem_name}/'
 petab_problem = benchmark_models.get_problem(problem_name)
+
+if RUN_ON_GPU:
+    # load problem
+    class DummySimulator:
+        def __init__(self):
+            self.petab_problem = petab_problem
+    dummy_simulator = DummySimulator()
 
 # decrease upper bounds for offset, scaling and noise parameters
 scale_params_id = [name for name in petab_problem.parameter_df.index.values if name[:6] == 'offset' or name[:5] == 'scale']
@@ -87,13 +98,18 @@ for i, row in petab_problem.parameter_df.iterrows():
         if row['parameterScale'] != 'lin' and not row['objectivePriorType'].startswith('parameterScale'):
             raise ValueError(f"Parameter {i} has parameterScale {row['parameterScale']} but {row['objectivePriorType']} prior")
 
-# load problem
-importer = pypesto.petab.PetabImporter(petab_problem, simulator_type="amici")
-factory = importer.create_objective_creator()
 
-model = factory.create_model(verbose=False)
-amici_predictor = factory.create_predictor()
-amici_predictor.amici_objective.amici_solver.setAbsoluteTolerance(1e-8)
+
+if not RUN_ON_GPU:
+    # load problem
+    importer = pypesto.petab.PetabImporter(petab_problem, simulator_type="amici")
+
+    factory = importer.create_objective_creator()
+    model = factory.create_model(verbose=False)
+    amici_predictor = factory.create_predictor()
+    amici_predictor.amici_objective.amici_solver.setAbsoluteTolerance(1e-8)
+else:
+    importer = pypesto.petab.PetabImporter(petab_problem, simulator_type="petab", simulator=dummy_simulator)
 
 # Creating the pypesto problem from PEtab
 pypesto_problem = importer.create_problem(
@@ -161,9 +177,9 @@ def simulator_amici(amici_params):
                                       factory=factory, petab_problem=petab_problem, pypesto_problem=pypesto_problem)
     return dict(sim_data=sim, sim_failed=failed)
 #%%
-prior_sample = prior()
-test = simulator_amici(prior_sample['amici_params'])
-print(test['sim_data'].shape, prior_sample['amici_params'].shape, np.nansum(test['sim_data']))
+#prior_sample = prior()
+#test = simulator_amici(prior_sample['amici_params'])
+#print(test['sim_data'].shape, prior_sample['amici_params'].shape, np.nansum(test['sim_data']))
 
 #%%
 def run_mcmc(petab_problem, pypesto_problem, true_params=None, n_optimization_starts=0, n_chains=10, n_samples=10000,
@@ -252,14 +268,17 @@ def get_mcmc_posterior_samples(res):
     #_samples = values_to_linear_scale(_samples, scales)
     return _samples
 
+def get_samples_from_dict(samples_dict):
+    samples = np.stack([samples_dict[name][..., 0] for name in pypesto_problem.x_names], axis=-1)
+    return samples
+
 # # BayesFlow workflow
 #%%
-simulator = bf.make_simulator([prior, simulator_amici])
+#simulator = bf.make_simulator([prior, simulator_amici])
 #%%
-num_training_batches = 512
+num_training_sets = 512*64
 num_validation_sets = 100
-batch_size = 64
-epochs = 100#0 todo
+
 #%%
 @delayed
 def sample_and_simulate():
@@ -295,7 +314,7 @@ if os.path.exists(f"{storage}validation_data_petab_{problem_name}.pkl"):
         training_data = None
         print("Training data not found")
 else:
-    training_data = simulate_parallel(num_training_batches * batch_size)
+    training_data = simulate_parallel(num_training_sets)
     validation_data = simulate_parallel(num_validation_sets)
 
     with open(f'{storage}training_data_petab_{problem_name}.pkl', 'wb') as f:
@@ -322,106 +341,101 @@ param_names = [name for i, name in enumerate(pypesto_problem.x_names) if i in py
 lbs = np.array([lb for i, lb in enumerate(petab_problem.lb_scaled) if i in pypesto_problem.x_free_indices])
 ubs = np.array([ub for i, ub in enumerate(petab_problem.ub_scaled) if i in pypesto_problem.x_free_indices])
 
-num_samples = 1000
-#%% md
-# # MCMC sampling for comparison
-#%%
-def run_mcmc_single(petab_prob, pypesto_prob, true_params, n_starts, n_mcmc_samples, n_final_samples, n_chains):
-    import amici
-    import logging
-    amici.swig_wrappers.logger.setLevel(logging.CRITICAL)
-    pypesto.logging.log(level=logging.ERROR, name="pypesto.petab", console=True)
-
-    try:
-        r, _, _ = run_mcmc(
-            petab_problem=petab_prob,
-            pypesto_problem=pypesto_prob,
-            true_params=true_params,
-            n_optimization_starts=n_starts,
-            n_samples=n_mcmc_samples,
-            n_chains=n_chains,
-            n_procs=n_cpus
-        )
-    except np.linalg.LinAlgError as e:
-        print("LinAlgError during MCMC:", e)
-        return np.full((n_final_samples, len(pypesto_prob.x_free_indices)), np.nan)
-
-    if r is None:
-        return np.full((n_final_samples, len(pypesto_prob.x_free_indices)), np.nan)
-
-    ps = get_mcmc_posterior_samples(r)
-    # num_samples random samples from posterior
-    idx = np.random.choice(ps.shape[0], size=n_final_samples)
-    return ps[idx]
-
-# mcmc_path = f'{storage}mcmc_samples_{problem_name}_{job_id}.pkl'
-# if not os.path.exists(mcmc_path):
-#     mcmc_posterior_samples = run_mcmc_single(
-#                 petab_prob=petab_problem,
-#                 pypesto_prob=pypesto_problem,
-#                 true_params=validation_data['amici_params'][job_id],
-#                 n_starts=10,
-#                 n_mcmc_samples=1e5,
-#                 n_final_samples=num_samples,
-#                 n_chains=10
-#     )
-#
-#     with open(mcmc_path, 'wb') as f:
-#         pickle.dump(mcmc_posterior_samples, f)
-
-#%%
 adapter = (
     bf.adapters.Adapter()
     .drop('amici_params')  # only used for simulation
     .to_array()
     .convert_dtype("float64", "float32")
     .concatenate(param_names, into="inference_variables")
-    .constrain("inference_variables", lower=lbs, upper=ubs, inclusive='both')  # after concatenate such that we can apply an array as constraint
+    .constrain("inference_variables", lower=lbs, upper=ubs,
+               inclusive='both')  # after concatenate such that we can apply an array as constraint
 
     .as_time_series("sim_data")
     .log("sim_data", p1=True)
-    #.standardize("sim_data", mean=test_mean, std=test_std)
-    #.nan_to_num("sim_data", default_value=-3.0)
+    # .standardize("sim_data", mean=test_mean, std=test_std)
+    # .nan_to_num("sim_data", default_value=-3.0)
     .rename("sim_data", "summary_variables")
 )
 
-#%%
-from model_settings import EPOCHS, BATCH_SIZE, MODELS, NUM_SAMPLES_INFERENCE, SAMPLER_SETTINGS
-model_name = list(MODELS.keys())[job_id]
-conf_tuple = MODELS[model_name]
-print(model_name)
 
-workflow = bf.BasicWorkflow(
-    simulator=simulator,
-    adapter=adapter,
-    summary_network=bf.networks.FusionTransformer(summary_dim=len(param_names)*2),  # FusionTransformer
-    inference_network=conf_tuple[0](**conf_tuple[1]),
-    standardize='all'
-)
-#%%
-model_path = f'{storage}petab_benchmark_diffusion_model_{problem_name}_{model_name}.keras'
-if not os.path.exists(model_path):
-    history = workflow.fit_offline(
-        training_data,
-        epochs=EPOCHS,
-        batch_size=BATCH_SIZE,
-        validation_data=validation_data,
-        verbose=2
-    )
-    workflow.approximator.save(model_path)
+if RUN_ON_GPU:
+    #%%
+    model_name = list(MODELS.keys())[job_id]
+    conf_tuple = MODELS[model_name]
+    print(model_name)
+
+    workflow = load_model(adapter=adapter, conf_tuple=conf_tuple, param_names=param_names, training_data=training_data,
+                          validation_data=validation_data, storage=storage, problem_name=problem_name,
+                          model_name=model_name)
+
+    #%%
+    diagnostics_plots = workflow.plot_default_diagnostics(test_data=validation_data, num_samples=NUM_SAMPLES_INFERENCE,
+                                                          calibration_ecdf_kwargs={"difference": True, 'stacked': True})
+    for k in diagnostics_plots.keys():
+        diagnostics_plots[k].savefig(f"{storage}petab_benchmark_{problem_name}_{model_name}_{k}.png")
 else:
-    workflow.approximator = keras.models.load_model(model_path)
-#%%
-diagnostics_plots = workflow.plot_default_diagnostics(test_data=validation_data, num_samples=NUM_SAMPLES_INFERENCE,
-                                                      calibration_ecdf_kwargs={"difference": True, 'stacked': True})
-for k in diagnostics_plots.keys():
-    diagnostics_plots[k].savefig(f"{storage}petab_benchmark_{problem_name}_{model_name}_{k}.pdf")
+    # MCMC sampling for comparison
+    def run_mcmc_single(petab_prob, pypesto_prob, true_params, n_starts, n_mcmc_samples, n_final_samples, n_chains):
+        import amici
+        import logging
+        amici.swig_wrappers.logger.setLevel(logging.CRITICAL)
+        pypesto.logging.log(level=logging.ERROR, name="pypesto.petab", console=True)
 
-if model_name.startswith('diffusion'):
-    for solver_name in SAMPLER_SETTINGS:
-        diagnostics = workflow.compute_default_diagnostics(test_data=validation_data, num_samples=NUM_SAMPLES_INFERENCE, approximator_kwargs=SAMPLER_SETTINGS[solver_name])
-        print(solver_name)
-        print(diagnostics.median(axis=1))
-        print('\n')
+        try:
+            r, _, _ = run_mcmc(
+                petab_problem=petab_prob,
+                pypesto_problem=pypesto_prob,
+                true_params=true_params,
+                n_optimization_starts=n_starts,
+                n_samples=n_mcmc_samples,
+                n_chains=n_chains,
+                n_procs=n_cpus
+            )
+        except np.linalg.LinAlgError as e:
+            print("LinAlgError during MCMC:", e)
+            return np.full((n_final_samples, len(pypesto_prob.x_free_indices)), np.nan)
+
+        if r is None:
+            return np.full((n_final_samples, len(pypesto_prob.x_free_indices)), np.nan)
+
+        ps = get_mcmc_posterior_samples(r)
+        # num_samples random samples from posterior
+        idx = np.random.choice(ps.shape[0], size=n_final_samples)
+        return ps[idx]
+
+    mcmc_path = f'{storage}mcmc_samples_{problem_name}_{job_id}.pkl'
+    if not os.path.exists(mcmc_path):
+        mcmc_posterior_samples = run_mcmc_single(
+            petab_prob=petab_problem,
+            pypesto_prob=pypesto_problem,
+            true_params=validation_data['amici_params'][job_id],
+            n_starts=10,
+            n_mcmc_samples=1e5,
+            n_final_samples=1000,
+            n_chains=10
+        )
+
+        with open(mcmc_path, 'wb') as f:
+            pickle.dump(mcmc_posterior_samples, f)
+    exit()
+
+mcmc_path = f'{storage}mcmc_samples_{problem_name}.pkl'
+if os.path.exists(mcmc_path):
+    with open(mcmc_path, 'rb') as f:
+        mcmc_posterior_samples = pickle.load(f)
+else:
+    raise FileNotFoundError(f'MCMC samples file {mcmc_path} not found')
+mcmc_mask = ~np.isnan(mcmc_posterior_samples.sum(axis=(1, 2)))
+mcmc_posterior_samples_test = mcmc_posterior_samples[mcmc_mask * val_mask]
+
+test_data = {}
+for keys, values in validation_data.items():
+    test_data[keys] = values[mcmc_mask * val_mask]
+
+metrics = compute_metrics(model_name=model_name, workflow=workflow, test_data=test_data,
+                          mcmc_posterior_samples=mcmc_posterior_samples_test, get_samples_from_dict=get_samples_from_dict)
+
+with open(f'{storage}petab_benchmark_{problem_name}_metrics_{job_id}.pkl', 'wb') as f:
+    pickle.dump(metrics, f)
 
 print('Done')
