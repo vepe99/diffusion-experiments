@@ -1,13 +1,7 @@
 import os
-import numpy as np
 
 import bayesflow as bf
 import keras
-
-from bayesflow.diagnostics.metrics import (root_mean_squared_error,
-                                           posterior_contraction,
-                                           calibration_error,
-                                           classifier_two_sample_test)
 
 
 EPOCHS = 1000
@@ -16,6 +10,7 @@ NUM_SAMPLES_INFERENCE = 1000
 MODELS = {
         ## TimeSeriesNetwork summary network
         "flow_matching": (bf.networks.FlowMatching, {}),
+        "flow_matching_edm": (bf.networks.FlowMatching, {'time_power_law_alpha': -0.6}),
         "ot_flow_matching": (bf.networks.FlowMatching, {"use_optimal_transport": True}),
         "consistency_model": (bf.networks.ConsistencyModel, {"total_steps": EPOCHS*BATCH_SIZE}),
         "stable_consistency_model": (bf.experimental.StableConsistencyModel, {"embedding_kwargs": {"embed_dim": 2}}),
@@ -38,6 +33,7 @@ MODELS = {
             "prediction_type": "noise"}),
         ## FusionTransformer summary network
         "flow_matching_ft": (bf.networks.FlowMatching, {}),
+        "flow_matching_edm_ft": (bf.networks.FlowMatching, {'time_power_law_alpha': -0.6}),
         "ot_flow_matching_ft": (bf.networks.FlowMatching, {"use_optimal_transport": True}),
         "consistency_model_ft": (bf.networks.ConsistencyModel, {"total_steps": EPOCHS * BATCH_SIZE}),
         "stable_consistency_model_ft": (bf.experimental.StableConsistencyModel, {"embedding_kwargs": {"embed_dim": 2}}),
@@ -105,28 +101,3 @@ def load_model(adapter, conf_tuple, param_names, training_data, validation_data,
     else:
         workflow.approximator = keras.models.load_model(model_path)
     return workflow
-
-
-def compute_metrics(model_name, workflow, test_data, mcmc_posterior_samples, get_samples_from_dict):
-    metrics = []
-    for solver_name in SAMPLER_SETTINGS:
-        if solver_name.startswith('sde') and not model_name.startswith('diffusion'):
-            continue
-        if 'consistency' in model_name:
-            workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=NUM_SAMPLES_INFERENCE)
-        else:
-            workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=NUM_SAMPLES_INFERENCE,
-                                                    **SAMPLER_SETTINGS[solver_name])
-        workflow_samples = get_samples_from_dict(workflow_samples_dict)
-        c2st_array = []
-        for ws, ms in zip(workflow_samples, mcmc_posterior_samples):
-            c2st_array.append(classifier_two_sample_test(ws, ms))
-        metrics.append({
-            'model': model_name,
-            'sampler': solver_name,
-            'nrmse': root_mean_squared_error(workflow_samples_dict, test_data)['values'].mean(),
-            'posterior_contraction': posterior_contraction(workflow_samples_dict, test_data)['values'].mean(),
-            'posterior_calibration_error': calibration_error(workflow_samples_dict, test_data)['values'].mean(),
-            'c2st': np.mean(c2st_array)
-        })
-    return metrics

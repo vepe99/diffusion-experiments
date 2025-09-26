@@ -1,4 +1,35 @@
 import numpy as np
+from copy import deepcopy
+
+import pypesto
+from bayesflow.diagnostics.metrics import (root_mean_squared_error,
+                                           posterior_contraction,
+                                           calibration_error,
+                                           classifier_two_sample_test)
+
+
+def create_pypesto_problem(petab_problem, measurement_df=None):
+    _petab_problem = deepcopy(petab_problem)
+    if not measurement_df is None:
+        _petab_problem.measurement_df = measurement_df
+    _importer = pypesto.petab.PetabImporter(_petab_problem, simulator_type="amici", validate_petab=False)
+    _factory = _importer.create_objective_creator()
+    _model = _factory.create_model(verbose=False)
+
+    _pypesto_problem = _importer.create_problem(
+        startpoint_kwargs={"check_fval": True, "check_grad": True}
+    )
+
+    if isinstance(_pypesto_problem.objective, pypesto.objective.AggregatedObjective):
+        _pypesto_problem.objective._objectives[0].amici_solver.setAbsoluteTolerance(1e-8)
+        #_pypesto_problem.objective._objectives[0].amici_solver.setSensitivityMethod(amici.SensitivityMethod.adjoint)
+    else:
+        _pypesto_problem.objective.amici_solver.setAbsoluteTolerance(1e-8)
+        #_pypesto_problem.objective.amici_solver.setSensitivityMethod(amici.SensitivityMethod.adjoint)
+
+    if not measurement_df is None:
+        return _pypesto_problem, _petab_problem
+    return _pypesto_problem
 
 
 def scale_values(x, scale):
@@ -101,39 +132,60 @@ def apply_noise_to_data(sim_df, params, field, pypesto_problem, petab_problem):
                                                                        obs_transformation)
     return sim_df
 
-
-def amici_pred_to_array(pred, params, factory, pypesto_problem, petab_problem):
+def amici_pred_to_df(pred, params, factory, pypesto_problem, petab_problem, field='simulation'):
     """
-    Convert a
+        Convert amici prediction results to a dataframe with noise applied.
+
+        Parameters
+        ----------
+        pred : pypesto.predict.PredictionResult
+            The predictor object containing simulation results.
+        params: array-like
+            The parameter values used for the simulation.
+        factory:
+            pypesto factory object
+        pypesto_problem:
+            pypesto problem object
+        petab_problem:
+            petab problem object
+        field : str, optional
+            The field to extract from the prediction results. Default is 'simulation'.
+        Returns
+        -------
+        array: a 2D numpy array of shape (n_timepoints, n_series) with NaNs for missing values.
+              Each column corresponds to a unique (simulationConditionId, observableId) pair.
+    """
+    failed = False
+    try:
+        if field == 'simulation':
+            sim_df = factory.prediction_to_petab_simulation_df(pred)
+        else:
+            sim_df = factory.prediction_to_petab_measurement_df(pred)
+        sim_df = apply_noise_to_data(sim_df, params, field=field,
+                                     pypesto_problem=pypesto_problem, petab_problem=petab_problem)
+    except ValueError as e:
+        print("Simulation failed:", e)
+        sim_df = petab_problem.measurement_df.copy()
+        sim_df[field] = 0  # will be set to nan later
+        failed = True
+    return sim_df, failed
+
+
+def amici_df_to_array(sim_df, field='simulation'):
+    """
+    Convert amici simulation dataframe to a 2D numpy array.
 
     Parameters
     ----------
-    pred : pypesto.predict.PredictionResult
-        The predictor object containing simulation results.
-    params: array-like
-        The parameter values used for the simulation.
-    factory:
-        pypesto factory object
-    pypesto_problem:
-        pypesto problem object
-    petab_problem:
-        petab problem object
+    sim_df : pandas.DataFrame
+        The simulation dataframe in PEtab format.
+    field: str
+        The field in the simulation dataframe to extract (default is 'simulation').
     Returns
     -------
     array: a 2D numpy array of shape (n_timepoints, n_series) with NaNs for missing values.
           Each column corresponds to a unique (simulationConditionId, observableId) pair.
     """
-    failed = False
-    try:
-        sim_df = factory.prediction_to_petab_simulation_df(pred)
-        sim_df = apply_noise_to_data(sim_df, params, field='simulation',
-                                     pypesto_problem=pypesto_problem, petab_problem=petab_problem)
-    except ValueError as e:
-        print("Simulation failed:", e)
-        sim_df = petab_problem.measurement_df.copy()
-        sim_df["simulation"] = 0  # will be set to nan later
-        failed = True
-
     # all unique time points
     timepoints = np.sort(sim_df["time"].unique())
 
@@ -141,12 +193,10 @@ def amici_pred_to_array(pred, params, factory, pypesto_problem, petab_problem):
     wide = sim_df.pivot_table(
         index=['simulationConditionId', 'observableId'],
         columns="time",
-        values="simulation",
+        values=field,
         aggfunc="first",  # just in case duplicates exist
         sort=True
     )
-    if failed:
-        wide = wide * np.nan  # set all to nan if simulation failed
 
     # reindex columns to include all time points
     wide = wide.reindex(columns=timepoints)
@@ -155,4 +205,58 @@ def amici_pred_to_array(pred, params, factory, pypesto_problem, petab_problem):
 
     # inf to nan
     arr[np.isinf(arr)] = np.nan
-    return arr, failed
+    return arr
+
+def compute_objective(petab_problem, measurement_df, eval_params) -> float:
+    if not 'measurement' in measurement_df.columns:
+        measurement_df['measurement'] = measurement_df['simulation']  # pypesto expects measurement column
+    _pypesto_problem, _petab_problem = create_pypesto_problem(petab_problem, measurement_df)
+    return _pypesto_problem.objective(eval_params)
+
+
+def compute_metrics(model_name, workflow, test_data, sampler_settings, get_samples_from_dict, petab_problem,
+                    num_samples_inference):
+    metrics = []
+    for solver_name in sampler_settings:
+        if solver_name.startswith('sde') and not model_name.startswith('diffusion'):
+            continue
+        if 'consistency' in model_name:
+            workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=num_samples_inference)
+        else:
+            workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=num_samples_inference,
+                                                    **sampler_settings[solver_name])
+        #workflow_samples = get_samples_from_dict(workflow_samples_dict)
+        #c2st_array = []
+        #for ws, ms in zip(workflow_samples, reference_samples):
+        #    c2st_array.append(classifier_two_sample_test(ws, ms))
+        metrics.append({
+            'model': model_name,
+            'sampler': solver_name,
+            'nrmse': root_mean_squared_error(workflow_samples_dict, test_data, normalize='mean')['values'].mean(),
+            'posterior_contraction': posterior_contraction(workflow_samples_dict, test_data)['values'].mean(),
+            'posterior_calibration_error': calibration_error(workflow_samples_dict, test_data)['values'].mean(),
+            #'c2st': np.mean(c2st_array)
+        })
+
+        # compute C2ST with augmented data (objective value)
+        if 'consistency' in model_name:
+            workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=1)
+        else:
+            workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=1,
+                                                    **sampler_settings[solver_name])
+        workflow_samples = get_samples_from_dict(workflow_samples_dict)[:, 0]
+
+        obj_val = np.zeros((len(test_data['sim_data_df']), 1))
+        for i in range(len(test_data['sim_data_df'])):
+            obj_val[i] = compute_objective(petab_problem, test_data['sim_data_df'][i], workflow_samples[i])
+        workflow_samples_aug = np.concatenate((workflow_samples, obj_val), axis=-1)
+
+        # augment test data
+        obj_val = np.zeros((len(test_data['sim_data_df']), 1))
+        for i in range(len(test_data['sim_data_df'])):
+            obj_val[i] = compute_objective(petab_problem, test_data['sim_data_df'][i], test_data['amici_params'][i])
+        test_data_aug = np.concatenate((test_data['amici_params'], obj_val), axis=-1)
+
+        # compute C2ST
+        metrics[-1]['c2st'] = classifier_two_sample_test(workflow_samples_aug, test_data_aug, validation_split=0.2)
+    return metrics

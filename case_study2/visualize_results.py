@@ -5,12 +5,16 @@ import numpy as np
 
 # metrics
 METRICS = ['NRMSE', 'Posterior Contraction', 'Calibration Error', 'c2st']
-METRIC_LABELS = {'NRMSE':'NRMSE','Posterior Contraction':'Contraction','Calibration Error':'Calibration','c2st':'C2ST'}
+METRIC_LABELS = {
+    'NRMSE':r'NRMSE',
+    'Posterior Contraction':r'$1-$Contraction',
+    'Calibration Error':'Calibration\nError',
+    'c2st':r'C2ST$-0.5$'}
 
 # colors and styles
 def _create_model_config():
     colors = {
-        "flow_matching":"#1f77b4","ot_flow_matching":"#ff7f0e",
+        "flow_matching":"#1f77b4","ot_flow_matching":"#ff7f0e","flow_matching_edm":"#1abc9c",
         "consistency_model":"#2ca02c","stable_consistency_model":"#d62728",
         "diffusion_edm_vp":"#9467bd","diffusion_edm_ve":"#8c564b",
         "diffusion_cosine_F":"#e377c2","diffusion_cosine_v":"#7f7f7f","diffusion_cosine_noise":"#bcbd22",
@@ -23,9 +27,9 @@ def _create_sampler_linestyles():
 
 def _get_model_display_name(k):
     names = {
-        "flow_matching":"Flow Matching","ot_flow_matching":"Flow Matching (OT)",
+        "flow_matching":"Flow Matching","ot_flow_matching":"Flow Matching (OT)","flow_matching_edm":"Flow Matching (EDM)",
         "consistency_model":"Discrete Consistency","stable_consistency_model":"Stable Consistency",
-        "diffusion_edm_vp":"EDM VP","diffusion_edm_ve":"EDM VE",
+        "diffusion_edm_vp":"VP-EDM","diffusion_edm_ve":"VE-EDM",
         "diffusion_cosine_F":r"Cosine $\boldsymbol{F}$-pred.","diffusion_cosine_v":r"Cosine $\boldsymbol{v}$-pred.","diffusion_cosine_noise":r"Cosine $\boldsymbol{\epsilon}$-pred.",
         "MCMC":"MCMC"
     }
@@ -33,7 +37,7 @@ def _get_model_display_name(k):
 
 def _get_method_groups(df, key):
     groups = {}
-    flow = ['flow_matching','ot_flow_matching','MCMC']
+    flow = ['flow_matching','ot_flow_matching','flow_matching_edm','MCMC']
     cons = ['consistency_model','stable_consistency_model','MCMC']
     diff = ['diffusion_edm_vp','diffusion_edm_ve','diffusion_cosine_F','diffusion_cosine_v','diffusion_cosine_noise','MCMC']
 
@@ -65,7 +69,7 @@ def _angles(n, rot):
 
 def _plot(ax, angles, vals, label, color, ls, marker, alpha):
     v = vals + vals[:1]
-    ax.plot(angles, v, label=label, color=color, linestyle=ls, marker=marker, linewidth=3, alpha=alpha)
+    ax.plot(angles, v, label=label, color=color, linestyle=ls, marker=marker, linewidth=2, alpha=alpha)
     ax.fill(angles, v, color=color, alpha=0.05)
 
 def _prep_metrics(df):
@@ -123,7 +127,7 @@ def _plot_single_radar(df, config, title, save_path, alpha, suptitle, rotation_a
     maxv = {m: 1 for m in metrics} #float(df[m].max()) for m in metrics}
     angles = _angles(len(metrics), rotation_angle)
 
-    fig, ax = plt.subplots(figsize=(7,6), subplot_kw=dict(polar=True), layout='constrained')
+    fig, ax = plt.subplots(figsize=(5,4), subplot_kw=dict(polar=True), layout='constrained')
     colors = config["visualization"]["colors"]
     ls_map = _create_sampler_linestyles()
 
@@ -154,15 +158,15 @@ def _plot_single_radar(df, config, title, save_path, alpha, suptitle, rotation_a
 
     for i, m in enumerate(metrics):
         if m == 'NRMSE' or m == 'Calibration Error':
-            y = 1.3
+            y = 1.4
         else:
-            y = 1.1
-        ax.text(angles[i], y, f"{METRIC_LABELS.get(m,m)}", ha='center', size=14, color='black', fontweight='bold')  # {maxv[m]:.3f
+            y = 1.15
+        ax.text(angles[i], y, f"{METRIC_LABELS.get(m,m)}", ha='center', size=11, color='black')  # {maxv[m]:.3f
 
     handles, labels = ax.get_legend_handles_labels()
     if handles:
-        fig.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.5, 0.07),
-                   ncol=min(len(handles),3), fontsize=11)
+        fig.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.5, 0.05),
+                   ncol=min(len(handles),2), fontsize=11)
 
     if suptitle:
         fig.suptitle(title, fontsize=18, fontweight="bold", y=0.95)
