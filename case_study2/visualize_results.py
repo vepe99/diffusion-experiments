@@ -9,7 +9,7 @@ METRIC_LABELS = {
     'NRMSE':r'NRMSE',
     'Posterior Contraction':r'$1-$Contraction',
     'Calibration Error':'Calibration\nError',
-    'c2st':r'C2ST$-0.5$'}
+    'c2st':r'$\vert \text{C2ST}-0.5\vert$'}
 
 # colors and styles
 def _create_model_config():
@@ -18,7 +18,11 @@ def _create_model_config():
         "consistency_model":"#2ca02c","stable_consistency_model":"#d62728",
         "diffusion_edm_vp":"#9467bd","diffusion_edm_ve":"#8c564b",
         "diffusion_cosine_F":"#e377c2","diffusion_cosine_v":"#7f7f7f","diffusion_cosine_noise":"#bcbd22",
-        "ode":"#17becf","sde":"#ffbb78","sde-pc":"#98df8a","MCMC":"#000000"
+        "ode":"#17becf","sde":"#ffbb78","sde-pc":"#98df8a","MCMC":"#000000",
+        "flow_matching_ft": "#1f77b4", "ot_flow_matching_ft": "#ff7f0e", "flow_matching_edm_ft": "#1abc9c",
+        "consistency_model_ft": "#2ca02c", "stable_consistency_model_ft": "#d62728",
+        "diffusion_edm_vp_ft": "#9467bd", "diffusion_edm_ve_ft": "#8c564b",
+        "diffusion_cosine_F_ft": "#e377c2", "diffusion_cosine_v_ft": "#7f7f7f", "diffusion_cosine_noise_ft": "#bcbd22"
     }
     return {"visualization":{"colors":colors}}
 
@@ -26,6 +30,8 @@ def _create_sampler_linestyles():
     return {'ode':'-','sde':'--','sde-pc':'-.'}
 
 def _get_model_display_name(k):
+    if k[-2:] == 'ft':
+        k = k[:-2]
     names = {
         "flow_matching":"Flow Matching","ot_flow_matching":"Flow Matching (OT)","flow_matching_edm":"Flow Matching (EDM)",
         "consistency_model":"Discrete Consistency","stable_consistency_model":"Stable Consistency",
@@ -36,10 +42,12 @@ def _get_model_display_name(k):
     return names.get(k, k.replace("_"," ").title())
 
 def _get_method_groups(df, key):
+    if key[-2:] == 'ft':
+        key = key[:-2]
     groups = {}
-    flow = ['flow_matching','ot_flow_matching','flow_matching_edm','MCMC']
-    cons = ['consistency_model','stable_consistency_model','MCMC']
-    diff = ['diffusion_edm_vp','diffusion_edm_ve','diffusion_cosine_F','diffusion_cosine_v','diffusion_cosine_noise','MCMC']
+    flow = ['flow_matching','ot_flow_matching','flow_matching_edm']
+    cons = ['consistency_model','stable_consistency_model']
+    diff = ['diffusion_edm_vp','diffusion_edm_ve','diffusion_cosine_F','diffusion_cosine_v','diffusion_cosine_noise']
 
     if key == 'flow': groups['Flow Methods'] = df[df['model'].isin(flow)]
     elif key == 'consistency': groups['Consistency Methods'] = df[df['model'].isin(cons)]
@@ -77,7 +85,7 @@ def _prep_metrics(df):
     if 'posterior_contraction' in d.columns:
         d['Posterior Contraction'] = 1 - d['posterior_contraction']
     if 'c2st' in d.columns:
-        d['c2st'] = d['c2st'] - 0.5
+        d['c2st'] = np.abs(d['c2st'] - 0.5)
     if 'nrmse' in d.columns:
         d['NRMSE'] = d['nrmse']
     if 'posterior_calibration_error' in d.columns:
@@ -165,7 +173,7 @@ def _plot_single_radar(df, config, title, save_path, alpha, suptitle, rotation_a
 
     handles, labels = ax.get_legend_handles_labels()
     if handles:
-        fig.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.5, 0.05),
+        fig.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.5, 0.0),
                    ncol=min(len(handles),2), fontsize=11)
 
     if suptitle:

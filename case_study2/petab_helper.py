@@ -225,17 +225,13 @@ def compute_metrics(model_name, workflow, test_data, sampler_settings, get_sampl
         else:
             workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=num_samples_inference,
                                                     **sampler_settings[solver_name])
-        #workflow_samples = get_samples_from_dict(workflow_samples_dict)
-        #c2st_array = []
-        #for ws, ms in zip(workflow_samples, reference_samples):
-        #    c2st_array.append(classifier_two_sample_test(ws, ms))
+
         metrics.append({
             'model': model_name,
             'sampler': solver_name,
-            'nrmse': root_mean_squared_error(workflow_samples_dict, test_data, normalize='mean')['values'].mean(),
+            'nrmse': root_mean_squared_error(workflow_samples_dict, test_data)['values'].mean(),
             'posterior_contraction': posterior_contraction(workflow_samples_dict, test_data)['values'].mean(),
             'posterior_calibration_error': calibration_error(workflow_samples_dict, test_data)['values'].mean(),
-            #'c2st': np.mean(c2st_array)
         })
 
         # compute C2ST with augmented data (objective value)

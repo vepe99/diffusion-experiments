@@ -2,7 +2,7 @@ import sys
 import numpy as np
 import pickle
 
-problem_name = sys.argv[1] if len(sys.argv) > 1 else "Boehm_JProteomeRes2014"
+problem_name = sys.argv[1] if len(sys.argv) > 1 else "Beer_MolBioSystems2014"
 print(problem_name)
 
 storage = f'plots/{problem_name}/'

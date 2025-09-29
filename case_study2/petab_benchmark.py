@@ -31,6 +31,7 @@ from model_settings import MODELS, NUM_SAMPLES_INFERENCE, SAMPLER_SETTINGS, load
 
 
 RUN_ON_GPU = True
+USE_MALA = True
 if not RUN_ON_GPU:
     import amici  # needed only for MCMC, not on the GPU
     import logging
@@ -191,7 +192,7 @@ def simulator_amici(amici_params, return_df=False):
 
 #%%
 def run_mcmc(petab_problem, data_df=None, n_optimization_starts=0, n_chains=10, n_samples=10000,
-             n_procs=10, verbose=False) -> Union[pypesto.result.Result, tuple[pypesto.result.Result, petab.Problem, pypesto.Problem]]:
+             n_procs=10, use_mala=True, verbose=False) -> Union[pypesto.result.Result, tuple[pypesto.result.Result, petab.Problem, pypesto.Problem]]:
     if data_df is None:
         # use true data
         _pypesto_problem = create_pypesto_problem(petab_problem)
@@ -223,10 +224,7 @@ def run_mcmc(petab_problem, data_df=None, n_optimization_starts=0, n_chains=10, 
         x0 += [_pypesto_problem.get_reduced_vector(prior()['amici_params']) for _ in range(n_chains - 1)]
 
     _sampler = sample.AdaptiveParallelTemperingSampler(
-        # internal_sampler=sample.AdaptiveMetropolisSampler(
-        #      options=dict(decay_constant=0.7, threshold_sample=2000)
-        # ),
-        internal_sampler=sample.Mala(),
+        internal_sampler=sample.MalaSampler() if use_mala else sample.AdaptiveMetropolisSampler(),
         n_chains=n_chains,
         options=dict(show_progress=verbose)
     )
@@ -313,16 +311,17 @@ else:
     exit()
 
 # remove failed simulations
-train_mask = ~training_data['sim_failed']
-for key in training_data.keys():
-    training_data[key] = training_data[key][train_mask]
+if not training_data is None:
+    train_mask = ~training_data['sim_failed']
+    for key in training_data.keys():
+        training_data[key] = training_data[key][train_mask]
+    print(f"Failed Training data: {np.sum(~train_mask)} / {len(train_mask)}")
 val_mask = ~validation_data['sim_failed']
 for key in validation_data.keys():
     if key == 'sim_data_df':
         continue
     validation_data[key] = validation_data[key][val_mask]
-print(f"Failed Training data: {np.sum(~train_mask)} / {len(train_mask)}, "
-      f"Failed Validation data: {np.sum(~val_mask)} / {len(val_mask)}")
+print(f"Failed Validation data: {np.sum(~val_mask)} / {len(val_mask)}")
 
 test_mean = np.nanmean(np.log(validation_data['sim_data']+1), axis=(0,1), keepdims=True)
 test_std = np.nanstd(np.log(validation_data['sim_data']+1), axis=(0,1), keepdims=True)
@@ -366,7 +365,7 @@ if RUN_ON_GPU:
         diagnostics_plots[k].savefig(f"{storage}petab_benchmark_{problem_name}_{model_name}_{k}.png")
 else:
     # MCMC sampling for comparison
-    def run_mcmc_single(petab_prob, pypesto_prob, sim_data_df, n_starts, n_mcmc_samples, n_final_samples, n_chains):
+    def run_mcmc_single(petab_prob, pypesto_prob, sim_data_df, n_starts, n_mcmc_samples, n_final_samples, n_chains, use_mala):
         import amici
         import logging
         amici.swig_wrappers.logger.setLevel(logging.CRITICAL)
@@ -381,7 +380,8 @@ else:
             n_optimization_starts=n_starts,
             n_samples=n_mcmc_samples,
             n_chains=n_chains,
-            n_procs=1
+            n_procs=1,
+            use_mala=use_mala
         )
 
         if r is None:
@@ -392,20 +392,22 @@ else:
         idx = np.random.choice(ps.shape[0], size=n_final_samples)
         return ps[idx]
 
-    mcmc_path = f'{storage}mcmc_samples_{problem_name}_{job_id}.pkl'
+    mcmc_path = f'{storage}mcmc_samples_{problem_name}{"_mala" if USE_MALA else ""}_{job_id}.pkl'
     if not os.path.exists(mcmc_path):
         mcmc_posterior_samples = run_mcmc_single(
             petab_prob=petab_problem,
             pypesto_prob=pypesto_problem,
             sim_data_df=validation_data['sim_data_df'][job_id],
             n_starts=0,
-            n_mcmc_samples=1e4,
+            n_mcmc_samples=1e5,
             n_final_samples=1000,
-            n_chains=10
+            n_chains=10,
+            use_mala=USE_MALA
         )
 
         with open(mcmc_path, 'wb') as f:
             pickle.dump(mcmc_posterior_samples, f)
+    print('Done')
     exit()
 
 
