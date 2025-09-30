@@ -8,8 +8,8 @@ METRICS = ['NRMSE', 'Posterior Contraction', 'Calibration Error', 'c2st']
 METRIC_LABELS = {
     'NRMSE':r'NRMSE',
     'Posterior Contraction':r'$1-$Contraction',
-    'Calibration Error':'Calibration\nError',
-    'c2st':r'$\vert \text{C2ST}-0.5\vert$'}
+    'Calibration Error':'Normalized\nCalibration\nError',
+    'c2st':r'$\vert \text{C2ST}-0.5\vert / 0.5$'}
 
 # colors and styles
 def _create_model_config():
@@ -77,7 +77,8 @@ def _angles(n, rot):
 
 def _plot(ax, angles, vals, label, color, ls, marker, alpha):
     v = vals + vals[:1]
-    ax.plot(angles, v, label=label, color=color, linestyle=ls, marker=marker, linewidth=2, alpha=alpha)
+    ax.plot(angles, v, label=label, color=color, linestyle=ls, marker=marker, linewidth=1, alpha=alpha)
+    ax.scatter(angles, v, color=color, marker=marker, linewidth=1)
     ax.fill(angles, v, color=color, alpha=0.05)
 
 def _prep_metrics(df):
@@ -89,7 +90,7 @@ def _prep_metrics(df):
     if 'nrmse' in d.columns:
         d['NRMSE'] = d['nrmse']
     if 'posterior_calibration_error' in d.columns:
-        d['Calibration Error'] = d['posterior_calibration_error']
+        d['Calibration Error'] = d['posterior_calibration_error'] / 0.5
     return d
 
 # model comparison radar
