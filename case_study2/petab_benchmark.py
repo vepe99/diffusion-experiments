@@ -30,7 +30,7 @@ import bayesflow as bf
 from model_settings import MODELS, NUM_SAMPLES_INFERENCE, SAMPLER_SETTINGS, load_model
 
 
-RUN_ON_GPU = True
+RUN_ON_GPU = False
 USE_MALA = True
 if not RUN_ON_GPU:
     import amici  # needed only for MCMC, not on the GPU
@@ -192,7 +192,7 @@ def simulator_amici(amici_params, return_df=False):
 
 #%%
 def run_mcmc(petab_problem, data_df=None, n_optimization_starts=0, n_chains=10, n_samples=10000,
-             n_procs=10, use_mala=True, verbose=False) -> Union[pypesto.result.Result, tuple[pypesto.result.Result, petab.Problem, pypesto.Problem]]:
+             n_procs=10, use_mala=True, verbose=False, mix_start=0.75) -> Union[pypesto.result.Result, tuple[pypesto.result.Result, petab.Problem, pypesto.Problem]]:
     if data_df is None:
         # use true data
         _pypesto_problem = create_pypesto_problem(petab_problem)
@@ -218,6 +218,8 @@ def run_mcmc(petab_problem, data_df=None, n_optimization_starts=0, n_chains=10, 
             progress_bar=verbose
         )
         x0 = [_pypesto_problem.get_reduced_vector(_result.optimize_result.x[0])]
+        x0 = [mix_start * np.array(x0[0]) + (1 - mix_start) * _pypesto_problem.get_reduced_vector(
+            prior()['amici_params'])]
         if x0[0] is None:
             print("Warning: x0 contains nan, replace with prior sample")
             x0[0] = _pypesto_problem.get_reduced_vector(prior()['amici_params'])
@@ -398,10 +400,10 @@ else:
             petab_prob=petab_problem,
             pypesto_prob=pypesto_problem,
             sim_data_df=validation_data['sim_data_df'][job_id],
-            n_starts=0,
+            n_starts=10,
             n_mcmc_samples=1e5,
             n_final_samples=1000,
-            n_chains=10,
+            n_chains=6,
             use_mala=USE_MALA
         )
 

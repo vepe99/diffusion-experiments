@@ -3,6 +3,8 @@ import os
 import bayesflow as bf
 import keras
 
+from ema_callback import EMA, save_ema_models
+
 
 EPOCHS = 1000
 BATCH_SIZE = 64
@@ -18,6 +20,10 @@ MODELS = {
             "noise_schedule": "edm",
             "prediction_type": "F",
             "schedule_kwargs": {"variance_type": "preserving"}}),
+        "diffusion_edm_vp_ema": (bf.networks.DiffusionModel, {
+                    "noise_schedule": "edm",
+                    "prediction_type": "F",
+                    "schedule_kwargs": {"variance_type": "preserving"}}),
         "diffusion_edm_ve": (bf.networks.DiffusionModel, {
             "noise_schedule": "edm",
             "prediction_type": "F",
@@ -41,6 +47,10 @@ MODELS = {
             "noise_schedule": "edm",
             "prediction_type": "F",
             "schedule_kwargs": {"variance_type": "preserving"}}),
+        "diffusion_edm_vp_ft_ema": (bf.networks.DiffusionModel, {
+                            "noise_schedule": "edm",
+                            "prediction_type": "F",
+                            "schedule_kwargs": {"variance_type": "preserving"}}),
         "diffusion_edm_ve_ft": (bf.networks.DiffusionModel, {
             "noise_schedule": "edm",
             "prediction_type": "F",
@@ -73,7 +83,8 @@ SAMPLER_SETTINGS = {
     }
 }
 
-def load_model(adapter, conf_tuple, param_names, training_data, validation_data, storage, problem_name, model_name):
+def load_model(adapter, conf_tuple, param_names, training_data, validation_data, storage, problem_name, model_name,
+               use_ema=False):
     if 'ft' in model_name:
         summary_network = bf.networks.FusionTransformer(summary_dim=len(param_names) * 2)
     else:
@@ -88,16 +99,30 @@ def load_model(adapter, conf_tuple, param_names, training_data, validation_data,
         inference_network=conf_tuple[0](**conf_tuple[1]),
         standardize='all'
     )
+
     model_path = f'{storage}petab_benchmark_diffusion_model_{problem_name}_{model_name}.keras'
+    model_path_ema = f'{storage}petab_benchmark_diffusion_model_{problem_name}_{model_name}_ema.keras'
+    if 'ema' in model_name:
+        cbs = [EMA(update_every=int(EPOCHS * 512 * 64 * 0.01))]
+    else:
+        cbs = None
+
     if not os.path.exists(model_path):
         history = workflow.fit_offline(
             training_data,
             epochs=EPOCHS,
             batch_size=BATCH_SIZE,
             validation_data=validation_data,
-            verbose=2
+            verbose=2,
+            callbacks=cbs
         )
         workflow.approximator.save(model_path)
+
+        if 'ema' in model_name:
+            save_ema_models(workflow.approximator, cbs[0], path_ema=model_path_ema, path_noema=model_path)
     else:
-        workflow.approximator = keras.models.load_model(model_path)
+        if use_ema:
+            workflow.approximator = keras.models.load_model(model_path_ema)
+        else:
+            workflow.approximator = keras.models.load_model(model_path)
     return workflow
