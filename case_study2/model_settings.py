@@ -103,7 +103,7 @@ def load_model(adapter, conf_tuple, param_names, training_data, validation_data,
     model_path = f'{storage}petab_benchmark_diffusion_model_{problem_name}_{model_name}.keras'
     model_path_ema = f'{storage}petab_benchmark_diffusion_model_{problem_name}_{model_name}_ema.keras'
     if 'ema' in model_name:
-        cbs = [EMA(update_every=int(EPOCHS * 512 * 64 * 0.01))]
+        cbs = [EMA()]
     else:
         cbs = None
 

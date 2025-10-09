@@ -32,6 +32,7 @@ from model_settings import MODELS, NUM_SAMPLES_INFERENCE, SAMPLER_SETTINGS, load
 
 RUN_ON_GPU = False
 USE_MALA = True
+USE_EMA = True
 if not RUN_ON_GPU:
     import amici  # needed only for MCMC, not on the GPU
     import logging
@@ -358,7 +359,7 @@ if RUN_ON_GPU:
 
     workflow = load_model(adapter=adapter, conf_tuple=conf_tuple, param_names=param_names, training_data=training_data,
                           validation_data=validation_data, storage=storage, problem_name=problem_name,
-                          model_name=model_name)
+                          model_name=model_name, use_ema=USE_EMA)
 
     #%%
     diagnostics_plots = workflow.plot_default_diagnostics(test_data=validation_data, num_samples=NUM_SAMPLES_INFERENCE,
@@ -424,7 +425,10 @@ metrics = compute_metrics(model_name=model_name, workflow=workflow, test_data=te
                           get_samples_from_dict=get_samples_from_dict, petab_problem=petab_problem,
                           num_samples_inference=NUM_SAMPLES_INFERENCE, sampler_settings=SAMPLER_SETTINGS)
 
-with open(f'{storage}petab_benchmark_{problem_name}_metrics_{job_id}.pkl', 'wb') as f:
-    pickle.dump(metrics, f)
-
+if not USE_EMA:
+    with open(f'{storage}petab_benchmark_{problem_name}_metrics_{job_id}_noema.pkl', 'wb') as f:
+        pickle.dump(metrics, f)
+else:
+    with open(f'{storage}petab_benchmark_{problem_name}_metrics_{job_id}.pkl', 'wb') as f:
+        pickle.dump(metrics, f)
 print('Done')

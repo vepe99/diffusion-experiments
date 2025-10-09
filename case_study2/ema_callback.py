@@ -3,16 +3,23 @@ from keras import ops
 
 
 class EMA(keras.callbacks.Callback):
-    def __init__(self, update_every, beta=0.9, use_for_validation=False):  # todo: use_for_validation seems to be not working
+    """ Exponential Moving Average (EMA) callback for Keras models.
+
+    Following the ideas from
+    * Karras et. al., https://arxiv.org/pdf/2312.02696
+    """
+    def __init__(self, gamma=6.94):
         super().__init__()
-        self.beta = float(beta)
-        self.update_every = int(update_every)
-        self.use_for_validation = bool(use_for_validation)
         self._shadow = None
         self._backup = None
         self._step = 0
         self._n_vars = 0
-        print(f"EMA model update every {update_every} steps.")
+        self._gamma = gamma
+        # sigma_rel = (gamma + 1)**(0.5) * (gamma +2)**(-1) * (gamma + 3)**(-0.5) = 10%
+        print(f"Using EMA for training.")
+
+    def beta(self, t):
+        return (1 - 1/t)**(self._gamma + 1)
 
     def _snapshot(self, v):
         t = ops.convert_to_tensor(v)
@@ -39,10 +46,8 @@ class EMA(keras.callbacks.Callback):
 
     def on_train_batch_end(self, batch, logs=None):
         self._step += 1
-        if self._step % self.update_every != 0:
-            return
         tv = self._ensure_slots()
-        b = self.beta
+        b = self.beta(self._step)
         new_shadow = []
         for s, v in zip(self._shadow, tv):
             v_now = self._snapshot(v)
@@ -66,16 +71,6 @@ class EMA(keras.callbacks.Callback):
             v.assign(self._backup[i])
         self._backup = [None] * len(tv)
 
-    def on_test_begin(self, logs=None):
-        if not self.use_for_validation:
-            return
-        self.swap_to_shadow()
-
-    def on_test_end(self, logs=None):
-        if not self.use_for_validation:
-            return
-        self.swap_from_shadow()
-
 
 def save_ema_models(model, ema_cb, path_noema, path_ema):
     # save non EMA
@@ -86,3 +81,4 @@ def save_ema_models(model, ema_cb, path_noema, path_ema):
         model.save(path_ema)
     finally:
         ema_cb.swap_from_shadow()
+e
