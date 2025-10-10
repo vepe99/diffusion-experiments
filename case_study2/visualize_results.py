@@ -16,7 +16,7 @@ def _create_model_config():
     colors = {
         "flow_matching":"#1f77b4","ot_flow_matching":"#ff7f0e","flow_matching_edm":"#1abc9c",
         "consistency_model":"#2ca02c","stable_consistency_model":"#d62728",
-        "diffusion_edm_vp":"#9467bd","diffusion_edm_ve":"#8c564b",
+        "diffusion_edm_vp":"#9467bd","diffusion_edm_vp_ema":"#b499e5","diffusion_edm_ve":"#8c564b",
         "diffusion_cosine_F":"#e377c2","diffusion_cosine_v":"#7f7f7f","diffusion_cosine_noise":"#bcbd22",
         "ode":"#17becf","sde":"#ffbb78","sde-pc":"#98df8a","MCMC":"#000000",
         "flow_matching_ft": "#1f77b4", "ot_flow_matching_ft": "#ff7f0e", "flow_matching_edm_ft": "#1abc9c",
@@ -35,7 +35,7 @@ def _get_model_display_name(k):
     names = {
         "flow_matching":"Flow Matching","ot_flow_matching":"Flow Matching (OT)","flow_matching_edm":"Flow Matching (EDM)",
         "consistency_model":"Discrete Consistency","stable_consistency_model":"Stable Consistency",
-        "diffusion_edm_vp":"VP-EDM","diffusion_edm_ve":"VE-EDM",
+        "diffusion_edm_vp":"VP-EDM","diffusion_edm_ve":"VE-EDM","diffusion_edm_vp_ema":"VP-EDM (EMA)",
         "diffusion_cosine_F":r"Cosine $\boldsymbol{F}$-pred.","diffusion_cosine_v":r"Cosine $\boldsymbol{v}$-pred.","diffusion_cosine_noise":r"Cosine $\boldsymbol{\epsilon}$-pred.",
         "MCMC":"MCMC"
     }
@@ -47,7 +47,8 @@ def _get_method_groups(df, key):
     groups = {}
     flow = ['flow_matching','ot_flow_matching','flow_matching_edm']
     cons = ['consistency_model','stable_consistency_model']
-    diff = ['diffusion_edm_vp','diffusion_edm_ve','diffusion_cosine_F','diffusion_cosine_v','diffusion_cosine_noise']
+    diff = ['diffusion_edm_vp','diffusion_edm_ve','diffusion_edm_vp_ema',
+            'diffusion_cosine_F','diffusion_cosine_v','diffusion_cosine_noise']
 
     if key == 'flow': groups['Flow Methods'] = df[df['model'].isin(flow)]
     elif key == 'consistency': groups['Consistency Methods'] = df[df['model'].isin(cons)]

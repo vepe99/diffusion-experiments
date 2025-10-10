@@ -81,4 +81,3 @@ def save_ema_models(model, ema_cb, path_noema, path_ema):
         model.save(path_ema)
     finally:
         ema_cb.swap_from_shadow()
-e
