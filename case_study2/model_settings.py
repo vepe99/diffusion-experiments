@@ -121,7 +121,7 @@ def load_model(adapter, conf_tuple, param_names, training_data, validation_data,
         if 'ema' in model_name:
             save_ema_models(workflow.approximator, cbs[0], path_ema=model_path_ema, path_noema=model_path)
     else:
-        if use_ema:
+        if use_ema and 'ema' in model_name:
             workflow.approximator = keras.models.load_model(model_path_ema)
         else:
             workflow.approximator = keras.models.load_model(model_path)
