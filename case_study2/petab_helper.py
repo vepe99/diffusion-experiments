@@ -207,11 +207,11 @@ def amici_df_to_array(sim_df, field='simulation'):
     arr[np.isinf(arr)] = np.nan
     return arr
 
-def compute_objective(petab_problem, measurement_df, eval_params) -> float:
+def compute_likelihood(petab_problem, measurement_df, eval_params) -> float:
     if not 'measurement' in measurement_df.columns:
         measurement_df['measurement'] = measurement_df['simulation']  # pypesto expects measurement column
-    _pypesto_problem, _petab_problem = create_pypesto_problem(petab_problem, measurement_df)
-    return _pypesto_problem.objective(eval_params)
+    _pypesto_problem, _ = create_pypesto_problem(petab_problem, measurement_df)
+    return _pypesto_problem.objective._objectives[0](eval_params)
 
 
 def compute_metrics(model_name, workflow, test_data, sampler_settings, get_samples_from_dict, petab_problem,
@@ -230,6 +230,7 @@ def compute_metrics(model_name, workflow, test_data, sampler_settings, get_sampl
             'model': model_name,
             'sampler': solver_name,
             'nrmse': root_mean_squared_error(workflow_samples_dict, test_data)['values'].mean(),
+            'nrmse_std': root_mean_squared_error(workflow_samples_dict, test_data, normalize='std')['values'].mean(),
             'posterior_contraction': posterior_contraction(workflow_samples_dict, test_data)['values'].mean(),
             'posterior_calibration_error': calibration_error(workflow_samples_dict, test_data)['values'].mean(),
         })
@@ -238,21 +239,21 @@ def compute_metrics(model_name, workflow, test_data, sampler_settings, get_sampl
         if 'consistency' in model_name:
             workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=1)
         else:
-            workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=1,
-                                                    **sampler_settings[solver_name])
+            workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=1, **sampler_settings[solver_name])
         workflow_samples = get_samples_from_dict(workflow_samples_dict)[:, 0]
 
         obj_val = np.zeros((len(test_data['sim_data_df']), 1))
         for i in range(len(test_data['sim_data_df'])):
-            obj_val[i] = compute_objective(petab_problem, test_data['sim_data_df'][i], workflow_samples[i])
+            obj_val[i] = compute_likelihood(petab_problem, test_data['sim_data_df'][i], workflow_samples[i])
         workflow_samples_aug = np.concatenate((workflow_samples, obj_val), axis=-1)
 
         # augment test data
         obj_val = np.zeros((len(test_data['sim_data_df']), 1))
         for i in range(len(test_data['sim_data_df'])):
-            obj_val[i] = compute_objective(petab_problem, test_data['sim_data_df'][i], test_data['amici_params'][i])
+            obj_val[i] = compute_likelihood(petab_problem, test_data['sim_data_df'][i], test_data['amici_params'][i])
         test_data_aug = np.concatenate((test_data['amici_params'], obj_val), axis=-1)
 
         # compute C2ST
-        metrics[-1]['c2st'] = classifier_two_sample_test(workflow_samples_aug, test_data_aug, validation_split=0.2)
+        metrics[-1]['c2st'] = classifier_two_sample_test(workflow_samples_aug, test_data_aug,
+                                                         mlp_widths=(128, 128, 128), validation_split=0.2)
     return metrics

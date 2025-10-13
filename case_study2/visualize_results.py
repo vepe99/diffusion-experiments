@@ -6,10 +6,10 @@ import numpy as np
 # metrics
 METRICS = ['NRMSE', 'Posterior Contraction', 'Calibration Error', 'c2st']
 METRIC_LABELS = {
-    'NRMSE':r'NRMSE',
-    'Posterior Contraction':r'$1-$Contraction',
-    'Calibration Error':'Normalized\nCalibration\nError',
-    'c2st':r'$\vert \text{C2ST}-0.5\vert / 0.5$'}
+    'NRMSE':r'$1-$NRMSE',
+    'Posterior Contraction':r'Contraction',
+    'Calibration Error':'Calibration',
+    'c2st':r'$1-\vert \text{C2ST}-0.5\vert$'}
 
 # colors and styles
 def _create_model_config():
@@ -85,13 +85,13 @@ def _plot(ax, angles, vals, label, color, ls, marker, alpha):
 def _prep_metrics(df):
     d = df.copy()
     if 'posterior_contraction' in d.columns:
-        d['Posterior Contraction'] = 1 - d['posterior_contraction']
+        d['Posterior Contraction'] = d['posterior_contraction']
     if 'c2st' in d.columns:
-        d['c2st'] = np.abs(d['c2st'] - 0.5)
+        d['c2st'] = 1 - np.abs(d['c2st'] - 0.5)
     if 'nrmse' in d.columns:
-        d['NRMSE'] = d['nrmse']
+        d['NRMSE'] = 1 - d['nrmse']
     if 'posterior_calibration_error' in d.columns:
-        d['Calibration Error'] = d['posterior_calibration_error'] / 0.5
+        d['Calibration Error'] = 1 - 2*d['posterior_calibration_error']
     return d
 
 # model comparison radar
@@ -168,14 +168,14 @@ def _plot_single_radar(df, config, title, save_path, alpha, suptitle, rotation_a
 
     for i, m in enumerate(metrics):
         if m == 'NRMSE' or m == 'Calibration Error':
-            y = 1.4
+            y = 1.5
         else:
             y = 1.15
         ax.text(angles[i], y, f"{METRIC_LABELS.get(m,m)}", ha='center', size=11, color='black')  # {maxv[m]:.3f
 
     handles, labels = ax.get_legend_handles_labels()
     if handles:
-        fig.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.5, 0.0),
+        fig.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.5, 0.1),
                    ncol=min(len(handles),2), fontsize=11)
 
     if suptitle:
