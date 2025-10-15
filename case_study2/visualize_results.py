@@ -9,7 +9,7 @@ METRIC_LABELS = {
     'NRMSE':r'$1-$NRMSE',
     'Posterior Contraction':r'Contraction',
     'Calibration Error':'Calibration',
-    'c2st':r'$1-\vert \text{C2ST}-0.5\vert$'}
+    'c2st':r'$1-\vert0.5-\text{C2ST}\vert$'}
 
 # colors and styles
 def _create_model_config():
@@ -78,16 +78,15 @@ def _angles(n, rot):
 
 def _plot(ax, angles, vals, label, color, ls, marker, alpha):
     v = vals + vals[:1]
-    ax.plot(angles, v, label=label, color=color, linestyle=ls, marker=marker, linewidth=1, alpha=alpha)
-    ax.scatter(angles, v, color=color, marker=marker, linewidth=1)
-    ax.fill(angles, v, color=color, alpha=0.05)
+    ax.plot(angles, v, label=label, color=color, linestyle=ls, marker=marker, linewidth=1, alpha=alpha, markersize=4)
+    #ax.fill(angles, v, color=color, alpha=0.05)
 
 def _prep_metrics(df):
     d = df.copy()
     if 'posterior_contraction' in d.columns:
         d['Posterior Contraction'] = d['posterior_contraction']
     if 'c2st' in d.columns:
-        d['c2st'] = 1 - np.abs(d['c2st'] - 0.5)
+        d['c2st'] = 1 - np.abs(0.5 - d['c2st'])
     if 'nrmse' in d.columns:
         d['NRMSE'] = 1 - d['nrmse']
     if 'posterior_calibration_error' in d.columns:
