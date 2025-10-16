@@ -9,7 +9,7 @@ METRIC_LABELS = {
     'NRMSE':r'$1-$NRMSE',
     'Posterior Contraction':r'Contraction',
     'Calibration Error':'Calibration',
-    'c2st':r'$1-\vert \text{C2ST}-0.5\vert$'}
+    'c2st':r'$1-\vert0.5-\text{C2ST}\vert$'}
 
 # colors and styles
 def _create_model_config():
@@ -53,17 +53,14 @@ def _get_method_groups(df, key):
     if key == 'flow': groups['Flow Methods'] = df[df['model'].isin(flow)]
     elif key == 'consistency': groups['Consistency Methods'] = df[df['model'].isin(cons)]
     elif key == 'diffusion': groups['Diffusion Methods'] = df[df['model'].isin(diff)]
-    elif key == 'all':
-        groups['Flow Methods'] = df[df['model'].isin(flow)]
-        groups['Consistency Methods'] = df[df['model'].isin(cons)]
-        groups['Diffusion Methods'] = df[df['model'].isin(diff)]
-    elif key == 'edm_vs_cosine':
-        groups['EDM Diffusion'] = df[df['model'].isin(['diffusion_edm_vp','diffusion_edm_ve'])]
-        groups['Cosine Diffusion'] = df[df['model'].isin(['diffusion_cosine_F','diffusion_cosine_v','diffusion_cosine_noise'])]
-    elif key == 'prediction_type':
-        groups['F parameterization'] = df[df['model'].isin(['diffusion_edm_vp','diffusion_edm_ve','diffusion_cosine_F'])]
-        groups['v parameterization'] = df[df['model'].isin(['diffusion_cosine_v'])]
-        groups['eps parameterization'] = df[df['model'].isin(['diffusion_cosine_noise'])]
+    elif key == 'overview':
+        groups['Overview'] = df[df['model'].isin(flow+cons+['diffusion_edm_vp','diffusion_edm_ve','diffusion_edm_vp_ema',
+            'diffusion_cosine_F', 'MCMC'])]
+    elif key == 'edm':
+        groups['EDM'] = df[df['model'].isin(['diffusion_edm_vp','diffusion_edm_ve','diffusion_edm_vp_ema'])]
+    elif key == 'cosine':
+        groups['Cosine'] = df[df['model'].isin(['diffusion_cosine_F','diffusion_cosine_v','diffusion_cosine_noise'])]
+
 
     return {k:v for k,v in groups.items() if not v.empty}
 
@@ -78,16 +75,15 @@ def _angles(n, rot):
 
 def _plot(ax, angles, vals, label, color, ls, marker, alpha):
     v = vals + vals[:1]
-    ax.plot(angles, v, label=label, color=color, linestyle=ls, marker=marker, linewidth=1, alpha=alpha)
-    ax.scatter(angles, v, color=color, marker=marker, linewidth=1)
-    ax.fill(angles, v, color=color, alpha=0.05)
+    ax.plot(angles, v, label=label, color=color, linestyle=ls, marker=marker, linewidth=1, alpha=alpha, markersize=4)
+    #ax.fill(angles, v, color=color, alpha=0.05)
 
 def _prep_metrics(df):
     d = df.copy()
     if 'posterior_contraction' in d.columns:
         d['Posterior Contraction'] = d['posterior_contraction']
     if 'c2st' in d.columns:
-        d['c2st'] = 1 - np.abs(d['c2st'] - 0.5)
+        d['c2st'] = 1 - np.abs(0.5 - d['c2st'])
     if 'nrmse' in d.columns:
         d['NRMSE'] = 1 - d['nrmse']
     if 'posterior_calibration_error' in d.columns:
