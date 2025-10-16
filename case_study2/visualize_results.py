@@ -53,17 +53,14 @@ def _get_method_groups(df, key):
     if key == 'flow': groups['Flow Methods'] = df[df['model'].isin(flow)]
     elif key == 'consistency': groups['Consistency Methods'] = df[df['model'].isin(cons)]
     elif key == 'diffusion': groups['Diffusion Methods'] = df[df['model'].isin(diff)]
-    elif key == 'all':
-        groups['Flow Methods'] = df[df['model'].isin(flow)]
-        groups['Consistency Methods'] = df[df['model'].isin(cons)]
-        groups['Diffusion Methods'] = df[df['model'].isin(diff)]
-    elif key == 'edm_vs_cosine':
-        groups['EDM Diffusion'] = df[df['model'].isin(['diffusion_edm_vp','diffusion_edm_ve'])]
-        groups['Cosine Diffusion'] = df[df['model'].isin(['diffusion_cosine_F','diffusion_cosine_v','diffusion_cosine_noise'])]
-    elif key == 'prediction_type':
-        groups['F parameterization'] = df[df['model'].isin(['diffusion_edm_vp','diffusion_edm_ve','diffusion_cosine_F'])]
-        groups['v parameterization'] = df[df['model'].isin(['diffusion_cosine_v'])]
-        groups['eps parameterization'] = df[df['model'].isin(['diffusion_cosine_noise'])]
+    elif key == 'overview':
+        groups['Overview'] = df[df['model'].isin(flow+cons+['diffusion_edm_vp','diffusion_edm_ve','diffusion_edm_vp_ema',
+            'diffusion_cosine_F', 'MCMC'])]
+    elif key == 'edm':
+        groups['EDM'] = df[df['model'].isin(['diffusion_edm_vp','diffusion_edm_ve','diffusion_edm_vp_ema'])]
+    elif key == 'cosine':
+        groups['Cosine'] = df[df['model'].isin(['diffusion_cosine_F','diffusion_cosine_v','diffusion_cosine_noise'])]
+
 
     return {k:v for k,v in groups.items() if not v.empty}
 

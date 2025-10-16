@@ -255,5 +255,5 @@ def compute_metrics(model_name, workflow, test_data, sampler_settings, get_sampl
 
         # compute C2ST
         metrics[-1]['c2st'] = classifier_two_sample_test(workflow_samples_aug, test_data_aug,
-                                                         mlp_widths=(128, 128, 128), validation_split=0.2)
+                                                         mlp_widths=(128, 128, 128))
     return metrics
