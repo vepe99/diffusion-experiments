@@ -1,18 +1,40 @@
 import os
 import pickle
 import numpy as np
-
 import bayesflow as bf
-
-from resnet import ResNetSummary
-
+import keras
 from keras.utils import clear_session
 import matplotlib.pyplot as plt
 
 
+@bf.utils.serialization.serializable("custom")
+class ResNetSubnet(bf.networks.SummaryNetwork):
+    def __init__(
+            self,
+            widths=(8, 16, 32),
+            activation="mish",
+            **kwargs,
+    ):
+        super().__init__(**kwargs)
+
+        layers = [keras.layers.Conv2D(width, kernel_size=3, activation=activation, padding='SAME') for width in widths]
+        self.net = bf.networks.Sequential(layers)
+        self.last_channels = widths[-1]
+
+    def build(self, x_shape, t_shape, conditions_shape):
+        self.net.build(x_shape[:-1] + (4,))
+
+    def call(self, x, t, conditions, training=False):
+        t = keras.ops.broadcast_to(t, keras.ops.shape(x)[:-1] + (1,))
+        return self.net(keras.ops.concatenate((x, t, conditions), axis=-1), training=training)
+
+    def compute_output_shape(self, x_shape, t_shape, conditions_shape):
+        return x_shape[:-1] + (self.last_channels,)
+
+
 def train_model(model_kwargs, dataset_kwargs, conf_tuple, data_dict):
     model_name = model_kwargs["model_name"]
-    proj_dir = os.path.join(f"{model_name}", "NPE")
+    proj_dir = os.path.join(f"{model_name}", "NLE")
     ckpt_dir = os.path.join(proj_dir, "checkpoints")
     figure_dir = os.path.join(proj_dir, "figures")
     os.makedirs(proj_dir, exist_ok=True)
@@ -22,66 +44,41 @@ def train_model(model_kwargs, dataset_kwargs, conf_tuple, data_dict):
     shape = dataset_kwargs["shape"]
     model_config = "shape_config_8_16" if str(shape[0]) in "shape_config_8_16" else "shape_config_32_64_128_256"
     bf.utils.logging.info(f"Using model config: {model_config} for shape {shape}")
-    summary_network = ResNetSummary(**model_kwargs[model_config]["summary_kwargs"])
-    inference_net_kwargs = conf_tuple[1] | {"subnet_kwargs": model_kwargs[model_config]["subnet_kwargs"]}
+    adapter = (
+        bf.adapters.Adapter()
+        .convert_dtype("float64", "float32")
+        .rename("params_expanded", "inference_conditions")
+        .rename("field", "inference_variables")
+    )
+    inference_net_kwargs = conf_tuple[1] | {
+        "concatenate_subnet_input": False,
+        "subnet":ResNetSubnet,
+        "subnet_kwargs": model_kwargs[model_config]["subnet_kwargs"]
+    }
     inference_network = conf_tuple[0](**inference_net_kwargs)
     workflow = bf.workflows.BasicWorkflow(
-        summary_network=summary_network,
         inference_network=inference_network,
-        inference_variables=["log_std", "alpha"],
-        summary_variables=["field"],
-        standardize="summary_variables",
+        adapter=adapter,
+        standardize=None,
         checkpoint_filepath=ckpt_dir,
         checkpoint_name=f"{dataset_kwargs["shape"][0]}_{model_config}",
     )
     history = workflow.fit_offline(
         data=data_dict["train"],
         epochs=EPOCHS,
-        batch_size=BATCH_SIZE,
         validation_data=data_dict["validation"],
+        batch_size=BATCH_SIZE,
     )
-    f = bf.diagnostics.plots.loss(history)
-    f.savefig(os.path.join(figure_dir, f"post_loss_{dataset_kwargs["shape"][0]}_{model_config}.png"))
-    plt.close(f)
-    small_training_data = {k: v[:len(data_dict["validation"]["field"])] for k, v in data_dict["train"].items()}
-    for data_name, test_data  in zip(["train", "validation"], [small_training_data, data_dict["validation"]]):
-        plot_fns = {
-            "recovery": bf.diagnostics.recovery,
-            "calibration": bf.diagnostics.calibration_ecdf,
-        }
-        fs = workflow.plot_custom_diagnostics(
-            test_data=test_data,
-            plot_fns=plot_fns,
-        )
-        for k, f in fs.items():
-            f.savefig(os.path.join(figure_dir, f"{k}_{data_name}_{dataset_kwargs["shape"][0]}_{model_config}.png"))
-            plt.close(f)
 
-        targets = {"alpha": test_data["alpha"], "log_std": test_data["log_std"]}
-        # Numbers
-        wf_samples = workflow.sample(num_samples=1000, conditions={"field": test_data["field"]})
-        nrmse = bf.diagnostics.metrics.root_mean_squared_error(targets=targets, estimates=wf_samples)
-        ce = bf.diagnostics.metrics.calibration_error(targets=targets, estimates=wf_samples)  # 0 is perfect [0, 0.5]
-        clg = bf.diagnostics.metrics.calibration_log_gamma(targets=targets, estimates=wf_samples)
-        validation_dict = {
-            "nrmse": nrmse,
-            "ce": ce,
-            "clg": clg,
-        }
-        validation_path = os.path.join(proj_dir, f"numbers_{dataset_kwargs["shape"][0]}_{model_config}.npz")
-        kv = {}
-        for k, m in validation_dict.items():
-            v = np.asarray(m["values"]).astype(float)
-            v[~np.isfinite(v)] = np.nan  # keep file valid
-            kv[f"{k}_values"] = v
-            kv[f"{k}_names"] = np.asarray(m["variable_names"], dtype=object)
-            kv[f"{k}_metric_name"] = np.asarray(m["metric_name"], dtype=object)
-        np.savez_compressed(validation_path, **kv)
+    f = bf.diagnostics.plots.loss(history)
+    f.savefig(os.path.join(figure_dir, f"like_loss_{dataset_kwargs["shape"][0]}_{model_config}.png"))
+    plt.close(f)
+
 
 
 def get_data_dict(dataset_kwargs):
     dataset_name = dataset_kwargs["name"]
-    if dataset_name == "grf_post":
+    if dataset_name == "grf_like":
         from FyeldGenerator import generate_field
 
         def generate_power_spectrum(alpha, scale):
@@ -99,13 +96,21 @@ def get_data_dict(dataset_kwargs):
             return a + 1j * b
 
         def prior():
-            return {"log_std": rng.normal(scale=0.3), "alpha": rng.normal(loc=3, scale=0.5)}
+            log_std = rng.normal(scale=0.3)
+            alpha = rng.normal(loc=3, scale=0.5)
+            params_expanded = np.array([log_std, alpha])
+            params_expanded = np.ones(shape + (2,)) * params_expanded[None, None, :]
+            return {
+                "log_std": log_std,
+                "alpha": alpha,
+                "params_expanded": params_expanded
+            }
 
         def likelihood(log_std, alpha):
             field = generate_field(
                 distribution, generate_power_spectrum(alpha, np.exp(log_std)), shape
             )
-            return {"field": field[..., None]}
+            return {"field": field[..., None]/50.}
 
         simulator = bf.make_simulator([prior, likelihood])
         data_dict = {
@@ -125,31 +130,19 @@ if __name__ == "__main__":
     BATCH_SIZE = 32
     NUM_SAMPLES_INFERENCE = 5000
     INTEGRATE_KWARGS = {"method": "rk45", "steps": 200}
-    shapes = [(2**n, 2**n) for n in range(3, 5)]
+    shapes = [(2**n, 2**n) for n in range(3, 9)]
     seed = 42
     model_kwargs = {
         "shape_config_32_64_128_256": {
-            "summary_kwargs": {
-                "summary_dim": 8,
-                "widths": [16, 32],
-                "use_batch_norm": False,
-                "dropout": 0.0,
-            },
             "subnet_kwargs": {
-                "widths": 3 * (32,),
-                "dropout": 0.0,
+                "widths": 3*(32,),
+                "activation": "mish",
             },
         },
         "shape_config_8_16": {
-            "summary_kwargs": {
-                "summary_dim": 4,
-                "widths": 2*(8,),
-                "use_batch_norm": False,
-                "dropout": 0.0,
-            },
             "subnet_kwargs": {
-                "widths": 3 * (32,),
-                "dropout": 0.0,
+                "widths": 3*(32,),
+                "activation": "mish",
             },
         }
     }
@@ -194,7 +187,7 @@ if __name__ == "__main__":
         }),
     }
 
-    DATASETS = ["grf_post"]
+    DATASETS = ["grf_like"]
     for dataset in DATASETS:
         for shape in shapes:
             dataset_kwargs = {
