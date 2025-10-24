@@ -10,23 +10,26 @@ EPOCHS = 300
 BATCH_SIZE = 64
 NUM_SAMPLES_INFERENCE = 3000
 MODELS = {
-        "flow_matching": (bf.networks.FlowMatching, {}),
-        "ot_flow_matching": (bf.networks.FlowMatching, {"use_optimal_transport": True}),
-        "consistency_model": (bf.networks.ConsistencyModel, {"total_steps": EPOCHS*BATCH_SIZE}),
+        "flow_matching": (bf.networks.FlowMatching, {
+        }),
+        "ot_flow_matching": (bf.networks.FlowMatching, {
+            "use_optimal_transport": True}),
+        "consistency_model": (bf.networks.ConsistencyModel, {
+            "total_steps": EPOCHS*BATCH_SIZE}),
         "diffusion_edm_vp": (bf.networks.DiffusionModel, {
-            "noise_schedule": "edm", 
-            "prediction_type": "F", 
+            "noise_schedule": "edm",
+            "prediction_type": "F",
             "schedule_kwargs": {"variance_type": "preserving"}}),
         "diffusion_edm_ve": (bf.networks.DiffusionModel, {
-            "noise_schedule": "edm", 
-            "prediction_type": "F", 
+            "noise_schedule": "edm",
+            "prediction_type": "F",
             "schedule_kwargs": {"variance_type": "exploding"}}),
         "diffusion_cosine_F": (bf.networks.DiffusionModel, {
-            "noise_schedule": "cosine", 
+            "noise_schedule": "cosine",
             "prediction_type": "F", }),
         "diffusion_cosine_v": (bf.networks.DiffusionModel, {
-            "noise_schedule": "cosine", 
-            "prediction_type": "velocity"}),   
+            "noise_schedule": "cosine",
+            "prediction_type": "velocity"}),
         "diffusion_cosine_noise": (bf.networks.DiffusionModel, {
             "noise_schedule": "cosine", 
             "prediction_type": "noise"}),
