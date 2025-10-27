@@ -9,82 +9,98 @@ from ema_callback import EMA, save_ema_models
 EPOCHS = 1000
 BATCH_SIZE = 64
 NUM_SAMPLES_INFERENCE = 1000
+
+SUBNET_KWARGS = {
+    "widths": (512, 512, 512, 512, 512),
+}
+
 MODELS = {
         ## TimeSeriesNetwork summary network
-        "flow_matching": (bf.networks.FlowMatching, {}),
-        "flow_matching_edm": (bf.networks.FlowMatching, {'time_power_law_alpha': -0.6}),
-        "ot_flow_matching": (bf.networks.FlowMatching, {"use_optimal_transport": True}),
-        "consistency_model": (bf.networks.ConsistencyModel, {"total_steps": EPOCHS*BATCH_SIZE}),
-        "stable_consistency_model": (bf.experimental.StableConsistencyModel, {"embedding_kwargs": {"embed_dim": 2}}),
+        "flow_matching": (bf.networks.FlowMatching, {"subnet_kwargs": SUBNET_KWARGS}),
+        "flow_matching_edm": (bf.networks.FlowMatching, {'time_power_law_alpha': -0.6, "subnet_kwargs": SUBNET_KWARGS}),
+        "ot_flow_matching": (bf.networks.FlowMatching, {"use_optimal_transport": True, "subnet_kwargs": SUBNET_KWARGS}),
+        "consistency_model": (bf.networks.ConsistencyModel, {"total_steps": EPOCHS*BATCH_SIZE, "subnet_kwargs": SUBNET_KWARGS}),
+        "stable_consistency_model": (bf.experimental.StableConsistencyModel, {"embedding_kwargs": {"embed_dim": 2}, "subnet_kwargs": SUBNET_KWARGS}),
         "diffusion_edm_vp": (bf.networks.DiffusionModel, {
             "noise_schedule": "edm",
             "prediction_type": "F",
-            "schedule_kwargs": {"variance_type": "preserving"}}),
+            "schedule_kwargs": {"variance_type": "preserving"},
+            "subnet_kwargs": SUBNET_KWARGS}),
         "diffusion_edm_vp_ema": (bf.networks.DiffusionModel, {
                     "noise_schedule": "edm",
                     "prediction_type": "F",
-                    "schedule_kwargs": {"variance_type": "preserving"}}),
+                    "schedule_kwargs": {"variance_type": "preserving"},
+            "subnet_kwargs": SUBNET_KWARGS}),
         "diffusion_edm_ve": (bf.networks.DiffusionModel, {
             "noise_schedule": "edm",
             "prediction_type": "F",
-            "schedule_kwargs": {"variance_type": "exploding"}}),
+            "schedule_kwargs": {"variance_type": "exploding"},
+            "subnet_kwargs": SUBNET_KWARGS}),
         "diffusion_cosine_F": (bf.networks.DiffusionModel, {
             "noise_schedule": "cosine",
             "prediction_type": "F", }),
         "diffusion_cosine_v": (bf.networks.DiffusionModel, {
             "noise_schedule": "cosine",
-            "prediction_type": "velocity"}),
+            "prediction_type": "velocity",
+            "subnet_kwargs": SUBNET_KWARGS}),
         "diffusion_cosine_noise": (bf.networks.DiffusionModel, {
             "noise_schedule": "cosine",
-            "prediction_type": "noise"}),
+            "prediction_type": "noise",
+            "subnet_kwargs": SUBNET_KWARGS}),
         ## FusionTransformer summary network
-        "flow_matching_ft": (bf.networks.FlowMatching, {}),
-        "flow_matching_edm_ft": (bf.networks.FlowMatching, {'time_power_law_alpha': -0.6}),
-        "ot_flow_matching_ft": (bf.networks.FlowMatching, {"use_optimal_transport": True}),
-        "consistency_model_ft": (bf.networks.ConsistencyModel, {"total_steps": EPOCHS * BATCH_SIZE}),
-        "stable_consistency_model_ft": (bf.experimental.StableConsistencyModel, {"embedding_kwargs": {"embed_dim": 2}}),
+        "flow_matching_ft": (bf.networks.FlowMatching, {"subnet_kwargs": SUBNET_KWARGS}),
+        "flow_matching_edm_ft": (bf.networks.FlowMatching, {'time_power_law_alpha': -0.6, "subnet_kwargs": SUBNET_KWARGS}),
+        "ot_flow_matching_ft": (bf.networks.FlowMatching, {"use_optimal_transport": True, "subnet_kwargs": SUBNET_KWARGS}),
+        "consistency_model_ft": (bf.networks.ConsistencyModel, {"total_steps": EPOCHS * BATCH_SIZE, "subnet_kwargs": SUBNET_KWARGS}),
+        "stable_consistency_model_ft": (bf.experimental.StableConsistencyModel, {"embedding_kwargs": {"embed_dim": 2}, "subnet_kwargs": SUBNET_KWARGS}),
         "diffusion_edm_vp_ft": (bf.networks.DiffusionModel, {
             "noise_schedule": "edm",
             "prediction_type": "F",
-            "schedule_kwargs": {"variance_type": "preserving"}}),
+            "schedule_kwargs": {"variance_type": "preserving"},
+            "subnet_kwargs": SUBNET_KWARGS}),
         "diffusion_edm_vp_ft_ema": (bf.networks.DiffusionModel, {
                             "noise_schedule": "edm",
                             "prediction_type": "F",
-                            "schedule_kwargs": {"variance_type": "preserving"}}),
+                            "schedule_kwargs": {"variance_type": "preserving"},
+            "subnet_kwargs": SUBNET_KWARGS}),
         "diffusion_edm_ve_ft": (bf.networks.DiffusionModel, {
             "noise_schedule": "edm",
             "prediction_type": "F",
-            "schedule_kwargs": {"variance_type": "exploding"}}),
+            "schedule_kwargs": {"variance_type": "exploding"},
+            "subnet_kwargs": SUBNET_KWARGS}),
         "diffusion_cosine_F_ft": (bf.networks.DiffusionModel, {
             "noise_schedule": "cosine",
-            "prediction_type": "F", }),
+            "prediction_type": "F",
+            "subnet_kwargs": SUBNET_KWARGS}),
         "diffusion_cosine_v_ft": (bf.networks.DiffusionModel, {
             "noise_schedule": "cosine",
-            "prediction_type": "velocity"}),
+            "prediction_type": "velocity",
+            "subnet_kwargs": SUBNET_KWARGS}),
         "diffusion_cosine_noise_ft": (bf.networks.DiffusionModel, {
             "noise_schedule": "cosine",
-            "prediction_type": "noise"}),
+            "prediction_type": "noise",
+            "subnet_kwargs": SUBNET_KWARGS}),
     }
 
 
 SAMPLER_SETTINGS = {
     'ode': {
         'method': 'rk45',
-        'steps': 200
+        'steps': 250
     },
     'sde': {
         'method': 'euler_maruyama',
-        'steps': 200
+        'steps': 250
     },
-    'sde-pc': {
-        'method': 'euler_maruyama',
-        'steps': 200,
-        'corrector_steps': 1,
-    }
+    # 'sde-pc': {
+    #     'method': 'euler_maruyama',
+    #     'steps': 250,
+    #     'corrector_steps': 1,
+    # }
 }
 
 def load_model(adapter, conf_tuple, param_names, training_data, validation_data, storage, problem_name, model_name,
-               use_ema=False):
+               use_ema=True):
     if 'ft' in model_name:
         summary_network = bf.networks.FusionTransformer(summary_dim=len(param_names) * 2)
     else:

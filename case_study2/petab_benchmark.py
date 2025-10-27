@@ -30,8 +30,8 @@ import bayesflow as bf
 from model_settings import MODELS, NUM_SAMPLES_INFERENCE, SAMPLER_SETTINGS, load_model
 
 
-RUN_ON_GPU = False
-USE_MALA = True
+RUN_ON_GPU = True
+USE_MALA = False
 USE_EMA = True
 if not RUN_ON_GPU:
     import amici  # needed only for MCMC, not on the GPU
@@ -113,9 +113,7 @@ else:
     importer = pypesto.petab.PetabImporter(petab_problem, simulator_type="petab", simulator=dummy_simulator)
 
 # Creating the pypesto problem from PEtab
-pypesto_problem = importer.create_problem(
-    startpoint_kwargs={"check_fval": True, "check_grad": True}
-)
+pypesto_problem = importer.create_problem()
 
 #%%
 def get_samples_from_dict(samples_dict):
@@ -207,7 +205,7 @@ def run_mcmc(petab_problem, data_df=None, n_optimization_starts=0, n_chains=10, 
     if n_optimization_starts == 0:
         print("Skipping optimization, sample start points for chains from prior")
         _result = None
-        x0 = [_pypesto_problem.get_reduced_vector(prior()['amici_params']) for _ in range(n_chains)]
+        #x0 = [_pypesto_problem.get_reduced_vector(prior()['amici_params']) for _ in range(n_chains)]
     else:
         # do the optimization
         _result = optimize.minimize(
@@ -218,16 +216,17 @@ def run_mcmc(petab_problem, data_df=None, n_optimization_starts=0, n_chains=10, 
             engine=pypesto.engine.MultiProcessEngine(n_procs=n_procs) if n_procs > 1 else None,
             progress_bar=verbose
         )
-        x0 = [_pypesto_problem.get_reduced_vector(_result.optimize_result.x[0])]
-        x0 = [mix_start * np.array(x0[0]) + (1 - mix_start) * _pypesto_problem.get_reduced_vector(
-            prior()['amici_params'])]
-        if x0[0] is None:
-            print("Warning: x0 contains nan, replace with prior sample")
-            x0[0] = _pypesto_problem.get_reduced_vector(prior()['amici_params'])
-        x0 += [_pypesto_problem.get_reduced_vector(prior()['amici_params']) for _ in range(n_chains - 1)]
+        #x0 = [_pypesto_problem.get_reduced_vector(_result.optimize_result.x[0])]
+        #x0 = [mix_start * np.array(x0[0]) + (1 - mix_start) * _pypesto_problem.get_reduced_vector(
+        #    prior()['amici_params'])]
+        #if x0[0] is None:
+        #    print("Warning: x0 contains nan, replace with prior sample")
+        #    x0[0] = _pypesto_problem.get_reduced_vector(prior()['amici_params'])
+        #x0 += [_pypesto_problem.get_reduced_vector(prior()['amici_params']) for _ in range(n_chains - 1)]
 
     _sampler = sample.AdaptiveParallelTemperingSampler(
-        internal_sampler=sample.MalaSampler() if use_mala else sample.AdaptiveMetropolisSampler(),
+        #internal_sampler=sample.MalaSampler() if use_mala else sample.AdaptiveMetropolisSampler(),
+        internal_sampler=sample.AdaptiveMetropolisSampler(),
         n_chains=n_chains,
         options=dict(show_progress=verbose)
     )
@@ -237,7 +236,7 @@ def run_mcmc(petab_problem, data_df=None, n_optimization_starts=0, n_chains=10, 
         n_samples=n_samples,
         sampler=_sampler,
         result=_result,
-        x0=x0
+        #x0=x0
     )
     sample.geweke_test(_result)
 
@@ -263,7 +262,7 @@ def get_mcmc_posterior_samples(res):
 #simulator = bf.make_simulator([prior, simulator_amici])
 #%%
 num_training_sets = 512*64
-num_validation_sets = 100
+num_validation_sets = 1000
 
 #%%
 @delayed
@@ -300,6 +299,7 @@ if os.path.exists(f"{storage}validation_data_petab_{problem_name}.pkl"):
     try:
         with open(f'{storage}training_data_petab_{problem_name}.pkl', 'rb') as f:
             training_data = pickle.load(f)
+        #training_data = None
     except FileNotFoundError:
         training_data = None
         print("Training data not found")
@@ -404,7 +404,7 @@ else:
             n_starts=10,
             n_mcmc_samples=1e5,
             n_final_samples=1000,
-            n_chains=6,
+            n_chains=10,
             use_mala=USE_MALA
         )
 
@@ -413,22 +413,23 @@ else:
     print('Done')
     exit()
 
+if not RUN_ON_GPU:
+    test_data = {}
+    for key, values in validation_data.items():
+        if key == 'sim_data_df':
+            test_data[key] = values
+        else:
+            test_data[key] = values[val_mask]
 
-test_data = {}
-for key, values in validation_data.items():
-    if key == 'sim_data_df':
-        test_data[key] = values
+    metrics = compute_metrics(model_name=model_name, workflow=workflow, test_data=test_data,
+                              get_samples_from_dict=get_samples_from_dict, petab_problem=petab_problem,
+                              num_samples_inference=NUM_SAMPLES_INFERENCE, sampler_settings=SAMPLER_SETTINGS,
+                              n_jobs=n_cpus)
+
+    if not USE_EMA:
+        with open(f'{storage}petab_benchmark_{problem_name}_metrics_{job_id}_noema.pkl', 'wb') as f:
+            pickle.dump(metrics, f)
     else:
-        test_data[key] = values[val_mask]
-
-metrics = compute_metrics(model_name=model_name, workflow=workflow, test_data=test_data,
-                          get_samples_from_dict=get_samples_from_dict, petab_problem=petab_problem,
-                          num_samples_inference=NUM_SAMPLES_INFERENCE, sampler_settings=SAMPLER_SETTINGS)
-
-if not USE_EMA:
-    with open(f'{storage}petab_benchmark_{problem_name}_metrics_{job_id}_noema.pkl', 'wb') as f:
-        pickle.dump(metrics, f)
-else:
-    with open(f'{storage}petab_benchmark_{problem_name}_metrics_{job_id}.pkl', 'wb') as f:
-        pickle.dump(metrics, f)
+        with open(f'{storage}petab_benchmark_{problem_name}_metrics_{job_id}.pkl', 'wb') as f:
+            pickle.dump(metrics, f)
 print('Done')
