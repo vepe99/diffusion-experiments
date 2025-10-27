@@ -1,185 +1,271 @@
 import os
-
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
 
-# metrics
+
 METRICS = ['NRMSE', 'Posterior Contraction', 'Calibration Error', 'c2st']
 METRIC_LABELS = {
-    'NRMSE':r'$1-$NRMSE',
-    'Posterior Contraction':r'Contraction',
-    'Calibration Error':'Calibration',
-    'c2st':r'$1-\vert0.5-\text{C2ST}\vert$'}
+    'NRMSE': r'$1-$NRMSE',
+    'Posterior Contraction': r'Contraction',
+    'Calibration Error': 'Calibration',
+    'c2st': r'C2ST',
+}
 
-# colors and styles
+
 def _create_model_config():
     colors = {
-        "flow_matching":"#1f77b4","ot_flow_matching":"#ff7f0e","flow_matching_edm":"#1abc9c",
-        "consistency_model":"#2ca02c","stable_consistency_model":"#d62728",
-        "diffusion_edm_vp":"#9467bd","diffusion_edm_vp_ema":"#b499e5","diffusion_edm_ve":"#8c564b",
-        "diffusion_cosine_F":"#e377c2","diffusion_cosine_v":"#7f7f7f","diffusion_cosine_noise":"#bcbd22",
-        "ode":"#17becf","sde":"#ffbb78","sde-pc":"#98df8a","MCMC":"#000000",
-        "flow_matching_ft": "#1f77b4", "ot_flow_matching_ft": "#ff7f0e", "flow_matching_edm_ft": "#1abc9c",
-        "consistency_model_ft": "#2ca02c", "stable_consistency_model_ft": "#d62728",
-        "diffusion_edm_vp_ft": "#9467bd", "diffusion_edm_ve_ft": "#8c564b",
-        "diffusion_cosine_F_ft": "#e377c2", "diffusion_cosine_v_ft": "#7f7f7f", "diffusion_cosine_noise_ft": "#bcbd22"
+        # Flow Matching family
+        "flow_matching": "#1B9E77",
+        "ot_flow_matching": "#33A02C",
+        "flow_matching_edm": "#66C2A5",
+        "flow_matching_ft": "#1B9E77",
+        "ot_flow_matching_ft": "#33A02C",
+        "flow_matching_edm_ft": "#66C2A5",
+
+        # EDM family
+        "diffusion_edm_vp": "#E7298A",
+        "diffusion_edm_vp_ema": "#AD1457",
+        "diffusion_edm_ve": "#FB9A99",
+        "diffusion_edm_vp_ft": "#E7298A",
+        "diffusion_edm_ve_ft": "#FB9A99",
+
+        # Cosine family
+        "diffusion_cosine_F": "#7570B3",
+        "diffusion_cosine_v": "#9E9AC8",
+        "diffusion_cosine_noise": "#54278F",
+        "diffusion_cosine_F_ft": "#7570B3",
+        "diffusion_cosine_v_ft": "#9E9AC8",
+        "diffusion_cosine_noise_ft": "#54278F",
+
+        # Consistency family
+        "consistency_model": "#D95F02",
+        "stable_consistency_model": "#E6AB02",
+        "consistency_model_ft": "#D95F02",
+        "stable_consistency_model_ft": "#E6AB02",
+
+        # Other
+        "ode": "#A6761D",
+        "sde": "#FFD92F",
+        "sde-pc": "#E6AB02",
+        "MCMC": "#000000",
     }
-    return {"visualization":{"colors":colors}}
+    return {"visualization": {"colors": colors}}
 
-def _create_sampler_linestyles():
-    return {'ode':'-','sde':'--','sde-pc':'-.'}
+SAMPLER_STYLES = {'ode': '-', 'sde': '--', 'sde-pc': '-.', 'MCMC': '-'}
 
-def _get_model_display_name(k):
-    if k[-2:] == 'ft':
+def _model_name(k):
+    if k.endswith('ft'):
         k = k[:-2]
     names = {
-        "flow_matching":"Flow Matching","ot_flow_matching":"Flow Matching (OT)","flow_matching_edm":"Flow Matching (EDM)",
-        "consistency_model":"Discrete Consistency","stable_consistency_model":"Stable Consistency",
-        "diffusion_edm_vp":"VP-EDM","diffusion_edm_ve":"VE-EDM","diffusion_edm_vp_ema":"VP-EDM (EMA)",
-        "diffusion_cosine_F":r"Cosine $\boldsymbol{F}$-pred.","diffusion_cosine_v":r"Cosine $\boldsymbol{v}$-pred.","diffusion_cosine_noise":r"Cosine $\boldsymbol{\epsilon}$-pred.",
-        "MCMC":"MCMC"
+        "flow_matching":r"Flow Matching$\,$",
+        "ot_flow_matching":r"Flow Matching (OT)$\,$",
+        "flow_matching_edm":r"Flow Matching (EDM)$\,$",
+        "consistency_model":r"Consistency Model$\,$",
+        "stable_consistency_model":r"Stable Consistency$\,$",
+        "diffusion_edm_vp":r"VP EDM$\,$",
+        "diffusion_edm_ve":r"VE EDM$\,$",
+        "diffusion_edm_vp_ema":r"VP EDM EMA$\,$",
+        "diffusion_cosine_F":r"Cosine $\boldsymbol{F}$-pred.$\,$",
+        "diffusion_cosine_v":r"Cosine $\boldsymbol{v}$-pred.$\,$",
+        "diffusion_cosine_noise":r"Cosine $\boldsymbol{\epsilon}$-pred.$\,$",
+        "MCMC":"MCMC",
     }
     return names.get(k, k.replace("_"," ").title())
 
-def _get_method_groups(df, key):
-    if key[-2:] == 'ft':
-        key = key[:-2]
-    groups = {}
+def _sampler_name(k):
+    names = {'ode':'(ODE RK45)', 'sde':'(SDE Euler)', 'sde-pc':'(SDE PC Euler)', 'MCMC': ''}
+    return names.get(k, k.upper())
+
+def _prep_metrics(df):
+    d = df.copy()
+    if 'posterior_contraction' in d: d['Posterior Contraction'] = d['posterior_contraction']
+    if 'c2st' in d: d['c2st'] = 1 - np.abs(0.5 - d['c2st'])
+    if 'nrmse' in d: d['NRMSE'] = 1 - d['nrmse']
+    if 'posterior_calibration_error' in d: d['Calibration Error'] = 1 - 2*d['posterior_calibration_error']
+    return d
+
+def _angles(n):
+    a = [i / float(n) * 2 * np.pi for i in range(n)]
+    return a + a[:1]
+
+def _group_by_method(df, key):
+    key = key[:-2] if key.endswith('ft') else key
     flow = ['flow_matching','ot_flow_matching','flow_matching_edm']
     cons = ['consistency_model','stable_consistency_model']
     diff = ['diffusion_edm_vp','diffusion_edm_ve','diffusion_edm_vp_ema',
             'diffusion_cosine_F','diffusion_cosine_v','diffusion_cosine_noise']
+    if key == 'flow': return {'Flow Methods': df[df['model'].isin(flow)]}
+    if key == 'consistency': return {'Consistency Methods': df[df['model'].isin(cons)]}
+    if key == 'diffusion': return {'Diffusion Methods': df[df['model'].isin(diff)]}
+    if key == 'flow_consistency': return {'Overview': df[df['model'].isin(flow+cons)]}
+    if key == 'overview': return {'Overview': df[df['model'].isin(['flow_matching','diffusion_edm_vp','diffusion_cosine_F','MCMC'])]}
+    if key == 'edm': return {'EDM': df[df['model'].isin(['diffusion_edm_vp','diffusion_edm_ve','diffusion_edm_vp_ema'])]}
+    if key == 'cosine': return {'Cosine': df[df['model'].isin(['diffusion_cosine_F','diffusion_cosine_v','diffusion_cosine_noise'])]}
+    return {}
 
-    if key == 'flow': groups['Flow Methods'] = df[df['model'].isin(flow)]
-    elif key == 'consistency': groups['Consistency Methods'] = df[df['model'].isin(cons)]
-    elif key == 'diffusion': groups['Diffusion Methods'] = df[df['model'].isin(diff)]
-    elif key == 'overview':
-        groups['Overview'] = df[df['model'].isin(flow+cons+['diffusion_edm_vp','diffusion_edm_ve','diffusion_edm_vp_ema',
-            'diffusion_cosine_F', 'MCMC'])]
-    elif key == 'edm':
-        groups['EDM'] = df[df['model'].isin(['diffusion_edm_vp','diffusion_edm_ve','diffusion_edm_vp_ema'])]
-    elif key == 'cosine':
-        groups['Cosine'] = df[df['model'].isin(['diffusion_cosine_F','diffusion_cosine_v','diffusion_cosine_noise'])]
-
-
-    return {k:v for k,v in groups.items() if not v.empty}
-
-def _get_sampler_display_name(k):
-    names = {'ode':'(ODE RK45)','sde':'(SDE Euler)','sde-pc':'(SDE PC Euler)', 'MCMC':''}
-    return names.get(k, k.upper())
-
-# helpers
-def _angles(n, rot):
-    a = [i / float(n) * 2 * np.pi + rot for i in range(n)]
-    return a + a[:1]
-
-def _plot(ax, angles, vals, label, color, ls, marker, alpha):
-    v = vals + vals[:1]
-    ax.plot(angles, v, label=label, color=color, linestyle=ls, marker=marker, linewidth=1, alpha=alpha, markersize=4)
-    #ax.fill(angles, v, color=color, alpha=0.05)
-
-def _prep_metrics(df):
-    d = df.copy()
-    if 'posterior_contraction' in d.columns:
-        d['Posterior Contraction'] = d['posterior_contraction']
-    if 'c2st' in d.columns:
-        d['c2st'] = 1 - np.abs(0.5 - d['c2st'])
-    if 'nrmse' in d.columns:
-        d['NRMSE'] = 1 - d['nrmse']
-    if 'posterior_calibration_error' in d.columns:
-        d['Calibration Error'] = 1 - 2*d['posterior_calibration_error']
-    return d
-
-# model comparison radar
-def plot_model_comparison_radar(
-    metrics_df,
-    save_path=None, alpha=0.7, suptitle=False,
-    group_by_sampler=False, group_by_method=None, rotation_angle=0.0
-):
-    config = _create_model_config()
-    d = _prep_metrics(metrics_df)
-
-    if group_by_method:
-        groups = _get_method_groups(d, group_by_method)
-        for name, data in groups.items():
-            if data.empty:
-                continue
-            if group_by_sampler and 'sampler' in data.columns:
-                for sp in data['sampler'].unique():
-                    if sp == 'MCMC':
-                        continue
-                    print(sp)
-                    sd = data[(data['sampler']==sp) | (data['sampler']=='MCMC')]
-                    _plot_single_radar(sd, config, f"{name} {_get_sampler_display_name(sp)}",
-                                       save_path, alpha, suptitle, rotation_angle, include_sampler=False)
-            else:
-                _plot_single_radar(data, config, f"{name}",
-                                   save_path, alpha, suptitle, rotation_angle, include_sampler=True)
-    elif group_by_sampler and 'sampler' in d.columns:
-        for sp in d['sampler'].unique():
-            if sp == 'MCMC':
-                continue
-            print(sp)
-            sd = d[(d['sampler']==sp) | (d['sampler']=='MCMC')]
-            _plot_single_radar(sd, config, f"{_get_sampler_display_name(sp)}",
-                               save_path, alpha, suptitle, rotation_angle, include_sampler=False)
-    else:
-        _plot_single_radar(d, config, 'all', save_path, alpha, suptitle, rotation_angle, include_sampler=True)
-
-def _plot_single_radar(df, config, title, save_path, alpha, suptitle, rotation_angle, include_sampler=False):
-    metrics = [m for m in ['NRMSE','Posterior Contraction','Calibration Error','c2st'] if m in df.columns]
+def _plot_one(ax, df, colors, alpha, include_sampler, sampler_filter=None):
+    metrics = [m for m in METRICS if m in df.columns]
     if not metrics:
         return
-    maxv = {m: 1 for m in metrics} #float(df[m].max()) for m in metrics}
-    angles = _angles(len(metrics), rotation_angle)
+    ang = _angles(len(metrics))
 
-    fig, ax = plt.subplots(figsize=(5,4), subplot_kw=dict(polar=True), layout='constrained')
-    colors = config["visualization"]["colors"]
-    ls_map = _create_sampler_linestyles()
+    def ok_sampler(s):
+        if sampler_filter is None:
+            return True
+        if isinstance(sampler_filter, str):
+            return s == sampler_filter
+        if isinstance(sampler_filter, (list, tuple, set)):
+            return s in sampler_filter
+        return True
 
-    for model in df['model'].unique() if 'model' in df.columns else ['All']:
-        if include_sampler and 'sampler' in df.columns:
+    # determine if all non MCMC traces share one sampler
+    non_mcmc_samplers = set()
+    if include_sampler and 'sampler' in df.columns:
+        for model in df['model'].unique():
+            if model == 'MCMC':
+                continue
             for sp in df['sampler'].unique():
-                sub = df[(df['model']==model) & (df['sampler']==sp)]
+                if not ok_sampler(sp):
+                    continue
+                sub = df[(df['model'] == model) & (df['sampler'] == sp)]
+                if not sub.empty:
+                    non_mcmc_samplers.add(sp)
+    uniform_sampler = (len(non_mcmc_samplers) == 1)
+
+    # plotting
+    for model in df['model'].unique() if 'model' in df.columns else ['All']:
+        if (include_sampler and 'sampler' in df.columns) or model == 'MCMC':
+            for sp in df['sampler'].unique() if 'sampler' in df.columns else ['']:
+                if not ok_sampler(sp):
+                    continue
+                if model == 'MCMC':
+                    sub = df[df['model'] == model]
+                else:
+                    sub = df[(df['model'] == model) & (df['sampler'] == sp)]
                 if sub.empty:
                     continue
-                vals = [float(sub[m].mean())/max(maxv[m],1e-12) for m in metrics]
-                label = f"{_get_model_display_name(model)} {_get_sampler_display_name(sp)}"
-                _plot(ax, angles, vals, label, colors.get(model, "#000000"), ls_map.get(sp,'-'), 'o', alpha)
+
+                vals = [float(sub[m].mean()) for m in metrics]
+                v = vals + vals[:1]
+
+                # legend label rules
+                if model == 'MCMC':
+                    label = _model_name(model)            # never show sampler
+                else:
+                    if include_sampler and not uniform_sampler:
+                        label = f"{_model_name(model)} {_sampler_name(sp)}"
+                    else:
+                        label = _model_name(model)
+
+                ax.plot(
+                    ang, v,
+                    label=label,
+                    color=colors.get(model, "#000000"),
+                    linestyle=SAMPLER_STYLES.get(sp, '-') if model != 'MCMC' else '-',
+                    marker='o', linewidth=2, alpha=alpha, markersize=4
+                )
         else:
-            sub = df[df['model']==model] if model != 'All' else df
+            sub = df[df['model'] == model] if model != 'All' else df
             if sub.empty:
                 continue
-            vals = [float(sub[m].mean())/max(maxv[m],1e-12) for m in metrics]
-            label = _get_model_display_name(model) if model != 'All' else 'All'
-            _plot(ax, angles, vals, label, colors.get(model, "#000000"), '-', 'o', alpha)
+            vals = [float(sub[m].mean()) for m in metrics]
+            v = vals + vals[:1]
+            ax.plot(
+                ang, v,
+                label=_model_name(model) if model != 'All' else 'All',
+                color=colors.get(model, "#000000"),
+                linestyle='-', marker='o', linewidth=2, alpha=alpha, markersize=4
+            )
 
-    ax.set_xticks(angles[:-1])
+    # axes and labels
+    ax.set_xticks(ang[:-1])
     ax.set_xticklabels([])
     ax.set_ylim(0, 1)
-    ax.set_rticks([0.2, 0.4, 0.6, 0.8, 1.0])        # show scale
-    ax.set_rlabel_position(rotation_angle or 0)     # place radial labels
-    ax.tick_params(axis='y', labelsize=10)
+    ax.set_rticks([0.2, 0.4, 0.6, 0.8, 1.0])
+    ax.tick_params(axis='y', labelsize=10, pad=-12)
     ax.grid(True)
-
     for i, m in enumerate(metrics):
-        if m == 'NRMSE' or m == 'Calibration Error':
-            y = 1.5
-        else:
-            y = 1.15
-        ax.text(angles[i], y, f"{METRIC_LABELS.get(m,m)}", ha='center', size=11, color='black')  # {maxv[m]:.3f
+        y = 1.3 if m in {'NRMSE', 'Calibration Error'} else 1.15
+        ax.text(ang[i], y, f"{METRIC_LABELS.get(m, m)}", ha='center', size=12, color='black')
 
-    handles, labels = ax.get_legend_handles_labels()
-    if handles:
-        fig.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.5, 0.1),
-                   ncol=min(len(handles),2), fontsize=11)
 
-    if suptitle:
-        fig.suptitle(title, fontsize=18, fontweight="bold", y=0.95)
+def plot_model_comparison_radar(
+    metrics_df,
+    save_path=None,
+    alpha=0.7,
+    title=None,
+    group='overview',
+    sampler='all',           # 'all', 'ode', ['ode','MCMC'], etc.
+    include_sampler=True,
+):
+    cfg = _create_model_config()
+    d = _prep_metrics(metrics_df)
+    groups = _group_by_method(d, group)
+
+    for name, data in groups.items():
+        if data.empty:
+            print(f'No metrics for {name}')
+            continue
+        fig, ax = plt.subplots(figsize=(5,4), subplot_kw=dict(polar=True), layout='constrained')
+        sampler_filter = None if sampler == 'all' else sampler
+        _plot_one(ax, data, cfg["visualization"]["colors"], alpha, include_sampler, sampler_filter)
+        handles, labels = ax.get_legend_handles_labels()
+        if handles:
+            fig.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.5, 0),
+                       ncol=min(len(handles), 2), fontsize=12)
+
+        if save_path:
+            os.makedirs(save_path, exist_ok=True)
+            fname = (title or name).lower().replace(' ','_') if (title or name) else group
+            fig.savefig(os.path.join(save_path, f"model_comparison_{fname}.pdf"), bbox_inches='tight')
+        plt.show()
+
+def plot_model_comparison_grid(
+    metrics_df,
+    save_path=None,
+    alpha=0.7,
+    panels=None,
+):
+
+    cfg = _create_model_config()
+    d = _prep_metrics(metrics_df)
+
+    if panels is None:
+        panels = [
+            ('overview', 'Overview', 'ode'),
+            ('flow_consistency', 'Flow and Consistency', 'ode'),
+            ('cosine', 'Cosine', 'all'),
+            ('edm', 'EDM', 'all'),
+        ]
+
+    fig, axes = plt.subplots(2, 2, figsize=(12, 10),
+                             subplot_kw=dict(polar=True),
+                             layout='constrained')
+    axes = axes.ravel()
+
+    for ax, (grp_key, panel_title, sampler) in zip(axes, panels):
+        groups = _group_by_method(d, grp_key)
+        data = next(iter(groups.values())) if groups else None
+        if data is None or data.empty:
+            ax.set_axis_off()
+            continue
+        _plot_one(ax, data, cfg["visualization"]["colors"], alpha,
+                  include_sampler=True, sampler_filter=(None if sampler == 'all' else sampler))
+
+        # individual legend
+        handles, labels = ax.get_legend_handles_labels()
+        if handles:
+            ax.legend(handles, labels,
+                  loc='upper center',
+                  bbox_to_anchor=(0.5, -0.05),
+                  ncol=2,
+                  fontsize=12,
+                  frameon=False,
+                  handleheight=1.6,  # fix symbol line height
+                  handletextpad=0.8,  # consistent padding
+                  labelspacing=0.2,  # fixed vertical spacing between rows
+            )
 
     if save_path:
-        os.makedirs(save_path, exist_ok=True)
-        fname = f"model_comparison_{title.lower().replace(' ','_')}"
-        fig.savefig(os.path.join(save_path, f"{fname}.pdf"), bbox_inches='tight')
-
+        fig.savefig(os.path.join(save_path, "model_comparison_grid.pdf"), bbox_inches='tight')
     plt.show()

@@ -1,7 +1,10 @@
 import numpy as np
 from copy import deepcopy
 
+from joblib import Parallel, delayed
+
 import pypesto
+import pypesto.petab
 from bayesflow.diagnostics.metrics import (root_mean_squared_error,
                                            posterior_contraction,
                                            calibration_error,
@@ -19,6 +22,7 @@ def create_pypesto_problem(petab_problem, measurement_df=None):
     _pypesto_problem = _importer.create_problem(
         startpoint_kwargs={"check_fval": True, "check_grad": True}
     )
+    _pypesto_problem.startpoint_method = pypesto.startpoint.PriorStartpoints(check_fval=True, check_grad=True)
 
     if isinstance(_pypesto_problem.objective, pypesto.objective.AggregatedObjective):
         _pypesto_problem.objective._objectives[0].amici_solver.setAbsoluteTolerance(1e-8)
@@ -214,46 +218,99 @@ def compute_likelihood(petab_problem, measurement_df, eval_params) -> float:
     return _pypesto_problem.objective._objectives[0](eval_params)
 
 
+def compute_likelihood_parallel(petab_problem, workflow_samples, test_data, n_jobs: int) -> np.ndarray:
+    sim_list = test_data['sim_data_df']
+    results = Parallel(n_jobs=n_jobs)(
+        delayed(compute_likelihood)(petab_problem, sim_list[i], workflow_samples[i])
+        for i in range(len(sim_list))
+    )
+    obj_val = np.asarray(results, dtype=float).reshape(len(sim_list), 1)
+    return np.concatenate((workflow_samples, obj_val), axis=-1)
+
+
+def sample_in_batches(data, workflow, num_samples, batch_size=64, sampler_settings=None) -> dict:
+    posterior_samples = None
+    for i in range(0, len(data['sim_data']), batch_size):
+        batch_data = {k: v[i:i + batch_size] for k, v in data.items() if k != 'sim_data_df'}
+        if sampler_settings is None:
+            batch_samples = workflow.sample(conditions=batch_data, num_samples=num_samples)
+        else:
+            batch_samples = workflow.sample(conditions=batch_data, num_samples=num_samples,
+                                            **sampler_settings)
+        if i == 0:
+            posterior_samples = batch_samples
+        else:
+            for key in posterior_samples.keys():
+                posterior_samples[key] = np.vstack([posterior_samples[key], batch_samples[key]])
+    return posterior_samples
+
+
 def compute_metrics(model_name, workflow, test_data, sampler_settings, get_samples_from_dict, petab_problem,
-                    num_samples_inference):
+                    num_samples_inference, n_jobs=1):
     metrics = []
+
+    import amici
+    import logging
+    amici.swig_wrappers.logger.setLevel(logging.CRITICAL)
+    pypesto.logging.log(level=logging.ERROR, name="pypesto.petab", console=True)
+
+    # augment test data
+    #obj_val = np.zeros((len(test_data['sim_data_df']), 1))
+    #for i in range(len(test_data['sim_data_df'])):
+    #    obj_val[i] = compute_likelihood(petab_problem, test_data['sim_data_df'][i], test_data['amici_params'][i])
+    #test_data_aug = np.concatenate((test_data['amici_params'], obj_val), axis=-1)
+    #del obj_val
+    test_data_aug = compute_likelihood_parallel(petab_problem, test_data['amici_params'], test_data, n_jobs=n_jobs)
+
     for solver_name in sampler_settings:
         if solver_name.startswith('sde') and not model_name.startswith('diffusion'):
             continue
         if 'consistency' in model_name:
-            workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=num_samples_inference)
+            workflow_samples_dict = sample_in_batches(test_data, workflow, num_samples_inference)
+            #workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=num_samples_inference)
         else:
-            workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=num_samples_inference,
-                                                    **sampler_settings[solver_name])
+            workflow_samples_dict = sample_in_batches(test_data, workflow, num_samples_inference,
+                                                      sampler_settings=sampler_settings[solver_name])
+            #workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=num_samples_inference,
+            #                                        **sampler_settings[solver_name])
 
         metrics.append({
             'model': model_name,
             'sampler': solver_name,
-            'nrmse': root_mean_squared_error(workflow_samples_dict, test_data)['values'].mean(),
-            'nrmse_std': root_mean_squared_error(workflow_samples_dict, test_data, normalize='std')['values'].mean(),
-            'posterior_contraction': posterior_contraction(workflow_samples_dict, test_data)['values'].mean(),
-            'posterior_calibration_error': calibration_error(workflow_samples_dict, test_data)['values'].mean(),
+            'nrmse': root_mean_squared_error(workflow_samples_dict, test_data, aggregation=np.nanmedian)['values'].mean(),
+            'nrmse_std': root_mean_squared_error(workflow_samples_dict, test_data, aggregation=np.nanstd)['values'].mean(),
+            'posterior_contraction': posterior_contraction(workflow_samples_dict, test_data, aggregation=np.nanmedian)['values'].mean(),
+            'posterior_contraction_std': posterior_contraction(workflow_samples_dict, test_data, aggregation=np.nanstd)['values'].mean(),
+            'posterior_calibration_error': calibration_error(workflow_samples_dict, test_data, aggregation=np.nanmedian)['values'].mean(),
+            'posterior_calibration_error_std': calibration_error(workflow_samples_dict, test_data, aggregation=np.nanstd)['values'].mean(),
+            'count_nan_data': np.sum(np.isnan(get_samples_from_dict(workflow_samples_dict)).any(axis=(1, 2)))
         })
+
+        del workflow_samples_dict  # free memory
 
         # compute C2ST with augmented data (objective value)
         if 'consistency' in model_name:
-            workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=1)
+            workflow_samples_dict = sample_in_batches(test_data, workflow, num_samples=1)
+            #workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=1)
         else:
-            workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=1, **sampler_settings[solver_name])
+            workflow_samples_dict = sample_in_batches(test_data, workflow, num_samples=1,
+                                                      sampler_settings=sampler_settings[solver_name])
+            #workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=1,
+            #                                        **sampler_settings[solver_name])
         workflow_samples = get_samples_from_dict(workflow_samples_dict)[:, 0]
 
-        obj_val = np.zeros((len(test_data['sim_data_df']), 1))
-        for i in range(len(test_data['sim_data_df'])):
-            obj_val[i] = compute_likelihood(petab_problem, test_data['sim_data_df'][i], workflow_samples[i])
-        workflow_samples_aug = np.concatenate((workflow_samples, obj_val), axis=-1)
-
-        # augment test data
-        obj_val = np.zeros((len(test_data['sim_data_df']), 1))
-        for i in range(len(test_data['sim_data_df'])):
-            obj_val[i] = compute_likelihood(petab_problem, test_data['sim_data_df'][i], test_data['amici_params'][i])
-        test_data_aug = np.concatenate((test_data['amici_params'], obj_val), axis=-1)
+        #obj_val = np.zeros((len(test_data['sim_data_df']), 1))
+        #for i in range(len(test_data['sim_data_df'])):
+        #    obj_val[i] = compute_likelihood(petab_problem, test_data['sim_data_df'][i], workflow_samples[i])
+        #workflow_samples_aug = np.concatenate((workflow_samples, obj_val), axis=-1)
+        #del obj_val
+        #del workflow_samples
+        workflow_samples_aug = compute_likelihood_parallel(petab_problem, workflow_samples, test_data, n_jobs=n_jobs)
 
         # compute C2ST
+        workflow_samples_aug = workflow_samples_aug[~np.isnan(workflow_samples_aug).any(axis=1)]
+        test_data_aug = test_data_aug[~np.isnan(test_data_aug).any(axis=1)]
+        print(f"{workflow_samples_aug.shape[0]} workflow samples and {test_data_aug.shape[0]} test data samples.")
         metrics[-1]['c2st'] = classifier_two_sample_test(workflow_samples_aug, test_data_aug,
-                                                         mlp_widths=(128, 128, 128))
+                                                         mlp_widths=(128, 128, 128), validation_split=0.25)
     return metrics
