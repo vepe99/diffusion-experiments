@@ -68,7 +68,7 @@ def train_model(model_kwargs, dataset_kwargs, conf_tuple, data_dict):
             "ce": ce,
             "clg": clg,
         }
-        validation_path = os.path.join(proj_dir, f"numbers__{data_name}_{dataset_kwargs["shape"][0]}_{model_config}.npz")
+        validation_path = os.path.join(proj_dir, f"numbers_{data_name}_{dataset_kwargs["shape"][0]}_{model_config}.npz")
         kv = {}
         for k, m in validation_dict.items():
             v = np.asarray(m["values"]).astype(float)
