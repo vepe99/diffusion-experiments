@@ -60,8 +60,8 @@ def _model_name(k):
         "flow_matching":r"Flow Matching$\,$",
         "ot_flow_matching":r"Flow Matching (OT)$\,$",
         "flow_matching_edm":r"Flow Matching (EDM)$\,$",
-        "consistency_model":r"Consistency Model$\,$",
-        "stable_consistency_model":r"Stable Consistency$\,$",
+        "consistency_model":r"Discrete Consistency Model$\,$",
+        "stable_consistency_model":r"Stable Consistency Model$\,$",
         "diffusion_edm_vp":r"VP EDM$\,$",
         "diffusion_edm_ve":r"VE EDM$\,$",
         "diffusion_edm_vp_ema":r"VP EDM EMA$\,$",
@@ -234,8 +234,8 @@ def plot_model_comparison_grid(
         panels = [
             ('overview', 'Overview', 'ode'),
             ('flow_consistency', 'Flow and Consistency', 'ode'),
-            ('cosine', 'Cosine', 'all'),
-            ('edm', 'EDM', 'all'),
+            ('cosine', 'Cosine', ['ode', 'sde']),
+            ('edm', 'EDM', ['ode', 'sde']),
         ]
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 10),
