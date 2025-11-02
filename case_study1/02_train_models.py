@@ -8,7 +8,7 @@ from keras.utils import clear_session
 
 EPOCHS = 1000
 BATCH_SIZE = 128
-NUM_SAMPLES_INFERENCE = 3000
+NUM_SAMPLES_INFERENCE = 5000
 MODELS = {
         "flow_matching": (bf.networks.FlowMatching, {}),
         "ot_flow_matching": (bf.networks.FlowMatching, {"use_optimal_transport": True}),
