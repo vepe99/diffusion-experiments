@@ -297,9 +297,11 @@ if os.path.exists(f"{storage}validation_data_petab_{problem_name}.pkl"):
     with open(f'{storage}validation_data_petab_{problem_name}.pkl', 'rb') as f:
         validation_data = pickle.load(f)
     try:
-        with open(f'{storage}training_data_petab_{problem_name}.pkl', 'rb') as f:
-            training_data = pickle.load(f)
-        #training_data = None
+        if RUN_ON_GPU:
+            with open(f'{storage}training_data_petab_{problem_name}.pkl', 'rb') as f:
+                training_data = pickle.load(f)
+        else:
+            training_data = None
     except FileNotFoundError:
         training_data = None
         print("Training data not found")
@@ -362,10 +364,11 @@ if RUN_ON_GPU:
                           model_name=model_name, use_ema=USE_EMA)
 
     #%%
-    diagnostics_plots = workflow.plot_default_diagnostics(test_data=validation_data, num_samples=NUM_SAMPLES_INFERENCE,
-                                                          calibration_ecdf_kwargs={"difference": True, 'stacked': True})
-    for k in diagnostics_plots.keys():
-        diagnostics_plots[k].savefig(f"{storage}petab_benchmark_{problem_name}_{model_name}_{k}.png")
+    if RUN_ON_GPU:
+        diagnostics_plots = workflow.plot_default_diagnostics(test_data=validation_data, num_samples=NUM_SAMPLES_INFERENCE,
+                                                              calibration_ecdf_kwargs={"difference": True, 'stacked': True})
+        for k in diagnostics_plots.keys():
+            diagnostics_plots[k].savefig(f"{storage}petab_benchmark_{problem_name}_{model_name}_{k}.png")
 else:
     # MCMC sampling for comparison
     def run_mcmc_single(petab_prob, pypesto_prob, sim_data_df, n_starts, n_mcmc_samples, n_final_samples, n_chains, use_mala):

@@ -3,6 +3,8 @@ from copy import deepcopy
 
 from joblib import Parallel, delayed
 
+from scipy.stats import median_abs_deviation
+
 import pypesto
 import pypesto.petab
 from bayesflow.diagnostics.metrics import (root_mean_squared_error,
@@ -219,6 +221,11 @@ def compute_likelihood(petab_problem, measurement_df, eval_params) -> float:
 
 
 def compute_likelihood_parallel(petab_problem, workflow_samples, test_data, n_jobs: int) -> np.ndarray:
+    import amici
+    import logging
+    amici.swig_wrappers.logger.setLevel(logging.CRITICAL)
+    pypesto.logging.log(level=logging.ERROR, name="pypesto.petab", console=True)
+
     sim_list = test_data['sim_data_df']
     results = Parallel(n_jobs=n_jobs)(
         delayed(compute_likelihood)(petab_problem, sim_list[i], workflow_samples[i])
@@ -249,11 +256,6 @@ def compute_metrics(model_name, workflow, test_data, sampler_settings, get_sampl
                     num_samples_inference, n_jobs=1):
     metrics = []
 
-    import amici
-    import logging
-    amici.swig_wrappers.logger.setLevel(logging.CRITICAL)
-    pypesto.logging.log(level=logging.ERROR, name="pypesto.petab", console=True)
-
     # augment test data
     #obj_val = np.zeros((len(test_data['sim_data_df']), 1))
     #for i in range(len(test_data['sim_data_df'])):
@@ -267,22 +269,19 @@ def compute_metrics(model_name, workflow, test_data, sampler_settings, get_sampl
             continue
         if 'consistency' in model_name:
             workflow_samples_dict = sample_in_batches(test_data, workflow, num_samples_inference)
-            #workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=num_samples_inference)
         else:
             workflow_samples_dict = sample_in_batches(test_data, workflow, num_samples_inference,
                                                       sampler_settings=sampler_settings[solver_name])
-            #workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=num_samples_inference,
-            #                                        **sampler_settings[solver_name])
 
         metrics.append({
             'model': model_name,
             'sampler': solver_name,
             'nrmse': root_mean_squared_error(workflow_samples_dict, test_data, aggregation=np.nanmedian)['values'].mean(),
-            'nrmse_std': root_mean_squared_error(workflow_samples_dict, test_data, aggregation=np.nanstd)['values'].mean(),
+            'nrmse_mad': root_mean_squared_error(workflow_samples_dict, test_data, aggregation=median_abs_deviation)['values'].mean(),
             'posterior_contraction': posterior_contraction(workflow_samples_dict, test_data, aggregation=np.nanmedian)['values'].mean(),
-            'posterior_contraction_std': posterior_contraction(workflow_samples_dict, test_data, aggregation=np.nanstd)['values'].mean(),
+            'posterior_contraction_mad': posterior_contraction(workflow_samples_dict, test_data, aggregation=median_abs_deviation)['values'].mean(),
             'posterior_calibration_error': calibration_error(workflow_samples_dict, test_data, aggregation=np.nanmedian)['values'].mean(),
-            'posterior_calibration_error_std': calibration_error(workflow_samples_dict, test_data, aggregation=np.nanstd)['values'].mean(),
+            'posterior_calibration_error_mad': calibration_error(workflow_samples_dict, test_data, aggregation=median_abs_deviation)['values'].mean(),
             'count_nan_data': np.sum(np.isnan(get_samples_from_dict(workflow_samples_dict)).any(axis=(1, 2)))
         })
 

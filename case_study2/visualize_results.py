@@ -61,7 +61,7 @@ def _model_name(k):
         "ot_flow_matching":r"Flow Matching (OT)$\,$",
         "flow_matching_edm":r"Flow Matching (EDM)$\,$",
         "consistency_model":r"Discrete Consistency Model$\,$",
-        "stable_consistency_model":r"Stable Consistency Model$\,$",
+        "stable_consistency_model":r"Continuous Consistency Model$\,$",
         "diffusion_edm_vp":r"VP EDM$\,$",
         "diffusion_edm_ve":r"VE EDM$\,$",
         "diffusion_edm_vp_ema":r"VP EDM EMA$\,$",
