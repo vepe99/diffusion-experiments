@@ -17,50 +17,41 @@ storage = 'plots/sbi_benchmark/'
 
 task_name = sbibm.get_available_tasks()[task_i]
 print(task_name)
-sim_budget = 10_000
-num_samples = 10_000
-task = sbibm.get_task(task_name)  # See sbibm.get_available_tasks() for all tasks
+sim_budget = 'online'
+task = sbibm.get_task(task_name)
 conf_tuple = list(MODELS.values())[model_i]
 model_name = list(MODELS.keys())[model_i]
 print(model_name)
 
 if task_name == 'lotka_volterra':
     # sbibm requires julia for this task
-    simulator_bf = bf.simulators.LotkaVolterra()
-    sample_dict = simulator_bf.sample((sim_budget,))
-    thetas = sample_dict['parameters']
-    xs = sample_dict['observables']
+    simulator = bf.simulators.LotkaVolterra(subsample='original')
 
 elif task_name == 'sir':
     # sbibm requires julia for this task
-    simulator_bf = bf.simulators.SIR(subsample=10)
-    sample_dict = simulator_bf.sample((sim_budget,))
-    thetas = sample_dict['parameters']
-    xs = sample_dict['observables']
+    simulator = bf.simulators.SIR(subsample='original')
 else:
     prior = task.get_prior()
-    thetas = prior(num_samples=sim_budget)
+    sbibm_simulator = task.get_simulator()
 
-    simulator = task.get_simulator()
-    xs = simulator(thetas)
+    def sbibm_simulator_bf():
+        thetas = prior(num_samples=1)
+        xs = sbibm_simulator(thetas)
+        return dict(parameters=thetas.numpy()[0], observables=xs.numpy()[0])
 
-    thetas = thetas.numpy()
-    xs = xs.numpy()
+    simulator = bf.make_simulator(sbibm_simulator_bf)
 
-print(f"Simulated {sim_budget} parameter-observation pairs.")
-print(thetas.shape, xs.shape)
-
-# check whether we need a summary network
-need_summary_network = False
-if need_summary_network:
-    obs_key = "summary_variables"
-    sum_dim = min(thetas.shape[-1]*2, 8)
+if isinstance(sim_budget, int):
+    training_data = simulator.sample((sim_budget,))
+    print(f"Simulated {sim_budget} parameter-observation pairs.")
+    print(training_data['inference_variables'].shape, training_data['inference_conditions'].shape)
 else:
-    obs_key = "inference_conditions"
-    sum_dim = 0
-training_data = {'inference_variables': thetas, obs_key: xs}
-workflow = load_model(adapter=None, conf_tuple=conf_tuple, sum_dim=sum_dim,
+    training_data = None
+    print(f"Using online simulation.")
+
+workflow = load_model(conf_tuple=conf_tuple,
                       training_data=training_data,
+                      simulator=simulator,
                       storage=storage,
                       problem_name=task_name, model_name=model_name,
                       use_ema=True)
@@ -71,17 +62,26 @@ for sampler in SAMPLER_SETTINGS.keys():
         continue
     for num_observation in range(1, 11):
         observation = task.get_observation(num_observation=num_observation).numpy()
+        reference_samples = task.get_reference_posterior_samples(num_observation=num_observation)
+        num_samples = reference_samples.shape[0]
+        print(observation.shape, reference_samples.shape)
         if 'consistency' in model_name:
-            posterior_samples_dict = workflow.sample(conditions={obs_key: observation}, num_samples=num_samples)
+            posterior_samples_dict = workflow.sample(conditions={'inference_conditions': observation}, num_samples=num_samples)
         else:
-            posterior_samples_dict = workflow.sample(conditions={obs_key: observation}, num_samples=num_samples,
+            posterior_samples_dict = workflow.sample(conditions={'inference_conditions': observation}, num_samples=num_samples,
                                                      **SAMPLER_SETTINGS[sampler])
         posterior_samples = torch.as_tensor(posterior_samples_dict['inference_variables'][0])
-
-        reference_samples = task.get_reference_posterior_samples(num_observation=num_observation)
-        c2st_accuracy = c2st(reference_samples, posterior_samples).numpy()[0]
+        print(posterior_samples.shape)
+        c2st_accuracy = c2st(reference_samples, posterior_samples).numpy().item()
         c2st_results[sampler].append(c2st_accuracy)
-        print(f"{num_observation} C2ST accuracy: {c2st_accuracy:.3f}")
+        print(f"{num_observation} C2ST accuracy: {c2st_accuracy}")
+
+        # bf.diagnostics.pairs_posterior(
+        #     estimates=posterior_samples.numpy(),
+        #     priors=reference_samples.numpy(),
+        # )
+        # plt.show()
+        # break
 
 with open(f'{storage}c2st_results_{model_name}_{task_name}.pkl', 'wb') as f:
     pickle.dump(c2st_results, f)

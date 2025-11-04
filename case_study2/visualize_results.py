@@ -59,7 +59,7 @@ def _model_name(k):
     names = {
         "flow_matching":r"Flow Matching$\,$",
         "ot_flow_matching":r"Flow Matching (OT)$\,$",
-        "flow_matching_edm":r"Flow Matching (EDM)$\,$",
+        "flow_matching_edm":r"Flow Matching ($\rho = -0.6$)$\,$",
         "consistency_model":r"Discrete Consistency Model$\,$",
         "stable_consistency_model":r"Continuous Consistency Model$\,$",
         "diffusion_edm_vp":r"VP EDM$\,$",
