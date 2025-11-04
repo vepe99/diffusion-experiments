@@ -129,140 +129,17 @@ class InverseKinematicsModel:
     def init_plot(self):
         return plt.figure(figsize=(8, 8))
 
-    def update_plot(self, x, y_target, exemplar=None, filter_width=4.0, arrows=False, target_label=False):
-        plt.gcf().clear()
-        x = np.array(x)
-        if exemplar is None:
-            exemplar = self.find_MAP(x)
-
-        starting_pos = np.zeros((x.shape[0], 2))
-        starting_pos[:, 1] = x[:, 0]
-        x0, x1 = self.segment_points(starting_pos, self.lens[0], x[:, 1])
-        x1, x2 = self.segment_points(x1, self.lens[1], x[:, 1] + x[:, 2])
-        x2, x3 = self.segment_points(x2, self.lens[2], x[:, 1] + x[:, 2] + x[:, 3])
-
-        plt.axvline(x=0, ls=":", c="gray", linewidth=0.5)
-        if not arrows:
-
-            l_cross = 0.6
-            plt.plot(
-                [y_target[0] - l_cross, y_target[0] + l_cross],
-                [y_target[1], y_target[1]],
-                ls="-",
-                c="magenta",
-                linewidth=0.8,
-                alpha=1.0,
-            )  # , zorder=-1)
-            plt.plot(
-                [y_target[0], y_target[0]],
-                [y_target[1] - l_cross, y_target[1] + l_cross],
-                ls="-",
-                c="magenta",
-                linewidth=0.8,
-                alpha=1.0,
-            )  # , zorder=-1)
-            if target_label:
-                plt.text(
-                    y_target[0] + 0.05,
-                    y_target[1] + 0.05,
-                    r"$\mathbf{y}^*$",
-                    ha="left",
-                    va="bottom",
-                    color="gray",
-                    fontsize=10,
-                )
-
-        opts = {
-            "alpha": 0.05,
-            "scale": 1,
-            "angles": "xy",
-            "scale_units": "xy",
-            "headlength": 0,
-            "headaxislength": 0,
-            "linewidth": 1.0,
-            "rasterized": True,
-        }
-        plt.quiver(x0[:, 0], x0[:, 1], (x1 - x0)[:, 0], (x1 - x0)[:, 1], **{"color": self.linecolors[0], **opts})
-        plt.quiver(x1[:, 0], x1[:, 1], (x2 - x1)[:, 0], (x2 - x1)[:, 1], **{"color": self.linecolors[1], **opts})
-        plt.quiver(x2[:, 0], x2[:, 1], (x3 - x2)[:, 0], (x3 - x2)[:, 1], **{"color": self.linecolors[2], **opts})
-
-        exemplar_color = self.colors[0] * np.array([0.5, 0.5, 0.5, 1])
-
-        plt.plot(
-            [x0[exemplar, 0], x1[exemplar, 0], x2[exemplar, 0]],
-            [x0[exemplar, 1], x1[exemplar, 1], x2[exemplar, 1]],
-            "-",
-            color=exemplar_color,
-            linewidth=1,
-            zorder=4,
-        )
-
-        if arrows:
-            plt.annotate(
-                s="",
-                xy=(-0.125, -0.5),
-                xytext=(-0.125, 0.5),
-                arrowprops=dict(arrowstyle="<->, head_width=.1, head_length=.2", ec="black", lw="0.5"),
-                zorder=2,
-            )
-            self.arcarrow(x0[exemplar, :], x1[exemplar, :])
-            self.arcarrow(x1[exemplar, :], x2[exemplar, :])
-            self.arcarrow(x2[exemplar, :], x3[exemplar, :])
-            plt.text(-0.09, -0.60, r"$x_1$", ha="center", va="center", fontsize=10)
-            plt.text(0.13, -0.38, r"$x_2$", ha="center", va="center", fontsize=10)
-            plt.text(0.60, -0.40, r"$x_3$", ha="center", va="center", fontsize=10)
-            plt.text(1.10, -0.44, r"$x_4$", ha="center", va="center", fontsize=10)
-            plt.text(1.97, -0.27, r"$\mathbf{y}$", ha="center", va="center", fontsize=10)
-
-        plt.arrow(
-            x2[exemplar, 0],
-            x2[exemplar, 1],
-            x3[exemplar, 0] - x2[exemplar, 0],
-            x3[exemplar, 1] - x2[exemplar, 1],
-            color=exemplar_color,
-            linewidth=1,
-            head_width=0.05,
-            head_length=0.04,
-            overhang=0.1,
-            length_includes_head=True,
-            zorder=4,
-        )
-        # plt.scatter([x3[exemplar,0],], [x3[exemplar,1],],
-        #             s=5, linewidth=1, edgecolors='none', facecolors=exemplar_color, zorder=5)
-        plt.scatter(
-            [
-                x0[exemplar, 0],
-            ],
-            [
-                x0[exemplar, 1],
-            ],
-            s=30,
-            marker="s",
-            linewidth=1,
-            edgecolors=exemplar_color,
-            facecolors="white",
-            zorder=3,
-        )
-        plt.scatter(
-            [x0[exemplar, 0], x1[exemplar, 0], x2[exemplar, 0]],
-            [x0[exemplar, 1], x1[exemplar, 1], x2[exemplar, 1]],
-            s=10,
-            linewidth=1,
-            edgecolors=exemplar_color,
-            facecolors="white",
-            zorder=5,
-        )
-
-        plt.xlim(*self.rangex)
-        plt.ylim(*self.rangey)
-
-        self.draw_isolines(x, "black", filter_width)
-        plt.gca().set_xticks([])
-        plt.gca().set_yticks([])
 
     def update_plot_ax(
-        self, ax, x, y_target, exemplar=None, filter_width=4.0, arrows=False, target_label=False, segment_color="gray",
-        exemplar_color="white"
+        self, 
+        ax, 
+        x, 
+        y_target, 
+        exemplar=None,
+        arrows=False, target_label=False, 
+        vline_color="black",
+        exemplar_color="#e6e7eb",
+        cross_color="maroon"
     ):
         x = np.array(x)  # [:4000, :]
         if exemplar is None:
@@ -274,7 +151,8 @@ class InverseKinematicsModel:
         x1, x2 = self.segment_points(x1, self.lens[1], x[:, 1] + x[:, 2])
         x2, x3 = self.segment_points(x2, self.lens[2], x[:, 1] + x[:, 2] + x[:, 3])
 
-        ax.axvline(x=0, c=segment_color, linewidth=1)
+        ax.axvline(x=0, c=vline_color, linewidth=1, alpha=0.8)
+
         if not arrows:
 
             l_cross = 0.6
@@ -282,7 +160,7 @@ class InverseKinematicsModel:
                 [y_target[0] - l_cross, y_target[0] + l_cross],
                 [y_target[1], y_target[1]],
                 ls="-",
-                c="magenta",
+                c=cross_color,
                 linewidth=0.8,
                 alpha=1.0,
                 rasterized=True,
@@ -291,7 +169,7 @@ class InverseKinematicsModel:
                 [y_target[0], y_target[0]],
                 [y_target[1] - l_cross, y_target[1] + l_cross],
                 ls="-",
-                c="magenta",
+                c=cross_color,
                 linewidth=0.8,
                 alpha=1.0,
                 rasterized=True,
@@ -333,7 +211,7 @@ class InverseKinematicsModel:
             [x0[exemplar, 1], x1[exemplar, 1], x2[exemplar, 1]],
             "-",
             color=exemplar_color,
-            linewidth=1,
+            linewidth=2,
             zorder=4,
             rasterized=True,
         )
@@ -361,7 +239,7 @@ class InverseKinematicsModel:
             x3[exemplar, 0] - x2[exemplar, 0],
             x3[exemplar, 1] - x2[exemplar, 1],
             color=exemplar_color,
-            linewidth=1,
+            linewidth=2,
             head_width=0.05,
             head_length=0.04,
             overhang=0.1,
@@ -377,21 +255,23 @@ class InverseKinematicsModel:
             [
                 x0[exemplar, 1],
             ],
-            s=30,
+            s=40,
             marker="s",
             linewidth=1,
             edgecolors="black",
-            facecolors=segment_color,
+            facecolors=exemplar_color,
+            alpha=0.8,
             zorder=3,
             rasterized=True,
         )
         ax.scatter(
             [x0[exemplar, 0], x1[exemplar, 0], x2[exemplar, 0]],
             [x0[exemplar, 1], x1[exemplar, 1], x2[exemplar, 1]],
-            s=10,
+            s=20,
             linewidth=1,
             edgecolors="black",
-            facecolors=segment_color,
+            facecolors=exemplar_color,
+            alpha=0.8,
             zorder=5,
             rasterized=True,
         )
