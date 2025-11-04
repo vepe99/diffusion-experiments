@@ -7,9 +7,10 @@ import keras
 from ema_callback import EMA, save_ema_models
 
 
-EPOCHS = 1000
+EPOCHS = 1_000
 BATCH_SIZE = 128
-NUM_SAMPLES_INFERENCE = 1000
+NUM_BATCHES_PER_EPOCH = 32_000 // BATCH_SIZE  # for online training
+NUM_SAMPLES_INFERENCE = 1_000
 
 SUBNET_KWARGS = {
     "widths": (256, 256, 256, 256, 256),
@@ -82,26 +83,32 @@ def create_adapter(config):
             bf.adapters.Adapter()
             .to_array()
             .convert_dtype("float64", "float32")
+            .rename('parameters', 'inference_variables')
+            .rename('observables', 'inference_conditions')
         )
     elif config == 'log':
         return (
             bf.adapters.Adapter()
             .to_array()
             .convert_dtype("float64", "float32")
-            .log("inference_variables")
+            .log("parameters")
+            .rename('parameters', 'inference_variables')
+            .rename('observables', 'inference_conditions')
         )
     elif isinstance(config, tuple) and len(config) == 2:
         return (
             bf.adapters.Adapter()
             .to_array()
             .convert_dtype("float64", "float32")
-            .constrain("inference_variables", lower=config[0], upper=config[1])
+            .constrain("parameters", lower=config[0], upper=config[1])
+            .rename('parameters', 'inference_variables')
+            .rename('observables', 'inference_conditions')
         )
     else:
         raise ValueError("Unknown adapter configuration")
 
 
-def load_model(conf_tuple, training_data, storage, problem_name, model_name, sum_dim=0, use_ema=True):
+def load_model(conf_tuple, simulator, training_data, storage, problem_name, model_name, sum_dim=0, use_ema=True):
     if sum_dim > 0:
         summary_network = bf.networks.TimeSeriesNetwork(summary_dim=sum_dim)
     else:
@@ -111,12 +118,9 @@ def load_model(conf_tuple, training_data, storage, problem_name, model_name, sum
 
     workflow = bf.BasicWorkflow(
         adapter=adapter,
-        training_data=training_data,
+        simulator=simulator,
         summary_network=summary_network,
         inference_network=conf_tuple[0](**conf_tuple[1]),
-        inference_variables='inference_variables',
-        summary_variables='summary_variables' if sum_dim > 0 else None,
-        inference_conditions='inference_conditions' if sum_dim == 0 else None,
         standardize='all'
     )
 
@@ -127,14 +131,24 @@ def load_model(conf_tuple, training_data, storage, problem_name, model_name, sum
     else:
         cbs = None
 
+
     if not os.path.exists(model_path):
-        workflow.fit_offline(
-            training_data,
-            epochs=EPOCHS,
-            batch_size=BATCH_SIZE,
-            verbose=2,
-            callbacks=cbs
-        )
+        if simulator is not None:
+            workflow.fit_online(
+                num_batches_per_epoch=NUM_BATCHES_PER_EPOCH,
+                epochs=EPOCHS,
+                batch_size=BATCH_SIZE,
+                verbose=2,
+                callbacks=cbs
+            )
+        else:
+            workflow.fit_offline(
+                training_data,
+                epochs=EPOCHS,
+                batch_size=BATCH_SIZE,
+                verbose=2,
+                callbacks=cbs
+            )
         #workflow.approximator.save(model_path)
 
         if 'ema' in model_name:

@@ -17,7 +17,7 @@ storage = 'plots/sbi_benchmark/'
 
 task_name = sbibm.get_available_tasks()[task_i]
 print(task_name)
-sim_budget = 30_000
+sim_budget = 'online'
 task = sbibm.get_task(task_name)
 conf_tuple = list(MODELS.values())[model_i]
 model_name = list(MODELS.keys())[model_i]
@@ -25,33 +25,33 @@ print(model_name)
 
 if task_name == 'lotka_volterra':
     # sbibm requires julia for this task
-    simulator_bf = bf.simulators.LotkaVolterra()
-    sample_dict = simulator_bf.sample((sim_budget,))
-    thetas = sample_dict['parameters']
-    xs = sample_dict['observables']
+    simulator = bf.simulators.LotkaVolterra(subsample='original')
 
 elif task_name == 'sir':
     # sbibm requires julia for this task
-    simulator_bf = bf.simulators.SIR(subsample=10)
-    sample_dict = simulator_bf.sample((sim_budget,))
-    thetas = sample_dict['parameters']
-    xs = sample_dict['observables']
+    simulator = bf.simulators.SIR(subsample='original')
 else:
     prior = task.get_prior()
-    thetas = prior(num_samples=sim_budget)
+    sbibm_simulator = task.get_simulator()
 
-    simulator = task.get_simulator()
-    xs = simulator(thetas)
+    def sbibm_simulator_bf():
+        thetas = prior(num_samples=1)
+        xs = sbibm_simulator(thetas)
+        return dict(parameters=thetas.numpy()[0], observables=xs.numpy()[0])
 
-    thetas = thetas.numpy()
-    xs = xs.numpy()
+    simulator = bf.make_simulator(sbibm_simulator_bf)
 
-print(f"Simulated {sim_budget} parameter-observation pairs.")
-print(thetas.shape, xs.shape)
+if isinstance(sim_budget, int):
+    training_data = simulator.sample((sim_budget,))
+    print(f"Simulated {sim_budget} parameter-observation pairs.")
+    print(training_data['inference_variables'].shape, training_data['inference_conditions'].shape)
+else:
+    training_data = None
+    print(f"Using online simulation.")
 
-training_data = {'inference_variables': thetas, 'inference_conditions': xs}
 workflow = load_model(conf_tuple=conf_tuple,
                       training_data=training_data,
+                      simulator=simulator,
                       storage=storage,
                       problem_name=task_name, model_name=model_name,
                       use_ema=True)
