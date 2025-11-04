@@ -13,6 +13,7 @@ benchmarks = itertools.product(range(len(MODELS)), range(len(sbibm.get_available
 storage = 'plots/sbi_benchmark/'
 
 results_dict = {}
+results_dict_std = {}
 for model_name in MODELS.keys():
     for sampler in SAMPLER_SETTINGS.keys():
         if sampler.startswith('sde') and not model_name.startswith('diffusion'):
@@ -21,7 +22,10 @@ for model_name in MODELS.keys():
                 model_name+'-'+sampler:
                     np.ones(len(sbibm.get_available_tasks())) * np.nan
             })
-results_dict_std = results_dict.copy()
+        results_dict_std.update({
+                model_name+'-'+sampler:
+                    np.ones(len(sbibm.get_available_tasks())) * np.nan
+            })
 
 for model_i, task_i in benchmarks:
     task_name = sbibm.get_available_tasks()[task_i]
@@ -43,7 +47,8 @@ df = pd.DataFrame.from_dict(results_dict, orient='index', columns=sbibm.get_avai
 df_std = pd.DataFrame.from_dict(results_dict_std, orient='index', columns=sbibm.get_available_tasks())
 df.index.name = 'Model-Sampler'
 df_std.index.name = 'Model-Sampler'
-df = df.join(df_std, rsuffix='_std')
+df_std = df_std.add_suffix('_std', axis='columns')
+df = pd.concat([df, df_std], axis=1)
 ordered_columns = []
 for task in sbibm.get_available_tasks():
     ordered_columns.append(task)
@@ -52,3 +57,4 @@ df = df[ordered_columns]
 df['sampler'] = [name.split('-')[1] for name in df.index]
 df['model'] = [name.split('-')[0] for name in df.index]
 df.to_csv(f'{storage}c2st_benchmark_results.csv')
+print(df)
