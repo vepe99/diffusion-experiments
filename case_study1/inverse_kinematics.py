@@ -260,7 +260,10 @@ class InverseKinematicsModel:
         plt.gca().set_xticks([])
         plt.gca().set_yticks([])
 
-    def update_plot_ax(self, ax, x, y_target, exemplar=None, filter_width=4.0, arrows=False, target_label=False):
+    def update_plot_ax(
+        self, ax, x, y_target, exemplar=None, filter_width=4.0, arrows=False, target_label=False, segment_color="gray",
+        exemplar_color="white"
+    ):
         x = np.array(x)  # [:4000, :]
         if exemplar is None:
             exemplar = self.find_MAP(x)
@@ -271,10 +274,9 @@ class InverseKinematicsModel:
         x1, x2 = self.segment_points(x1, self.lens[1], x[:, 1] + x[:, 2])
         x2, x3 = self.segment_points(x2, self.lens[2], x[:, 1] + x[:, 2] + x[:, 3])
 
-        ax.axvline(x=0, c="white", linewidth=1)
+        ax.axvline(x=0, c=segment_color, linewidth=1)
         if not arrows:
-            # plt.axvline(x=y_target[0], ls='-', c='gray', linewidth=.5, alpha=.5, zorder=-1)
-            # plt.axhline(y=y_target[1], ls='-', c='gray', linewidth=.5, alpha=.5, zorder=-1)
+
             l_cross = 0.6
             ax.plot(
                 [y_target[0] - l_cross, y_target[0] + l_cross],
@@ -323,7 +325,6 @@ class InverseKinematicsModel:
         #        plt.quiver(x2[:,0], x2[:,1], (x3-x2)[:,0], (x3-x2)[:,1], **{'color': self.colors[2], **opts})
         ax.scatter(x3[:, 0], x3[:, 1], color=self.linecolors[0], s=1, rasterized=True, alpha=0.20)
 
-        exemplar_color = (1.0, 1.0, 1.0)
         # plt.plot([x0[exemplar,0], x1[exemplar,0], x2[exemplar,0], x3[exemplar,0]],
         #          [x0[exemplar,1], x1[exemplar,1], x2[exemplar,1], x3[exemplar,1]],
         #          '-', color=exemplar_color, linewidth=1, zorder=4)
@@ -380,7 +381,7 @@ class InverseKinematicsModel:
             marker="s",
             linewidth=1,
             edgecolors="black",
-            facecolors="white",
+            facecolors=segment_color,
             zorder=3,
             rasterized=True,
         )
@@ -390,7 +391,7 @@ class InverseKinematicsModel:
             s=10,
             linewidth=1,
             edgecolors="black",
-            facecolors="white",
+            facecolors=segment_color,
             zorder=5,
             rasterized=True,
         )
