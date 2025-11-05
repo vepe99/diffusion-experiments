@@ -8,7 +8,7 @@ METRIC_LABELS = {
     'NRMSE': r'$1-$NRMSE',
     'Posterior Contraction': r'Contraction',
     'Calibration Error': 'Calibration',
-    'c2st': r'C2ST',
+    'c2st': r'$1-\vert 0.5-\text{C2ST}\vert$',
 }
 
 
@@ -98,12 +98,14 @@ def _group_by_method(df, key):
     if key == 'consistency': return {'Consistency Methods': df[df['model'].isin(cons)]}
     if key == 'diffusion': return {'Diffusion Methods': df[df['model'].isin(diff)]}
     if key == 'flow_consistency': return {'Overview': df[df['model'].isin(flow+cons)]}
-    if key == 'overview': return {'Overview': df[df['model'].isin(['flow_matching','diffusion_edm_vp','diffusion_cosine_F','MCMC'])]}
-    if key == 'edm': return {'EDM': df[df['model'].isin(['diffusion_edm_vp','diffusion_edm_ve','diffusion_edm_vp_ema'])]}
+    #if key == 'overview': return {'Overview': df[df['model'].isin(['flow_matching','diffusion_edm_vp','diffusion_cosine_F','MCMC'])]}
+    if key == 'overview': return {'Overview': df[df['model'].isin(['MCMC','ot_flow_matching','diffusion_cosine_v','consistency_model'])]}
+    if key == 'edm': return {'EDM': df[df['model'].isin(['diffusion_edm_vp','diffusion_edm_ve'])]}
     if key == 'cosine': return {'Cosine': df[df['model'].isin(['diffusion_cosine_F','diffusion_cosine_v','diffusion_cosine_noise'])]}
     return {}
 
-def _plot_one(ax, df, colors, alpha, include_sampler, sampler_filter=None):
+
+def _plot_one(ax, df, colors, alpha, include_sampler, sampler_filter=None, plot_shade=False):
     metrics = [m for m in METRICS if m in df.columns]
     if not metrics:
         return
@@ -164,6 +166,9 @@ def _plot_one(ax, df, colors, alpha, include_sampler, sampler_filter=None):
                     linestyle=SAMPLER_STYLES.get(sp, '-') if model != 'MCMC' else '-',
                     marker='o', linewidth=2, alpha=alpha, markersize=4
                 )
+                if plot_shade:
+                    # shade under curve
+                    ax.fill(ang, v, color=colors.get(model, "#000000"), alpha=alpha * 0.25)
         else:
             sub = df[df['model'] == model] if model != 'All' else df
             if sub.empty:
@@ -176,6 +181,8 @@ def _plot_one(ax, df, colors, alpha, include_sampler, sampler_filter=None):
                 color=colors.get(model, "#000000"),
                 linestyle='-', marker='o', linewidth=2, alpha=alpha, markersize=4
             )
+            if plot_shade:
+                ax.fill(ang, v, color=colors.get(model, "#000000"), alpha=alpha * 0.25)
 
     # axes and labels
     ax.set_xticks(ang[:-1])
@@ -185,8 +192,15 @@ def _plot_one(ax, df, colors, alpha, include_sampler, sampler_filter=None):
     ax.tick_params(axis='y', labelsize=10, pad=-12)
     ax.grid(True)
     for i, m in enumerate(metrics):
-        y = 1.3 if m in {'NRMSE', 'Calibration Error'} else 1.15
-        ax.text(ang[i], y, f"{METRIC_LABELS.get(m, m)}", ha='center', size=12, color='black')
+        y = 1.2 if m in {'NRMSE', 'Calibration Error'} else 1.15
+        if m == 'NRMSE':
+            x = ang[i] - 0.2
+        elif m == 'Calibration Error':
+            x = ang[i] + 0.2
+        else:
+            x = ang[i]
+        rotation = 90 if m in {'NRMSE', 'Calibration Error'} else 0
+        ax.text(x, y, f"{METRIC_LABELS.get(m, m)}", ha='center', size=12, color='black', rotation=rotation)
 
 
 def plot_model_comparison_radar(
@@ -220,11 +234,13 @@ def plot_model_comparison_radar(
             fig.savefig(os.path.join(save_path, f"model_comparison_{fname}.pdf"), bbox_inches='tight')
         plt.show()
 
+
 def plot_model_comparison_grid(
     metrics_df,
     save_path=None,
     alpha=0.7,
     panels=None,
+    plot_shade=False
 ):
 
     cfg = _create_model_config()
@@ -233,16 +249,18 @@ def plot_model_comparison_grid(
     if panels is None:
         panels = [
             ('overview', 'Overview', 'ode'),
-            ('flow_consistency', 'Flow and Consistency', 'ode'),
-            ('cosine', 'Cosine', ['ode', 'sde']),
-            ('edm', 'EDM', ['ode', 'sde']),
+            #('flow_consistency', 'Flow and Consistency', 'ode'),
+            ('cosine', 'Cosine', ['ode']),
+            ('edm', 'EDM', ['ode']),
         ]
 
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10),
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4),
                              subplot_kw=dict(polar=True),
                              layout='constrained')
     axes = axes.ravel()
 
+    handles = []
+    labels = []
     for ax, (grp_key, panel_title, sampler) in zip(axes, panels):
         groups = _group_by_method(d, grp_key)
         data = next(iter(groups.values())) if groups else None
@@ -250,21 +268,40 @@ def plot_model_comparison_grid(
             ax.set_axis_off()
             continue
         _plot_one(ax, data, cfg["visualization"]["colors"], alpha,
-                  include_sampler=True, sampler_filter=(None if sampler == 'all' else sampler))
+                  include_sampler=True, sampler_filter=(None if sampler == 'all' else sampler),
+                  plot_shade=plot_shade)
 
         # individual legend
-        handles, labels = ax.get_legend_handles_labels()
-        if handles:
-            ax.legend(handles, labels,
-                  loc='upper center',
-                  bbox_to_anchor=(0.5, -0.05),
-                  ncol=2,
+        # handles, labels = ax.get_legend_handles_labels()
+        # if handles:
+        #     ax.legend(handles, labels,
+        #           loc='upper center',
+        #           bbox_to_anchor=(0.5, -0.05),
+        #           ncol=2,
+        #           fontsize=12,
+        #           frameon=False,
+        #           handleheight=1.6,  # fix symbol line height
+        #           handletextpad=0.8,  # consistent padding
+        #           labelspacing=0.2,  # fixed vertical spacing between rows
+        #     )
+        handles += ax.get_legend_handles_labels()[0]
+        labels += ax.get_legend_handles_labels()[1]
+    # unique handles and labels
+    unique = dict()
+    for handle, label in zip(handles, labels):
+        if label not in unique:
+            unique[label] = handle
+    handles = list(unique.values())
+    fig.legend(handles=handles,
+        loc='lower center',
+                  bbox_to_anchor=(0.5, -0.17),
+                  ncol=4,
                   fontsize=12,
                   frameon=False,
                   handleheight=1.6,  # fix symbol line height
                   handletextpad=0.8,  # consistent padding
                   labelspacing=0.2,  # fixed vertical spacing between rows
-            )
+    )
 
     if save_path:
         fig.savefig(os.path.join(save_path, "model_comparison_grid.pdf"), bbox_inches='tight')
