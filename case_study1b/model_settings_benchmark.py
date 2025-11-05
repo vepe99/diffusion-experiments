@@ -72,7 +72,7 @@ ADAPTER_SETTINGS = {
     'sir': 'log',
     'gaussian_linear': None,
     'slcp': (-3, 3),
-    'slcp_distractors':(-3, 3),
+    'slcp_distractors': (-3, 3),
     'bernoulli_glm_raw': None
 }
 
@@ -100,7 +100,7 @@ def create_adapter(config):
             bf.adapters.Adapter()
             .to_array()
             .convert_dtype("float64", "float32")
-            .constrain("parameters", lower=config[0], upper=config[1])
+            .constrain("parameters", lower=config[0], upper=config[1], epsilon=1e-6, inclusive='both')
             .rename('parameters', 'inference_variables')
             .rename('observables', 'inference_conditions')
         )
