@@ -1,15 +1,15 @@
 import numpy as np
 from scipy.stats import beta as beta_dist, norm as norm_dist
 
+from numba import njit
+
 
 def beta_from_normal(z, a, b):
     u = norm_dist.cdf(z)
     x = beta_dist.ppf(u, a, b)  # Beta inverse CDF
     return x
 
-# ---------------------------
-# DDM simulator
-# ---------------------------
+@njit
 def simulate_ddm_trial(nu, alpha, t0, beta, dt=1e-3, scale=1.0, max_time=10.0):
     """
     Simulates one realization of the diffusion process given
