@@ -50,16 +50,45 @@ MODELS = {
             "subnet_kwargs": SUBNET_KWARGS}),
     }
 
-
+NUM_STEPS_SAMPLER = 600
 SAMPLER_SETTINGS = {
-    'ode': {
-        'method': 'rk45',
-        'steps': 500
+    'ode-euler': {
+        'method': 'euler',
+        'steps': NUM_STEPS_SAMPLER,
     },
-    'sde': {
+    'ode-rk45': {
+        'method': 'rk45',
+        'steps': NUM_STEPS_SAMPLER // 6
+    },
+    'ode-tsit5': {
+            'method': 'tsit5',
+            'steps': NUM_STEPS_SAMPLER // 6
+        },
+    'ode-rk45-adaptive': {
+                'method': 'rk45',
+                'steps': "adaptive"
+            },
+    'ode-tsit5-adaptive': {
+                'method': 'tsit5',
+                'steps': "adaptive"
+            },
+    'sde-euler': {
         'method': 'euler_maruyama',
-        'steps': 500
-    }
+        'steps': NUM_STEPS_SAMPLER
+    },
+    'sde-euler-pc': {
+            'method': 'euler_maruyama',
+            'steps': NUM_STEPS_SAMPLER // 5,
+            'corrector_steps': 4
+        },
+    'sde-shark': {
+            'method': 'shark',
+            'steps': NUM_STEPS_SAMPLER // 2
+        },
+    'sde-shark-adaptive': {
+            'method': 'shark',
+            'steps': "adaptive"
+        }
 }
 
 
@@ -149,7 +178,7 @@ def load_model(conf_tuple, simulator, training_data, storage, problem_name, mode
                 verbose=2,
                 callbacks=cbs
             )
-        #workflow.approximator.save(model_path)
+        workflow.approximator.save(model_path)
 
         if 'ema' in model_name:
             save_ema_models(workflow.approximator, cbs[0], path_ema=model_path_ema, path_noema=model_path)

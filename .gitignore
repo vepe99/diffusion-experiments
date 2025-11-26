@@ -2,7 +2,6 @@
 data/
 checkpoints/
 results/
-plots/
 samples/
 /amici_models/
 /case_study2/amici_models/

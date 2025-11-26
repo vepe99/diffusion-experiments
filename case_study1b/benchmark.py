@@ -3,12 +3,18 @@ os.environ["KERAS_BACKEND"] = "torch"
 
 import pickle
 import itertools
+import time
+
 import torch
 import sbibm
 from sbibm.metrics import c2st
 import bayesflow as bf
 
+import logging
+logging.getLogger("bayesflow").setLevel(logging.DEBUG)
+
 from model_settings_benchmark import load_model, MODELS, SAMPLER_SETTINGS
+
 
 job_id = int(os.environ.get('SLURM_ARRAY_TASK_ID', 0))
 benchmarks = list(itertools.product(range(len(MODELS)), range(len(sbibm.get_available_tasks()))))
@@ -29,7 +35,7 @@ if task_name == 'lotka_volterra':
 
 elif task_name == 'sir':
     # sbibm requires julia for this task
-    simulator = bf.simulators.SIR(subsample='original')
+    simulator = bf.simulators.SIR(subsample='original', scale_by_total=True)  # sbibm uses scale_by_total=False
 else:
     prior = task.get_prior()
     sbibm_simulator = task.get_simulator()
@@ -44,7 +50,7 @@ else:
 if isinstance(sim_budget, int):
     training_data = simulator.sample((sim_budget,))
     print(f"Simulated {sim_budget} parameter-observation pairs.")
-    print(training_data['inference_variables'].shape, training_data['inference_conditions'].shape)
+    print(training_data['parameters'].shape, training_data['observables'].shape)
 else:
     training_data = None
     print(f"Using online simulation.")
@@ -56,25 +62,32 @@ workflow = load_model(conf_tuple=conf_tuple,
                       problem_name=task_name, model_name=model_name,
                       use_ema=True)
 
-c2st_results = {'ode': [], 'sde': []}
+c2st_results = {sampler: [] for sampler in SAMPLER_SETTINGS.keys()}
 for sampler in SAMPLER_SETTINGS.keys():
     if sampler.startswith('sde') and not model_name.startswith('diffusion'):
         continue
+    elif 'consistency' in model_name and sampler != 'ode-euler':
+        continue
+    print(f"Evaluating sampler: {sampler}")
     for num_observation in range(1, 11):
         observation = task.get_observation(num_observation=num_observation).numpy()
+        if task_name == 'sir':
+            observation = observation / simulator.total_count  # sbibm SIR uses scale_by_total=False
         reference_samples = task.get_reference_posterior_samples(num_observation=num_observation)
         num_samples = reference_samples.shape[0]
-        print(observation.shape, reference_samples.shape)
+        start_time = time.perf_counter()
         if 'consistency' in model_name:
-            posterior_samples_dict = workflow.sample(conditions={'inference_conditions': observation}, num_samples=num_samples)
+            posterior_samples_dict = workflow.sample(conditions={'observables': observation}, num_samples=num_samples)
         else:
-            posterior_samples_dict = workflow.sample(conditions={'inference_conditions': observation}, num_samples=num_samples,
+            posterior_samples_dict = workflow.sample(conditions={'observables': observation}, num_samples=num_samples,
                                                      **SAMPLER_SETTINGS[sampler])
-        posterior_samples = torch.as_tensor(posterior_samples_dict['inference_variables'][0])
-        print(posterior_samples.shape)
+        end_time = time.perf_counter()
+        posterior_samples = torch.as_tensor(posterior_samples_dict['parameters'][0])
+        posterior_samples = posterior_samples[torch.isfinite(posterior_samples).all(dim=-1)]
         c2st_accuracy = c2st(reference_samples, posterior_samples).numpy().item()
-        c2st_results[sampler].append(c2st_accuracy)
+        c2st_results[sampler].append((c2st_accuracy, end_time - start_time))
         print(f"{num_observation} C2ST accuracy: {c2st_accuracy}")
+        print(f"Sampling time: {end_time - start_time} seconds.")
 
         # bf.diagnostics.pairs_posterior(
         #     estimates=posterior_samples.numpy(),
