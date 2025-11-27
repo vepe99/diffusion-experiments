@@ -78,8 +78,8 @@ def _(pd):
 
 @app.cell
 def _(SAMPLER_SETTINGS):
-    all_samplers = ['best', 'all'] + [k for k in SAMPLER_SETTINGS.keys()]
-    SHOW_SAMPLER = all_samplers[0]
+    all_samplers = ['best', 'merge_problems', 'all'] + [k for k in SAMPLER_SETTINGS.keys()]
+    SHOW_SAMPLER = all_samplers[1]
     print(SHOW_SAMPLER)
     return (SHOW_SAMPLER,)
 
@@ -118,25 +118,38 @@ def _(SHOW_SAMPLER, create_model_config, np, pd, results, sbibm):
             long_df[["model", "problem", "time", "time_std"]].groupby(["model", "problem"])
               .sum()
         ).reset_index()
+        n_sampler = len(long_df['sampler'].unique())
         long_df = (
             long_df[["model", "problem", "error", "std"]].groupby(["model", "problem"])
-              .mean()                    # mean across samplers
+              .sum()                    # mean across samplers
         ).reset_index()
+        long_df['error'] = long_df['error'] / n_sampler
         long_df['Model-Sampler'] = long_df['model']
         long_df['sampler'] = 'all'
         long_df['time'] = long_df_time['time']
         long_df['time_std'] = long_df_time['time_std']
+    elif SHOW_SAMPLER == 'merge_problems':
+        long_df = (
+            long_df[["model", "sampler", "error", "std", "time", "time_std"]].groupby(["model", "sampler"])
+              .sum()                    # mean across problems
+        ).reset_index()
+        long_df['problem'] = 'all'
+        long_df['time'] = long_df['time'] / 10
+        long_df['error'] = long_df['error'] / 10
+        long_df[(long_df.model == 'consistency') & (long_df.sampler != 'ode-euler')] = np.nan
     else:
         long_df = long_df[long_df['sampler'] == SHOW_SAMPLER]
     long_df['rank'] = long_df.groupby('problem')['error'].rank(method='min', ascending=True)
 
     config = create_model_config()
     colors = config['visualization']['colors']
-    problem_names = np.array([sbibm.get_task(long_df.problem.unique()[_i]).name_display for _i in range(10)])
-    problem_dim = [sbibm.get_task(long_df.problem.unique()[_i]).dim_parameters for _i in range(10)]  
-    data_dim = [sbibm.get_task(long_df.problem.unique()[_i]).dim_data for _i in range(10)]
-    problem_names = np.array([f'{n}\n' + '$\\text{dim}(\\boldsymbol{\\theta})$' + f'$={p_dim}$' + ', $\\text{dim}(\\boldsymbol{y})$' + f'$={d_dim}$' for n, p_dim, d_dim in zip(problem_names, problem_dim, data_dim)])
-    problem_order = np.lexsort((data_dim, problem_dim))
+    if long_df.problem[0] != 'all':
+        problem_names = np.array([sbibm.get_task(long_df.problem.unique()[_i]).name for _i in range(10)])
+        problem_names_nice = np.array([sbibm.get_task(long_df.problem.unique()[_i]).name_display for _i in range(10)])
+        problem_dim = [sbibm.get_task(long_df.problem.unique()[_i]).dim_parameters for _i in range(10)]  
+        data_dim = [sbibm.get_task(long_df.problem.unique()[_i]).dim_data for _i in range(10)]
+        problem_names_nice = np.array([f'{n}\n' + '$\\text{dim}(\\boldsymbol{\\theta})$' + f'$={p_dim}$' + ', $\\text{dim}(\\boldsymbol{y})$' + f'$={d_dim}$' for n, p_dim, d_dim in zip(problem_names_nice, problem_dim, data_dim)])
+        problem_order = np.lexsort((data_dim, problem_dim))
 
     model_order = list(colors.keys())
     long_df["model"] = pd.Categorical(long_df["model"], categories=model_order, ordered=True)
@@ -149,6 +162,7 @@ def _(SHOW_SAMPLER, create_model_config, np, pd, results, sbibm):
         long_df_copy,
         model_order,
         problem_names,
+        problem_names_nice,
         problem_order,
     )
 
@@ -162,102 +176,141 @@ def _(
     np,
     plt,
     problem_names,
+    problem_names_nice,
     problem_order,
     results_lueckmann,
 ):
-    # Boxplot showing distribution of model performances per problem
-    _fig, _axes = plt.subplots(2, 5, figsize=(12, 4), sharex=True, sharey=True, layout='constrained')
-    _axes = _axes.flatten()
-    for _idx, _problem_idx in enumerate(problem_order):
-        _problem = long_df['problem'].unique()[_problem_idx]
-        _subset = long_df[long_df['problem'] == _problem]
-        _data_to_plot = []
-        _std_to_plot = []
-        _labels = []
-        _colors_list = []
-        for _model in _subset['Model-Sampler'].unique():
-            _model_data = _subset[_subset['Model-Sampler'] == _model]
-            _base_name = _model_data['model'].values[0]
-            _sampler = _model_data['sampler'].values[0]
-            error = _model_data['error'].values[0]
-            _data_to_plot.append(error)
-            _std_to_plot.append(_model_data['std'].values[0])
-            _label = model_name(_base_name)
-            if not 'consistency' in _model and SHOW_SAMPLER != 'all':
-                _label += f' ({_sampler.title()})'
-            _labels.append(_label)
-            _colors_list.append(colors.get(_base_name, 'gray'))
-        _x_positions = np.arange(len(_data_to_plot))
-        for _i, _color in enumerate(_colors_list):
-            _axes[_idx].errorbar(_x_positions[_i], _data_to_plot[_i], yerr=_std_to_plot[_i],
-                                 fmt='o', markersize=6, capsize=3, color=_color, markeredgewidth=0.5, label=_labels[_i])
-        _axes[_idx].set_title(problem_names[_problem_idx], fontsize=11)
-        _axes[_idx].spines['right'].set_visible(False)
-        _axes[_idx].spines['top'].set_visible(False)
-        _axes[_idx].grid(True)
-        _axes[_idx].set_ylim(0, 0.55)
-        _axes[_idx].set_xticks([])
-        ref_val = results_lueckmann.loc[results_lueckmann['task'] == _problem, 'mean'].item()
-        _axes[_idx].axhline(y=np.abs(0.5 - ref_val), color='black', linestyle='--', linewidth=1,
-                            label='Lueckmann et. al. NPE', zorder=-1)
-    _axes[0].set_ylabel('$\\vert 0.5-\\text{C2ST}\\vert$', fontsize=11)
-    _axes[5].set_ylabel('$\\vert 0.5-\\text{C2ST}\\vert$', fontsize=11)
-    _handles = _fig.axes[0].get_legend_handles_labels()[0]
-    _fig.legend(labels=_labels + ['Lueckmann et. al. NPE'], handles=_handles[1:] + _handles[:1], loc='lower center', bbox_to_anchor=(0.5, -0.3), ncol=3, fancybox=False, fontsize=11)
-    _fig.savefig(f"plots/c2st_benchmark_boxplot_{SHOW_SAMPLER}.pdf", bbox_inches='tight')
-    plt.show()
+    if long_df.problem[0] != 'all':
+        # Boxplot showing distribution of model performances per problem
+        _fig, _axes = plt.subplots(2, 5, figsize=(12, 4), sharex=True, sharey=True, layout='constrained')
+        _axes = _axes.flatten()
+        for _idx, _problem_idx in enumerate(problem_order):
+            _subset = long_df[long_df['problem'] == problem_names[_problem_idx]]
+            _data_to_plot = []
+            _std_to_plot = []
+            _labels = []
+            _colors_list = []
+            for _model in _subset['Model-Sampler'].unique():
+                _model_data = _subset[_subset['Model-Sampler'] == _model]
+                _base_name = _model_data['model'].values[0]
+                _sampler = _model_data['sampler'].values[0]
+                error = _model_data['error'].values[0]
+                _data_to_plot.append(error)
+                _std_to_plot.append(_model_data['std'].values[0])
+                _label = model_name(_base_name)
+                if not 'consistency' in _model and SHOW_SAMPLER != 'all':
+                    _label += f' ({_sampler.title()})'
+                _labels.append(_label)
+                _colors_list.append(colors.get(_base_name, 'gray'))
+            _x_positions = np.arange(len(_data_to_plot))
+            for _i, _color in enumerate(_colors_list):
+                _axes[_idx].errorbar(_x_positions[_i], _data_to_plot[_i], yerr=_std_to_plot[_i],
+                                     fmt='o', markersize=6, capsize=3, color=_color, markeredgewidth=0.5, label=_labels[_i])
+            _axes[_idx].set_title(problem_names_nice[_problem_idx], fontsize=11)
+            _axes[_idx].spines['right'].set_visible(False)
+            _axes[_idx].spines['top'].set_visible(False)
+            _axes[_idx].grid(True)
+            _axes[_idx].set_ylim(0, 0.55)
+            _axes[_idx].set_xticks([])
+            ref_val = results_lueckmann.loc[results_lueckmann['task'] == problem_names[_problem_idx], 'mean'].item()
+            _axes[_idx].axhline(y=np.abs(0.5 - ref_val), color='black', linestyle='--', linewidth=1,
+                                label='Lueckmann et. al. NPE', zorder=-1)
+        _axes[0].set_ylabel(r'$\vert 0.5-\text{C2ST}\vert$', fontsize=11)
+        _axes[5].set_ylabel(r'$\vert 0.5-\text{C2ST}\vert$', fontsize=11)
+        _handles = _fig.axes[0].get_legend_handles_labels()[0]
+        _fig.legend(labels=_labels + ['Lueckmann et. al. NPE'], handles=_handles[1:] + _handles[:1], loc='lower center', bbox_to_anchor=(0.5, -0.3), ncol=3, fancybox=False, fontsize=11)
+        _fig.savefig(f"plots/c2st_benchmark_boxplot_{SHOW_SAMPLER}.pdf", bbox_inches='tight')
+        plt.show()
     return
 
 
 @app.cell
-def _(
-    SHOW_SAMPLER,
-    colors,
-    long_df,
-    model_name,
-    np,
-    plt,
-    problem_names,
-    problem_order,
-):
-    # Boxplot showing distribution of model sampling duration per problem
-    _fig, _axes = plt.subplots(2, 5, figsize=(12, 4), sharex=True, sharey=True, layout='constrained')
-    _axes = _axes.flatten()
-    for _idx, _problem_idx in enumerate(problem_order):
-        _problem = long_df['problem'].unique()[_problem_idx]
-        _subset = long_df[long_df['problem'] == _problem]
-        _data_to_plot = []
-        _std_to_plot = []
-        _labels = []
-        _colors_list = []
-        for _model in _subset['Model-Sampler'].unique():
-            _model_data = _subset[_subset['Model-Sampler'] == _model]
-            _base_name = _model_data['model'].values[0]
-            _sampler = _model_data['sampler'].values[0]
-            timing = _model_data['time'].values[0]
-            _data_to_plot.append(timing)
-            _std_to_plot.append(_model_data['time_std'].values[0])
-            _label = model_name(_base_name)
-            if not 'consistency' in _model and SHOW_SAMPLER != 'all':
-                _label += f' ({_sampler.title()})'
-            _labels.append(_label)
-            _colors_list.append(colors.get(_base_name, 'gray'))
-        _x_positions = np.arange(len(_data_to_plot))
-        for _i, _color in enumerate(_colors_list):
-            _axes[_idx].errorbar(_x_positions[_i], _data_to_plot[_i], yerr=_std_to_plot[_i], fmt='o',
-                                 markersize=6, capsize=3, color=_color, markeredgewidth=0.5, label=_labels[_i])
-        _axes[_idx].set_title(problem_names[_problem_idx], fontsize=11)
-        _axes[_idx].spines['right'].set_visible(False)
-        _axes[_idx].spines['top'].set_visible(False)
-        _axes[_idx].grid(True)
-        _axes[_idx].set_xticks([])
-        #_axes[_idx].set_ylim([0, 200])
-    _axes[0].set_ylabel('Time [s]', fontsize=11)
-    _axes[5].set_ylabel('Time [s]', fontsize=11)
-    _handles = _fig.axes[0].get_legend_handles_labels()[0]
-    _fig.legend(labels=_labels, handles=_handles, loc='lower center', bbox_to_anchor=(0.5, -0.3), ncol=3, fancybox=False, fontsize=11)
-    _fig.savefig(f"plots/time_benchmark_boxplot_{SHOW_SAMPLER}.pdf", bbox_inches='tight')
-    plt.show()
+def _(SHOW_SAMPLER, colors, long_df, model_name, np, plt):
+    if long_df.problem[0] == 'all':
+        # Boxplot showing distribution of model performances per sampler
+        _fig, _axes = plt.subplots(2, 5, figsize=(12, 4), sharex=True, sharey=True, layout='constrained')
+        _axes = _axes.flatten()
+        for _idx, _sampler in enumerate(long_df.sampler.unique()):
+            _subset = long_df[long_df['sampler'] == _sampler]
+            _data_to_plot = []
+            _std_to_plot = []
+            if _idx == 0:
+                _labels = []
+            _colors_list = []
+        
+            for _model in _subset['model'].unique():
+                _model_data = _subset[_subset['model'] == _model]
+                _base_name = _model_data['model'].values[0]
+                _sampler = _model_data['sampler'].values[0]
+                _val = _model_data['time'].values[0]
+                _data_to_plot.append(_val)
+                _std_to_plot.append(_model_data['time_std'].values[0])
+                _label = model_name(_base_name)
+                if _idx == 0:
+                    _labels.append(_label)
+                _colors_list.append(colors.get(_base_name, 'gray'))
+            _x_positions = np.arange(len(_data_to_plot))
+            if len(_x_positions) != len(long_df.model.unique()):
+                _x_positions += 5
+            for _i, _color in enumerate(_colors_list):
+                if _sampler != 'ode-euler' and (_x_positions[_i] == 4 or _x_positions[_i] == 3):
+                    continue  # consistency models
+                _axes[_idx].errorbar(_x_positions[_i], _data_to_plot[_i], yerr=_std_to_plot[_i],
+                                     fmt='o', markersize=6, capsize=3, color=_color, markeredgewidth=0.5, label=_labels[_i])
+            _axes[_idx].set_title(_sampler.title(), fontsize=11)
+            _axes[_idx].spines['right'].set_visible(False)
+            _axes[_idx].spines['top'].set_visible(False)
+            _axes[_idx].grid(True)
+            _axes[_idx].set_xticks([])
+        _axes[0].set_ylabel(r'Time [s]', fontsize=11)
+        _axes[5].set_ylabel(r'Time [s]', fontsize=11)
+        _axes[-1].set_visible(False)
+        _handles = _fig.axes[0].get_legend_handles_labels()[0]
+        _fig.legend(labels=_labels, handles=_handles, loc='lower center', bbox_to_anchor=(0.5, -0.3), ncol=3, fancybox=False, fontsize=11)
+        _fig.savefig(f"plots/time_benchmark_boxplot_{SHOW_SAMPLER}.pdf", bbox_inches='tight')
+        plt.show()
+    
+        # Boxplot showing distribution of model performances per sampler
+        _fig, _axes = plt.subplots(2, 5, figsize=(12, 4), sharex=True, sharey=True, layout='constrained')
+        _axes = _axes.flatten()
+        for _idx, _sampler in enumerate(long_df.sampler.unique()):
+            _subset = long_df[long_df['sampler'] == _sampler]
+            _data_to_plot = []
+            _std_to_plot = []
+            if _idx == 0:
+                _labels = []
+            _colors_list = []
+            for _model in _subset['model'].unique():
+                _model_data = _subset[_subset['model'] == _model]
+                _base_name = _model_data['model'].values[0]
+                _sampler = _model_data['sampler'].values[0]
+                _val = _model_data['error'].values[0]
+                _data_to_plot.append(_val)
+                _std_to_plot.append(_model_data['std'].values[0])
+                _label = model_name(_base_name)
+                if _idx == 0:
+                    _labels.append(_label)
+                _colors_list.append(colors.get(_base_name, 'gray'))
+            _x_positions = np.arange(len(_data_to_plot))
+            if len(_x_positions) != len(long_df.model.unique()):
+                _x_positions += 5
+            for _i, _color in enumerate(_colors_list):
+                if _sampler != 'ode-euler' and (_x_positions[_i] == 4 or _x_positions[_i] == 3):
+                    continue  # consistency models
+                _axes[_idx].errorbar(_x_positions[_i], _data_to_plot[_i], yerr=_std_to_plot[_i],
+                                     fmt='o', markersize=6, capsize=3, color=_color, markeredgewidth=0.5, label=_labels[_i])
+            _axes[_idx].set_title(_sampler.title(), fontsize=11)
+            _axes[_idx].spines['right'].set_visible(False)
+            _axes[_idx].spines['top'].set_visible(False)
+            _axes[_idx].grid(True)
+            _axes[_idx].set_xticks([])
+        _axes[0].set_ylabel(r'$\vert 0.5-\text{C2ST}\vert$', fontsize=11)
+        _axes[5].set_ylabel(r'$\vert 0.5-\text{C2ST}\vert$', fontsize=11)
+        _axes[-1].set_visible(False)
+        _handles = _fig.axes[0].get_legend_handles_labels()[0]
+        _fig.legend(labels=_labels, handles=_handles, loc='lower center', bbox_to_anchor=(0.5, -0.3), ncol=3, fancybox=False, fontsize=11)
+        _fig.savefig(f"plots/c2st_benchmark_boxplot_{SHOW_SAMPLER}.pdf", bbox_inches='tight')
+        plt.show()
     return
 
 
@@ -269,7 +322,7 @@ def _(
     model_name,
     model_order,
     plt,
-    problem_names,
+    problem_names_nice,
 ):
     # Order samplers: use SAMPLER_SETTINGS order, then any remaining
     sampler_order = [
@@ -285,7 +338,7 @@ def _(
 
     # Dictionary for nicer titles
     problem_to_title = {
-        p: t for p, t in zip(problems_unique, problem_names)
+        p: t for p, t in zip(problems_unique, problem_names_nice)
     }
 
     # One plot per problem: x axis = sampler, points colored by model
@@ -370,77 +423,114 @@ def _(
 
         fig.savefig(f"plots/c2st_benchmark_all_samplers_{problem}.pdf", bbox_inches="tight")
         plt.show()
-
-        fig, ax = plt.subplots(figsize=(10, 4), layout='constrained')
-        for i_s, sampler in enumerate(samplers_here):
-            base_x = i_s
-            sub_s = subset[subset["sampler"] == sampler]
-            if sub_s.empty:
-                continue
-
-            for i_m, model in enumerate(models_here):
-                row = sub_s[sub_s["model"] == model]
-                if row.empty:
-                    continue
-
-                x = base_x - 0.4 + width / 2 + i_m * width
-                y = row["time"].values[0]
-                yerr = row["time_std"].values[0]
-
-                ax.errorbar(
-                        x,
-                        y,
-                        yerr=yerr,
-                        fmt="o",
-                        markersize=5,
-                        capsize=3,
-                        color=colors.get(model, "gray"),
-                        markeredgewidth=0.5,
-                    )
-
-        ax.set_xticks(range(len(samplers_here)))
-        ax.set_xticklabels(
-                [s.replace("_", " ").title() for s in samplers_here],
-                rotation=45,
-                ha="right",
-            )
-        ax.set_ylabel("Time [s]")
-        ax.set_title(problem_to_title.get(problem, problem), fontsize=11)
-        ax.grid(True)
-        ax.spines["right"].set_visible(False)
-        ax.spines["top"].set_visible(False)
-
-        # Legend by model, keeping colors
-        handles = []
-        labels = []
-        for model in models_here:
-            handle = plt.Line2D(
-                    [0],
-                    [0],
-                    marker="o",
-                    linestyle="none",
-                    markeredgewidth=0.5,
-                    color=colors.get(model, "gray"),
-                )
-            handles.append(handle)
-            labels.append(model_name(model))
-        ax.legend(
-                handles,
-                labels,
-                title="Model",
-                bbox_to_anchor=(1.02, 1.0),
-                loc="upper left",
-                borderaxespad=0.0,
-                fontsize=9,
-            )
-
-        fig.savefig(f"plots/time_benchmark_all_samplers_{problem}.pdf", bbox_inches="tight")
-        plt.show()
     return
 
 
 @app.cell
 def _():
+    import bayesflow as bf
+    import itertools
+    import torch
+
+    from model_settings_benchmark import load_model, MODELS
+    return MODELS, bf, load_model
+
+
+@app.cell
+def _(MODELS, sbibm):
+    model_i = 4
+    task_name = sbibm.get_available_tasks()[0]
+    task = sbibm.get_task(task_name)
+    conf_tuple = list(MODELS.values())[model_i]
+    model_name_test = list(MODELS.keys())[model_i]
+    priors = task.get_prior()(1_000).numpy()
+    print(model_name_test)
+    print(task_name)
+    storage = ''
+    return conf_tuple, model_name_test, priors, storage, task, task_name
+
+
+@app.cell
+def _(conf_tuple, load_model, model_name_test, storage, task_name):
+    workflow = load_model(conf_tuple=conf_tuple,
+                          training_data=None,
+                          simulator=None,
+                          storage=storage,
+                          problem_name=task_name, model_name=model_name_test,
+                          use_ema=True)
+    return (workflow,)
+
+
+@app.cell
+def _(np, task, task_name):
+    test_data = {
+        'observables': np.concatenate([task.get_observation(num_observation=i).numpy() 
+                                       for i in range(1, 11)]),
+        'parameters': np.concatenate([task.get_true_parameters(num_observation=i).numpy()
+                                      for i in range(1, 11)])
+    }
+
+    if task_name == 'lotka_volterra':
+        new_data = []
+        for obs in test_data['observables']:
+            new_data.append(np.array([obs[:10], obs[10:]]).T.flatten()[np.newaxis])
+        test_data['observables'] = np.concatenate(new_data)
+    return (test_data,)
+
+
+@app.cell
+def _(plt, test_data, workflow):
+    diagnostics = workflow.plot_default_diagnostics(test_data=test_data)
+    plt.show()
+    return
+
+
+@app.cell
+def _(np, task, workflow):
+    num_observation = 1
+    observation = task.get_observation(num_observation=num_observation).numpy()
+    observation = np.array([observation[0, :10], observation[0, 10:]]).T.flatten()[np.newaxis]
+    reference_samples = task.get_reference_posterior_samples(num_observation=num_observation).numpy()[:1000]
+    posterior_samples_dict = workflow.sample(conditions={'observables': observation}, num_samples=1_000)
+    posterior_samples = posterior_samples_dict['parameters'][0]
+
+    param_names = task.get_labels_parameters()
+    true_params = task.get_true_parameters(num_observation=num_observation).numpy()[0]
+    return param_names, posterior_samples, reference_samples, true_params
+
+
+@app.cell
+def _(bf, param_names, plt, posterior_samples, priors, true_params):
+    bf.diagnostics.pairs_posterior(
+        estimates=posterior_samples,
+        priors=priors,
+        targets=true_params,
+        variable_names=param_names
+    )
+    plt.show()
+    return
+
+
+@app.cell
+def _(bf, param_names, plt, priors, reference_samples, true_params):
+    bf.diagnostics.pairs_posterior(
+        estimates=reference_samples,
+        priors=priors,
+        targets=true_params,
+        variable_names=param_names
+    )
+    plt.show()
+    return
+
+
+@app.cell
+def _():
+    return
+
+
+@app.cell
+def _():
+    import marimo as mo
     return
 
 

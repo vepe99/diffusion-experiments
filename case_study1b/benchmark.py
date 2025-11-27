@@ -73,6 +73,9 @@ for sampler in SAMPLER_SETTINGS.keys():
         observation = task.get_observation(num_observation=num_observation).numpy()
         if task_name == 'sir':
             observation = observation / simulator.total_count  # sbibm SIR uses scale_by_total=False
+        #elif task_name == 'lotka_volterra':
+        #    # error in earlier version of bayesflow simulator for lotka volterra, needs to be reshaped
+        #    observation = np.array([observation[0, :10], observation[0, 10:]]).T.flatten()[np.newaxis]
         reference_samples = task.get_reference_posterior_samples(num_observation=num_observation)
         num_samples = reference_samples.shape[0]
         start_time = time.perf_counter()
@@ -88,13 +91,6 @@ for sampler in SAMPLER_SETTINGS.keys():
         c2st_results[sampler].append((c2st_accuracy, end_time - start_time))
         print(f"{num_observation} C2ST accuracy: {c2st_accuracy}")
         print(f"Sampling time: {end_time - start_time} seconds.")
-
-        # bf.diagnostics.pairs_posterior(
-        #     estimates=posterior_samples.numpy(),
-        #     priors=reference_samples.numpy(),
-        # )
-        # plt.show()
-        # break
 
 with open(f'{storage}c2st_results_{model_name}_{task_name}.pkl', 'wb') as f:
     pickle.dump(c2st_results, f)

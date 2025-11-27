@@ -10,7 +10,6 @@ from ema_callback import EMA, save_ema_models
 EPOCHS = 1_000
 BATCH_SIZE = 128
 NUM_BATCHES_PER_EPOCH = 32_000 // BATCH_SIZE  # for online training
-NUM_SAMPLES_INFERENCE = 1_000
 
 SUBNET_KWARGS = {
     "widths": (256, 256, 256, 256, 256),
@@ -50,7 +49,7 @@ MODELS = {
             "subnet_kwargs": SUBNET_KWARGS}),
     }
 
-NUM_STEPS_SAMPLER = 600
+NUM_STEPS_SAMPLER = 500
 SAMPLER_SETTINGS = {
     'ode-euler': {
         'method': 'euler',
@@ -58,37 +57,50 @@ SAMPLER_SETTINGS = {
     },
     'ode-rk45': {
         'method': 'rk45',
-        'steps': NUM_STEPS_SAMPLER // 6
+        'steps': NUM_STEPS_SAMPLER
     },
     'ode-tsit5': {
-            'method': 'tsit5',
-            'steps': NUM_STEPS_SAMPLER // 6
-        },
+        'method': 'tsit5',
+        'steps': NUM_STEPS_SAMPLER
+    },
     'ode-rk45-adaptive': {
-                'method': 'rk45',
-                'steps': "adaptive"
-            },
+        'method': 'rk45',
+        'steps': "adaptive"
+    },
     'ode-tsit5-adaptive': {
-                'method': 'tsit5',
-                'steps': "adaptive"
-            },
+        'method': 'tsit5',
+        'steps': "adaptive"
+    },
     'sde-euler': {
         'method': 'euler_maruyama',
         'steps': NUM_STEPS_SAMPLER
     },
     'sde-euler-pc': {
-            'method': 'euler_maruyama',
-            'steps': NUM_STEPS_SAMPLER // 5,
-            'corrector_steps': 4
-        },
+        'method': 'euler_maruyama',
+        'steps': NUM_STEPS_SAMPLER,
+        'corrector_steps': 1
+    },
+    'sde-sea': {
+        'method': 'sea',
+        'steps': NUM_STEPS_SAMPLER,
+    },
     'sde-shark': {
-            'method': 'shark',
-            'steps': NUM_STEPS_SAMPLER // 2
-        },
+        'method': 'shark',
+        'steps': NUM_STEPS_SAMPLER
+    },
     'sde-shark-adaptive': {
-            'method': 'shark',
-            'steps': "adaptive"
-        }
+        'method': 'shark',
+        'steps': "adaptive"
+    },
+    'sde-langevin': {
+        'method': 'langevin',
+        'steps': NUM_STEPS_SAMPLER
+    },
+    'sde-langevin-pc': {
+        'method': 'langevin',
+        'steps': NUM_STEPS_SAMPLER,
+        'corrector_steps': 5
+    },
 }
 
 
