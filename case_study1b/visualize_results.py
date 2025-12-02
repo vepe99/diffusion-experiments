@@ -60,7 +60,25 @@ def _():
             "MCMC":"MCMC",
         }
         return names.get(k, k.replace("_"," ").title())
-    return create_model_config, model_name
+
+    def sampler_name(k):
+        names = {
+           'ode-rk45': 'ODE-RK45',
+           'ode-rk45-adaptive': 'ODE-RK45-Adaptive', 
+           'ode-tsit5': 'ODE-TSIT5',
+           'ode-tsit5-adaptive': 'ODE-TSIT5-Adaptive',
+           'ode-euler': 'ODE-Euler', 
+           'sde-euler-adaptive': 'SDE-EulerM-Adaptive', 
+           'sde-euler': 'SDE-EulerM' ,
+           'sde-euler-pc': 'SDE-EulerM-PC',
+           'sde-langevin': 'SDE-Langevin', 
+           'sde-langevin-pc': 'SDE-Langevin-PC',
+           'sde-sea': 'SDE-SEA',
+           'sde-shark': 'SDE-ShARK',
+           'sde-two_step-adaptive': 'SDE-2Step-Adaptive'
+        }
+        return names.get(k, k.replace("_"," ").title())
+    return create_model_config, model_name, sampler_name
 
 
 @app.cell
@@ -78,8 +96,8 @@ def _(pd):
 
 @app.cell
 def _(SAMPLER_SETTINGS):
-    all_samplers = ['best', 'merge_problems', 'all'] + [k for k in SAMPLER_SETTINGS.keys()]
-    SHOW_SAMPLER = all_samplers[1]
+    all_samplers = ['best', 'merge_problems'] + [k for k in SAMPLER_SETTINGS.keys()]
+    SHOW_SAMPLER = all_samplers[0]
     print(SHOW_SAMPLER)
     return (SHOW_SAMPLER,)
 
@@ -103,31 +121,16 @@ def _(SHOW_SAMPLER, create_model_config, np, pd, results, sbibm):
     time_long['problem'] = time_long['problem_time'].str.replace('_std', '', regex=False)
     long_df['time_std'] = time_long['time_std']
     long_df['error'] = np.abs(long_df['cs2t'] - 0.5)
-    long_df['rank'] = long_df.groupby('problem')['error'].rank(method='min', ascending=True)
+    #long_df['rank'] = long_df.groupby('problem')['error'].rank(method='min', ascending=True)
     long_df['model'] = long_df['Model-Sampler'].apply(lambda x: x.split('-')[0])
     long_df['sampler'] = long_df['Model-Sampler'].apply(lambda x: '-'.join(x.split('-')[1:]))
     long_df_copy = long_df.copy()
 
     # Rank models within each problem (lower error = better rank)
     if SHOW_SAMPLER == 'best':
-        mean_ranks = long_df.groupby(['model', 'sampler'])['rank'].mean().reset_index()
-        best_samplers = mean_ranks.loc[mean_ranks.groupby('model')['rank'].idxmin(), ['model', 'sampler']]
+        mean_error = long_df.groupby(['model', 'sampler'])['error'].mean().reset_index()
+        best_samplers = mean_error.loc[mean_error.groupby('model')['error'].idxmin(), ['model', 'sampler']]
         long_df = long_df.merge(best_samplers, on=['model', 'sampler'])
-    elif SHOW_SAMPLER == 'all':
-        long_df_time = (
-            long_df[["model", "problem", "time", "time_std"]].groupby(["model", "problem"])
-              .sum()
-        ).reset_index()
-        n_sampler = len(long_df['sampler'].unique())
-        long_df = (
-            long_df[["model", "problem", "error", "std"]].groupby(["model", "problem"])
-              .sum()                    # mean across samplers
-        ).reset_index()
-        long_df['error'] = long_df['error'] / n_sampler
-        long_df['Model-Sampler'] = long_df['model']
-        long_df['sampler'] = 'all'
-        long_df['time'] = long_df_time['time']
-        long_df['time_std'] = long_df_time['time_std']
     elif SHOW_SAMPLER == 'merge_problems':
         long_df = (
             long_df[["model", "sampler", "error", "std", "time", "time_std"]].groupby(["model", "sampler"])
@@ -139,7 +142,7 @@ def _(SHOW_SAMPLER, create_model_config, np, pd, results, sbibm):
         long_df[(long_df.model == 'consistency') & (long_df.sampler != 'ode-euler')] = np.nan
     else:
         long_df = long_df[long_df['sampler'] == SHOW_SAMPLER]
-    long_df['rank'] = long_df.groupby('problem')['error'].rank(method='min', ascending=True)
+    #long_df['rank'] = long_df.groupby('problem')['error'].rank(method='min', ascending=True)
 
     config = create_model_config()
     colors = config['visualization']['colors']
@@ -179,6 +182,7 @@ def _(
     problem_names_nice,
     problem_order,
     results_lueckmann,
+    sampler_name,
 ):
     if long_df.problem[0] != 'all':
         # Boxplot showing distribution of model performances per problem
@@ -199,7 +203,7 @@ def _(
                 _std_to_plot.append(_model_data['std'].values[0])
                 _label = model_name(_base_name)
                 if not 'consistency' in _model and SHOW_SAMPLER != 'all':
-                    _label += f' ({_sampler.title()})'
+                    _label += f' ({sampler_name(_sampler)})'
                 _labels.append(_label)
                 _colors_list.append(colors.get(_base_name, 'gray'))
             _x_positions = np.arange(len(_data_to_plot))
@@ -225,10 +229,10 @@ def _(
 
 
 @app.cell
-def _(SHOW_SAMPLER, colors, long_df, model_name, np, plt):
+def _(SHOW_SAMPLER, colors, long_df, model_name, np, plt, sampler_name):
     if long_df.problem[0] == 'all':
         # Boxplot showing distribution of model performances per sampler
-        _fig, _axes = plt.subplots(2, 5, figsize=(12, 4), sharex=True, sharey=True, layout='constrained')
+        _fig, _axes = plt.subplots(2, len(long_df.sampler.unique())//2+1, figsize=(12, 4), sharex=True, sharey=True, layout='constrained')
         _axes = _axes.flatten()
         for _idx, _sampler in enumerate(long_df.sampler.unique()):
             _subset = long_df[long_df['sampler'] == _sampler]
@@ -237,7 +241,7 @@ def _(SHOW_SAMPLER, colors, long_df, model_name, np, plt):
             if _idx == 0:
                 _labels = []
             _colors_list = []
-        
+
             for _model in _subset['model'].unique():
                 _model_data = _subset[_subset['model'] == _model]
                 _base_name = _model_data['model'].values[0]
@@ -257,21 +261,21 @@ def _(SHOW_SAMPLER, colors, long_df, model_name, np, plt):
                     continue  # consistency models
                 _axes[_idx].errorbar(_x_positions[_i], _data_to_plot[_i], yerr=_std_to_plot[_i],
                                      fmt='o', markersize=6, capsize=3, color=_color, markeredgewidth=0.5, label=_labels[_i])
-            _axes[_idx].set_title(_sampler.title(), fontsize=11)
+            _axes[_idx].set_title(sampler_name(_sampler), fontsize=11)
             _axes[_idx].spines['right'].set_visible(False)
             _axes[_idx].spines['top'].set_visible(False)
             _axes[_idx].grid(True)
             _axes[_idx].set_xticks([])
         _axes[0].set_ylabel(r'Time [s]', fontsize=11)
-        _axes[5].set_ylabel(r'Time [s]', fontsize=11)
-        _axes[-1].set_visible(False)
+        _axes[len(long_df.sampler.unique())//2+1].set_ylabel(r'Time [s]', fontsize=11)
+        #_axes[-1].set_visible(False)
         _handles = _fig.axes[0].get_legend_handles_labels()[0]
         _fig.legend(labels=_labels, handles=_handles, loc='lower center', bbox_to_anchor=(0.5, -0.3), ncol=3, fancybox=False, fontsize=11)
         _fig.savefig(f"plots/time_benchmark_boxplot_{SHOW_SAMPLER}.pdf", bbox_inches='tight')
         plt.show()
-    
+
         # Boxplot showing distribution of model performances per sampler
-        _fig, _axes = plt.subplots(2, 5, figsize=(12, 4), sharex=True, sharey=True, layout='constrained')
+        _fig, _axes = plt.subplots(2, len(long_df.sampler.unique())//2+1, figsize=(12, 4), sharex=True, sharey=True, layout='constrained')
         _axes = _axes.flatten()
         for _idx, _sampler in enumerate(long_df.sampler.unique()):
             _subset = long_df[long_df['sampler'] == _sampler]
@@ -299,18 +303,32 @@ def _(SHOW_SAMPLER, colors, long_df, model_name, np, plt):
                     continue  # consistency models
                 _axes[_idx].errorbar(_x_positions[_i], _data_to_plot[_i], yerr=_std_to_plot[_i],
                                      fmt='o', markersize=6, capsize=3, color=_color, markeredgewidth=0.5, label=_labels[_i])
-            _axes[_idx].set_title(_sampler.title(), fontsize=11)
+            _axes[_idx].set_title(sampler_name(_sampler), fontsize=11)
             _axes[_idx].spines['right'].set_visible(False)
             _axes[_idx].spines['top'].set_visible(False)
             _axes[_idx].grid(True)
             _axes[_idx].set_xticks([])
         _axes[0].set_ylabel(r'$\vert 0.5-\text{C2ST}\vert$', fontsize=11)
-        _axes[5].set_ylabel(r'$\vert 0.5-\text{C2ST}\vert$', fontsize=11)
-        _axes[-1].set_visible(False)
+        _axes[len(long_df.sampler.unique())//2+1].set_ylabel(r'$\vert 0.5-\text{C2ST}\vert$', fontsize=11)
+        #_axes[-1].set_visible(False)
         _handles = _fig.axes[0].get_legend_handles_labels()[0]
         _fig.legend(labels=_labels, handles=_handles, loc='lower center', bbox_to_anchor=(0.5, -0.3), ncol=3, fancybox=False, fontsize=11)
         _fig.savefig(f"plots/c2st_benchmark_boxplot_{SHOW_SAMPLER}.pdf", bbox_inches='tight')
         plt.show()
+    return
+
+
+@app.cell
+def _(long_df):
+    vp_edm_df = long_df[long_df['model'] == 'diffusion_edm_vp']
+    vp_edm_df[['sampler', 'error', 'time']].sort_values(by='error')
+    return
+
+
+@app.cell
+def _(long_df):
+    fm_df = long_df[long_df['model'] == 'flow_matching']
+    fm_df[['sampler', 'error', 'time']].sort_values(by='error')
     return
 
 
