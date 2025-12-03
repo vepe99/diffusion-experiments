@@ -97,7 +97,7 @@ def _(pd):
 @app.cell
 def _(SAMPLER_SETTINGS):
     all_samplers = ['best', 'merge_problems'] + [k for k in SAMPLER_SETTINGS.keys()]
-    SHOW_SAMPLER = all_samplers[0]
+    SHOW_SAMPLER = all_samplers[1]
     print(SHOW_SAMPLER)
     return (SHOW_SAMPLER,)
 
@@ -268,8 +268,8 @@ def _(SHOW_SAMPLER, colors, long_df, model_name, np, plt, sampler_name):
             _axes[_idx].set_xticks([])
         _axes[0].set_ylabel(r'Time [s]', fontsize=11)
         _axes[len(long_df.sampler.unique())//2+1].set_ylabel(r'Time [s]', fontsize=11)
-        #_axes[-1].set_visible(False)
-        _handles = _fig.axes[0].get_legend_handles_labels()[0]
+        _axes[-1].set_visible(False)
+        _handles = _fig.axes[4].get_legend_handles_labels()[0]
         _fig.legend(labels=_labels, handles=_handles, loc='lower center', bbox_to_anchor=(0.5, -0.3), ncol=3, fancybox=False, fontsize=11)
         _fig.savefig(f"plots/time_benchmark_boxplot_{SHOW_SAMPLER}.pdf", bbox_inches='tight')
         plt.show()
@@ -310,8 +310,8 @@ def _(SHOW_SAMPLER, colors, long_df, model_name, np, plt, sampler_name):
             _axes[_idx].set_xticks([])
         _axes[0].set_ylabel(r'$\vert 0.5-\text{C2ST}\vert$', fontsize=11)
         _axes[len(long_df.sampler.unique())//2+1].set_ylabel(r'$\vert 0.5-\text{C2ST}\vert$', fontsize=11)
-        #_axes[-1].set_visible(False)
-        _handles = _fig.axes[0].get_legend_handles_labels()[0]
+        _axes[-1].set_visible(False)
+        _handles = _fig.axes[4].get_legend_handles_labels()[0]
         _fig.legend(labels=_labels, handles=_handles, loc='lower center', bbox_to_anchor=(0.5, -0.3), ncol=3, fancybox=False, fontsize=11)
         _fig.savefig(f"plots/c2st_benchmark_boxplot_{SHOW_SAMPLER}.pdf", bbox_inches='tight')
         plt.show()
