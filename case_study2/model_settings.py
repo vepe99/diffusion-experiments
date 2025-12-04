@@ -82,21 +82,18 @@ MODELS = {
             "subnet_kwargs": SUBNET_KWARGS}),
     }
 
-
+MIN_STEPS = 50
 SAMPLER_SETTINGS = {
     'ode': {
-        'method': 'rk45',
-        'steps': 250
+        'method': 'tsit5',
+        'steps': "adaptive",
+        'min_steps': MIN_STEPS
     },
     'sde': {
-        'method': 'euler_maruyama',
-        'steps': 250
+        'method': 'two_step_adaptive',
+        'steps': "adaptive",
+        'min_steps': MIN_STEPS
     },
-    'sde-pc': {
-        'method': 'euler_maruyama',
-        'steps': 250,
-        'corrector_steps': 1,
-    }
 }
 
 def load_model(adapter, conf_tuple, param_names, training_data, validation_data, storage, problem_name, model_name,

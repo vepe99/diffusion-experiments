@@ -1,5 +1,5 @@
 import os
-os.environ["KERAS_BACKEND"] = "torch"
+os.environ["KERAS_BACKEND"] = "tensorflow"
 
 import bayesflow as bf
 import keras

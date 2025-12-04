@@ -84,9 +84,11 @@ def _():
 @app.cell
 def _(pd):
     results_lueckmann = pd.read_csv('lueckmann_results.csv')
-    results_lueckmann = results_lueckmann[results_lueckmann['num_simulations'] == max(results_lueckmann['num_simulations'])]
+    results_lueckmann = results_lueckmann.loc[results_lueckmann['num_simulations'] == max(results_lueckmann['num_simulations']),
+        ['task', 'algorithm', 'C2ST']]
     results_lueckmann = results_lueckmann[results_lueckmann['algorithm'] == 'NPE']
-    results_lueckmann = results_lueckmann.groupby('task')['C2ST'].agg(['mean']).reset_index()
+    results_lueckmann = results_lueckmann.groupby('task')['C2ST'].mean().reset_index()
+    #results_lueckmann = results_lueckmann.groupby(['task', 'algorithm']).mean().groupby(['task']).min().reset_index()
 
     # Load the dataset
     results = pd.read_csv('c2st_benchmark_results.csv')
@@ -97,7 +99,7 @@ def _(pd):
 @app.cell
 def _(SAMPLER_SETTINGS):
     all_samplers = ['best', 'merge_problems'] + [k for k in SAMPLER_SETTINGS.keys()]
-    SHOW_SAMPLER = all_samplers[1]
+    SHOW_SAMPLER = all_samplers[0]
     print(SHOW_SAMPLER)
     return (SHOW_SAMPLER,)
 
@@ -216,7 +218,8 @@ def _(
             _axes[_idx].grid(True)
             _axes[_idx].set_ylim(0, 0.55)
             _axes[_idx].set_xticks([])
-            ref_val = results_lueckmann.loc[results_lueckmann['task'] == problem_names[_problem_idx], 'mean'].item()
+            #ref_val = results_lueckmann.loc[results_lueckmann['task'] == problem_names[_problem_idx], 'mean'].item()
+            ref_val = results_lueckmann.loc[results_lueckmann['task'] == problem_names[_problem_idx], 'C2ST'].item()
             _axes[_idx].axhline(y=np.abs(0.5 - ref_val), color='black', linestyle='--', linewidth=1,
                                 label='Lueckmann et. al. NPE', zorder=-1)
         _axes[0].set_ylabel(r'$\vert 0.5-\text{C2ST}\vert$', fontsize=11)
