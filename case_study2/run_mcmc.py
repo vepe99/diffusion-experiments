@@ -17,6 +17,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import pickle
 from joblib import Parallel, delayed
+from pathlib import Path
 
 import petab
 import pypesto.petab
@@ -31,15 +32,17 @@ from bayesflow.diagnostics.metrics import root_mean_squared_error, posterior_con
 
 import logging
 pypesto.logging.log(level=logging.ERROR, name="pypesto.petab", console=True)
+logging.getLogger("pypesto").setLevel(logging.ERROR)
 
 from case_study2.helper_pypesto import load_problem, simulate_parallel, get_samples_from_dict, compute_likelihood_parallel, create_pypesto_problem, sample_from_prior, simulator_amici
 
-job_id = 0 #int(os.environ.get('SLURM_ARRAY_TASK_ID', 0))
-n_cpus = 10 #int(os.environ.get('SLURM_CPUS_PER_TASK', 1))
+job_id = int(os.environ.get('SLURM_ARRAY_TASK_ID', 0))
+n_cpus = int(os.environ.get('SLURM_CPUS_PER_TASK', 1))
+BASE = Path(__file__).resolve().parent  # folder of run_diffusion_models.py
 num_training_sets = 512 * 64
 num_validation_sets = 1000
 problem_name = "Beer_MolBioSystems2014"
-mcmc_path = f'models/mcmc_samples_{problem_name}.pkl'
+mcmc_path = BASE / "models" / f'mcmc_samples_{problem_name}.pkl'
 RUN_TEST = False
 
 
@@ -132,11 +135,11 @@ if __name__ == "__main__":
     lbs = np.array([lb for i, lb in enumerate(petab_problem.lb_scaled) if i in pypesto_problem.x_free_indices])
     ubs = np.array([ub for i, ub in enumerate(petab_problem.ub_scaled) if i in pypesto_problem.x_free_indices])
 
-    if os.path.exists(f"models/validation_data_petab_{problem_name}.pkl"):
-        with open(f'models/validation_data_petab_{problem_name}.pkl', 'rb') as f:
+    if os.path.exists(BASE / "models" / f"validation_data_petab_{problem_name}.pkl"):
+        with open(BASE / "models" / f'validation_data_petab_{problem_name}.pkl', 'rb') as f:
             validation_data = pickle.load(f)
         try:
-            with open(f'models/training_data_petab_{problem_name}.pkl', 'rb') as f:
+            with open(BASE / "models" / f'training_data_petab_{problem_name}.pkl', 'rb') as f:
                 training_data = pickle.load(f)
         except FileNotFoundError:
             training_data = None
@@ -147,9 +150,9 @@ if __name__ == "__main__":
         validation_data = simulate_parallel(num_validation_sets, amici_predictor, factory, petab_problem,
                                             pypesto_problem, return_df=True)
 
-        with open(f'models/training_data_petab_{problem_name}.pkl', 'wb') as f:
+        with open(BASE / "models" / f'training_data_petab_{problem_name}.pkl', 'wb') as f:
             pickle.dump(training_data, f)
-        with open(f'models/validation_data_petab_{problem_name}.pkl', 'wb') as f:
+        with open(BASE / "models" / f'validation_data_petab_{problem_name}.pkl', 'wb') as f:
             pickle.dump(validation_data, f)
 
     if RUN_TEST:
@@ -194,7 +197,7 @@ if __name__ == "__main__":
                 ax[i].tick_params(axis='x', labelsize=12)
                 ax[i].spines['top'].set_visible(False)
                 ax[i].spines['right'].set_visible(False)
-            plt.savefig(f'plots/petab_benchmark_model_{problem_name}.png')
+            plt.savefig(BASE / "plots" / f'petab_benchmark_model_{problem_name}.png')
             plt.show()
         exit()
 
@@ -226,7 +229,7 @@ if __name__ == "__main__":
         targets=pypesto_problem.get_reduced_vector(validation_data['amici_params'].T).T[mcmc_mask],
         variable_names=param_names,
     )
-    fig.savefig(f"plots/{problem_name}_mcmc_recovery.png")
+    fig.savefig(BASE / "plots" / f"{problem_name}_mcmc_recovery.png")
 
     fig = bf.diagnostics.calibration_ecdf(
         estimates=mcmc_posterior_samples[mcmc_mask],
@@ -235,7 +238,7 @@ if __name__ == "__main__":
         difference=True,
         stacked=True
     )
-    fig.savefig(f"plots/{problem_name}_mcmc_calibration.png")
+    fig.savefig(BASE / "plots" / f"{problem_name}_mcmc_calibration.png")
 
     test_data = {}
     for key, values in validation_data.items():
@@ -245,8 +248,8 @@ if __name__ == "__main__":
             test_data[key] = values[mcmc_mask]
 
     #%%
-    if os.path.exists(f'metrics/{problem_name}_mcmc_metrics.csv'):
-        with open(f'metrics/{problem_name}_mcmc_metrics.csv', 'rb') as f:
+    if os.path.exists(BASE / "metrics" / f'{problem_name}_mcmc_metrics.csv'):
+        with open(BASE / "metrics" / f'{problem_name}_mcmc_metrics.csv', 'rb') as f:
             mcmc_df = pd.read_csv(f)
         print("MCMC metrics already computed.")
     else:
@@ -288,5 +291,5 @@ if __name__ == "__main__":
             'c2st': classifier_two_sample_test(workflow_samples_aug, test_data_aug, mlp_widths=(128, 128, 128),
                                                validation_split=0.25)
         }], index=[0])
-        with open(f'metrics/{problem_name}_mcmc_metrics.csv', 'wb') as f:
+        with open(BASE / "metrics" / f'{problem_name}_mcmc_metrics.csv', 'wb') as f:
             mcmc_df.to_csv(f)

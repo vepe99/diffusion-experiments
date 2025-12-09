@@ -21,7 +21,10 @@ from bayesflow.diagnostics.metrics import (root_mean_squared_error,
 from joblib import Parallel, delayed
 from scipy import stats
 from scipy.stats import median_abs_deviation
+from functools import partial
 
+
+mad = partial(median_abs_deviation, nan_policy='omit')
 
 @delayed
 def sample_and_simulate(amici_predictor, factory, petab_problem, pypesto_problem, return_df=False):
@@ -58,7 +61,9 @@ def load_problem(problem_name = "Beer_MolBioSystems2014", create_amici_model=Tru
     if create_amici_model:
         import amici
         amici.swig_wrappers.logger.setLevel(logging.CRITICAL)
-        pypesto.logging.log(level=logging.ERROR, name="pypesto.petab", console=True)
+        logging.getLogger("pypesto").setLevel(logging.ERROR)
+        logging.getLogger("petab").setLevel(logging.ERROR)
+        logging.getLogger("bayesflow").setLevel(logging.ERROR)
 
     petab_problem = benchmark_models.get_problem(problem_name)
 
@@ -104,7 +109,7 @@ def load_problem(problem_name = "Beer_MolBioSystems2014", create_amici_model=Tru
             def __init__(self):
                 self.petab_problem = petab_problem
 
-        importer = pypesto.petab.PetabImporter(petab_problem, simulator_type=DummySimulator())
+        importer = pypesto.petab.PetabImporter(petab_problem, simulator=DummySimulator())
 
     # Creating the pypesto problem from PEtab
     pypesto_problem = importer.create_problem()
@@ -397,7 +402,10 @@ def compute_likelihood_parallel(petab_problem, workflow_samples, test_data, n_jo
     import amici
     import logging
     amici.swig_wrappers.logger.setLevel(logging.CRITICAL)
-    pypesto.logging.log(level=logging.ERROR, name="pypesto.petab", console=True)
+    logging.getLogger("pypesto").setLevel(logging.ERROR)
+    logging.getLogger("pypesto.petab").setLevel(logging.ERROR)
+    logging.getLogger("petab").setLevel(logging.ERROR)
+    logging.getLogger("bayesflow").setLevel(logging.ERROR)
 
     sim_list = test_data['sim_data_df']
     results = Parallel(n_jobs=n_jobs)(
@@ -445,11 +453,11 @@ def compute_metrics(model_name, workflow, test_data, sampler_settings, petab_pro
             'model': model_name,
             'sampler': solver_name,
             'nrmse': root_mean_squared_error(workflow_samples_dict, test_data, aggregation=np.nanmedian)['values'].mean(),
-            'nrmse_mad': root_mean_squared_error(workflow_samples_dict, test_data, aggregation=median_abs_deviation)['values'].mean(),
+            'nrmse_mad': root_mean_squared_error(workflow_samples_dict, test_data, aggregation=mad)['values'].mean(),
             'posterior_contraction': posterior_contraction(workflow_samples_dict, test_data, aggregation=np.nanmedian)['values'].mean(),
-            'posterior_contraction_mad': posterior_contraction(workflow_samples_dict, test_data, aggregation=median_abs_deviation)['values'].mean(),
+            'posterior_contraction_mad': posterior_contraction(workflow_samples_dict, test_data, aggregation=mad)['values'].mean(),
             'posterior_calibration_error': calibration_error(workflow_samples_dict, test_data, aggregation=np.nanmedian)['values'].mean(),
-            'posterior_calibration_error_mad': calibration_error(workflow_samples_dict, test_data, aggregation=median_abs_deviation)['values'].mean(),
+            'posterior_calibration_error_mad': calibration_error(workflow_samples_dict, test_data, aggregation=mad)['values'].mean(),
             'count_nan_data': np.sum(np.isnan(get_samples_from_dict(workflow_samples_dict, pypesto_problem)).any(axis=(1, 2)))
         })
 

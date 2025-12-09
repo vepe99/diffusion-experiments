@@ -15,7 +15,7 @@ import logging
 pypesto.logging.log(level=logging.ERROR, name="pypesto.petab", console=True)
 
 from case_study2.model_settings import MODELS
-from helper_visualize import plot_model_comparison_grid
+from case_study2.helper_visualize import plot_model_comparison_grid
 
 problem_name = "Beer_MolBioSystems2014"
 mcmc_path = f'models/mcmc_samples_{problem_name}.pkl'
@@ -52,12 +52,6 @@ if __name__ == "__main__":
             metrics_df[col] = metrics_df[col].astype(float)
             metrics_df.loc[metrics_df[col].isna(), col] = 1
         metrics_df = pd.concat([metrics_df, mcmc_df], ignore_index=True)
-
-        metrics_df.loc[metrics_df['nrmse'] == 1.0, 'posterior_contraction'] = np.nan  # samples were nan
-        metrics_df.loc[metrics_df['nrmse'] == 1.0, 'posterior_contraction_mad'] = np.nan  # samples were nan
-        metrics_df.loc[metrics_df['nrmse'] == 1.0, 'nrmse'] = np.nan  # samples were nan
-        metrics_df.loc[metrics_df['nrmse'] == 1.0, 'nrmse_mad'] = np.nan  # samples were nan
-        metrics_df = metrics_df[metrics_df['sampler'] != 'sde-pc']
         metrics_df['c2st'] = 0.5+np.abs(metrics_df['c2st']-0.5)
         metrics_df['rank'] = metrics_df['nrmse'] + metrics_df['posterior_calibration_error']
 
@@ -129,3 +123,45 @@ if __name__ == "__main__":
     metrics_df_joint.to_csv("plots/metrics.csv", index=False)
     print(np.corrcoef(metrics_df_joint[['posterior_calibration_error', 'c2st']].values.T))
     plot_model_comparison_grid(metrics_df_joint, save_path='plots', plot_shade=True)
+
+
+    df = metrics_df_joint.copy()
+    def fmt_pair(mean, mad):
+        if np.isnan(mad):
+            return f"{mean:.3f} (---)"
+        return f"{mean:.3f} ({mad:.3f})"
+
+
+    df["NRMSE"] = df.apply(lambda r: fmt_pair(r["nrmse"], r["nrmse_mad"]), axis=1)
+    df["Calibration Error"] = df.apply(
+        lambda r: fmt_pair(r["posterior_calibration_error"],
+                           r["posterior_calibration_error_mad"]),
+        axis=1,
+    )
+    df["Contraction"] = df.apply(
+        lambda r: fmt_pair(r["posterior_contraction"],
+                           r["posterior_contraction_mad"]),
+        axis=1,
+    )
+
+    # Optionally rename columns to match your table
+    df = df.rename(columns={
+        "family": "Family",
+        "model": "Design Choice",
+        "sampler": "Sampler",
+        "c2st": "C2ST",
+        "rank": "Rank",
+    })
+
+    cols = ["Family", "Design Choice", "Sampler",
+            "NRMSE", "Calibration Error", "Contraction", "C2ST", "Rank"]
+
+    latex_code = df[cols].to_latex(
+        index=False,
+        escape=False,  # keep math like $\v$ if you put it in the DataFrame
+    )
+    print(df)
+
+    #with open("plots/metrics_table.tex", "w") as f:
+    #    f.write(latex_code)
+

@@ -116,8 +116,8 @@ def load_model(adapter, conf_tuple, param_names, training_data, validation_data,
         standardize='all'
     )
 
-    model_path = f'{storage}petab_benchmark_diffusion_model_{problem_name}_{model_name}.keras'
-    model_path_ema = f'{storage}petab_benchmark_diffusion_model_{problem_name}_{model_name}_ema.keras'
+    model_path = storage / f'petab_benchmark_diffusion_model_{problem_name}_{model_name}.keras'
+    model_path_ema = storage / f'petab_benchmark_diffusion_model_{problem_name}_{model_name}_ema.keras'
     if 'ema' in model_name:
         cbs = [EMA()]
     else:
