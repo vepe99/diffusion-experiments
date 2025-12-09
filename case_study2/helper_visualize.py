@@ -271,19 +271,6 @@ def plot_model_comparison_grid(
                   include_sampler=True, sampler_filter=(None if sampler == 'all' else sampler),
                   plot_shade=plot_shade)
 
-        # individual legend
-        # handles, labels = ax.get_legend_handles_labels()
-        # if handles:
-        #     ax.legend(handles, labels,
-        #           loc='upper center',
-        #           bbox_to_anchor=(0.5, -0.05),
-        #           ncol=2,
-        #           fontsize=12,
-        #           frameon=False,
-        #           handleheight=1.6,  # fix symbol line height
-        #           handletextpad=0.8,  # consistent padding
-        #           labelspacing=0.2,  # fixed vertical spacing between rows
-        #     )
         handles += ax.get_legend_handles_labels()[0]
         labels += ax.get_legend_handles_labels()[1]
     # unique handles and labels

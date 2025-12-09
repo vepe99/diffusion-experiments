@@ -1,13 +1,13 @@
 import marimo
 
-__generated_with = "0.18.1"
+__generated_with = "0.18.2"
 app = marimo.App(width="full")
 
 
 @app.cell
 def _():
     import os
-    os.environ["KERAS_BACKEND"] = "torch"
+    os.environ["KERAS_BACKEND"] = "tensorflow"
 
     import pandas as pd
     import numpy as np

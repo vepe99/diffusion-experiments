@@ -3,7 +3,7 @@ import os
 import bayesflow as bf
 import keras
 
-from ema_callback import EMA, save_ema_models
+from case_study2.ema_callback import EMA, save_ema_models
 
 
 EPOCHS = 1000
@@ -83,16 +83,19 @@ MODELS = {
     }
 
 MIN_STEPS = 50
+MAX_STEPS = 1_000
 SAMPLER_SETTINGS = {
     'ode': {
         'method': 'tsit5',
         'steps': "adaptive",
-        'min_steps': MIN_STEPS
+        'min_steps': MIN_STEPS,
+        'max_steps': MAX_STEPS
     },
     'sde': {
         'method': 'two_step_adaptive',
         'steps': "adaptive",
-        'min_steps': MIN_STEPS
+        'min_steps': MIN_STEPS,
+        'max_steps': MAX_STEPS
     },
 }
 

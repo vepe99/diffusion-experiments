@@ -1,16 +1,188 @@
-import numpy as np
+#%% md
+# # PEtab benchmark model
+#%%
+# pip install git+https://github.com/Benchmarking-Initiative/Benchmark-Models-PEtab.git@master#subdirectory=src/python
+# pypesto, amici, petab, fides, joblib
+
+import logging
 from copy import deepcopy
+from collections import defaultdict
 
-from joblib import Parallel, delayed
-
-from scipy.stats import median_abs_deviation
-
+import benchmark_models_petab as benchmark_models
+import numpy as np
+import pandas as pd
 import pypesto
+import pypesto.petab
 import pypesto.petab
 from bayesflow.diagnostics.metrics import (root_mean_squared_error,
                                            posterior_contraction,
                                            calibration_error,
                                            classifier_two_sample_test)
+from joblib import Parallel, delayed
+from scipy import stats
+from scipy.stats import median_abs_deviation
+
+
+@delayed
+def sample_and_simulate(amici_predictor, factory, petab_problem, pypesto_problem, return_df=False):
+    """Single iteration of sampling and simulation"""
+    prior_sample = sample_from_prior(petab_problem, pypesto_problem)
+    test = simulator_amici(prior_sample['amici_params'], amici_predictor, factory, petab_problem, pypesto_problem,
+                           return_df=return_df)
+
+    # Combine both dictionaries
+    result = {**prior_sample, **test}
+    return result
+
+
+def simulate_parallel(n_samples, amici_predictor, factory, petab_problem, pypesto_problem, return_df=False, n_cpus=10):
+    """Parallel sampling and simulation"""
+    results = Parallel(n_jobs=n_cpus, verbose=100)(
+        sample_and_simulate(amici_predictor, factory, petab_problem, pypesto_problem, return_df) for _ in range(n_samples)
+    )
+    results_dict = defaultdict(list)
+
+    for r in results:
+        for key, value in r.items():
+            results_dict[key].append(value)
+    for key, value_list in results_dict.items():
+        if isinstance(value_list[0], pd.DataFrame):
+            pass
+        else:
+           results_dict[key] = np.array(value_list)
+    return results_dict
+
+
+
+def load_problem(problem_name = "Beer_MolBioSystems2014", create_amici_model=True):
+    if create_amici_model:
+        import amici
+        amici.swig_wrappers.logger.setLevel(logging.CRITICAL)
+        pypesto.logging.log(level=logging.ERROR, name="pypesto.petab", console=True)
+
+    petab_problem = benchmark_models.get_problem(problem_name)
+
+    # decrease upper bounds for offset, scaling and noise parameters
+    scale_params_id = [name for name in petab_problem.parameter_df.index.values if name[:6] == 'offset' or name[:5] == 'scale']
+    petab_problem.parameter_df.loc[scale_params_id, 'upperBound'] = 100
+    sd_params_id = [name for name in petab_problem.parameter_df.index.values if name[:3] == 'sd_']
+    petab_problem.parameter_df.loc[sd_params_id, 'upperBound'] = 10
+
+    # add normal prior (on scale) around real parameters values
+    real_data_params = petab_problem.parameter_df.nominalValue
+    std = 0.5
+    for i in real_data_params.index:
+        if petab_problem.parameter_df.loc[i, 'estimate'] == 0:
+            continue
+        # set prior mean depending on scale
+        mean = scale_values(real_data_params.loc[i], petab_problem.parameter_df.loc[i, 'parameterScale'])
+        if not 'objectivePriorType' in petab_problem.parameter_df or pd.isna(petab_problem.parameter_df.loc[i, 'objectivePriorType']):
+            petab_problem.parameter_df.loc[i, 'objectivePriorType'] = "parameterScaleNormal"
+            petab_problem.parameter_df.loc[i, 'objectivePriorParameters'] = f"{mean};{std}"
+
+    for i, row in petab_problem.parameter_df.iterrows():
+        if 'objectivePriorType' in row and not pd.isna(row['objectivePriorType']):
+            if row['estimate'] == 0:
+                print(f"Parameter {i} has a {row['objectivePriorType']} prior but is not estimated, setting to nan")
+                petab_problem.parameter_df.loc[i, 'objectivePriorType'] = np.nan
+            # validate petab problem, if scale for parameter is defined, prior must be on the same scale
+            if row['parameterScale'] != 'lin' and not row['objectivePriorType'].startswith('parameterScale'):
+                raise ValueError(f"Parameter {i} has parameterScale {row['parameterScale']} but {row['objectivePriorType']} prior")
+
+    amici_predictor = None
+    factory = None
+    if create_amici_model:
+        importer = pypesto.petab.PetabImporter(petab_problem, simulator_type="amici")
+        factory = importer.create_objective_creator()
+
+        model = factory.create_model(verbose=False)
+        amici_predictor = factory.create_predictor()
+        amici_predictor.amici_objective.amici_solver.setAbsoluteTolerance(1e-8)
+    else:
+        # load problem
+        class DummySimulator:
+            def __init__(self):
+                self.petab_problem = petab_problem
+
+        importer = pypesto.petab.PetabImporter(petab_problem, simulator_type=DummySimulator())
+
+    # Creating the pypesto problem from PEtab
+    pypesto_problem = importer.create_problem()
+    if create_amici_model:
+        pypesto_problem.print_parameter_summary()
+    return pypesto_problem, petab_problem, factory, amici_predictor
+
+#%%
+def get_samples_from_dict(samples_dict, pypesto_problem):
+    samples = np.stack([samples_dict[name][..., 0] for name in pypesto_problem.x_names], axis=-1)
+    return samples
+
+
+def sample_from_prior(petab_problem, pypesto_problem):
+    lb = petab_problem.parameter_df['lowerBound'].values
+    ub = petab_problem.parameter_df['upperBound'].values
+    param_names_id = petab_problem.parameter_df.index.values
+    param_scale = petab_problem.parameter_df['parameterScale'].values
+    if 'objectivePriorType' in petab_problem.parameter_df.columns:
+        prior_type = petab_problem.parameter_df['objectivePriorType'].values
+    else:
+        prior_type = [np.nan] * len(param_names_id)
+    estimate_param = petab_problem.parameter_df['estimate'].values
+
+    prior_dict = {}
+    for i, name in enumerate(param_names_id):
+        if estimate_param[i] == 0:
+            prior_dict[name] = petab_problem.parameter_df['nominalValue'].values[i]  # linear space
+        elif prior_type[i] == 'uniform':  # linear space
+            prior_dict[name] = np.random.uniform(low=lb[i], high=ub[i])
+        elif prior_type[i] == 'parameterScaleUniform' or pd.isna(prior_type[i]):
+            # scale bounds to scaled space
+            lb_scaled_i = scale_values(lb[i], param_scale[i])
+            ub_scaled_i = scale_values(ub[i], param_scale[i])
+            val = np.random.uniform(low=lb_scaled_i, high=ub_scaled_i)
+            # scale to linear space
+            prior_dict[name] = values_to_linear_scale(val, param_scale[i])
+        elif prior_type[i] == 'parameterScaleNormal':
+            mean, std = petab_problem.parameter_df['objectivePriorParameters'].values[i].split(';')
+            lb_scaled_i = scale_values(lb[i], param_scale[i])
+            ub_scaled_i = scale_values(ub[i], param_scale[i])
+            a, b = (lb_scaled_i - float(mean)) / float(std), (ub_scaled_i - float(mean)) / float(std)
+            rv = stats.truncnorm.rvs(loc=float(mean), scale=float(std), a=a, b=b)
+            # scale to linear space
+            prior_dict[name] = values_to_linear_scale(rv, param_scale[i])
+        elif prior_type[i] == 'normal':
+            mean, std = petab_problem.parameter_df['objectivePriorParameters'].values[i].split(';')
+            a, b = (lb[i] - float(mean)) / float(std), (ub[i] - float(mean)) / float(std)
+            rv = stats.truncnorm.rvs(loc=float(mean), scale=float(std), a=a, b=b)
+            prior_dict[name] = rv
+        elif prior_type[i] == 'laplace':
+            loc, scale = petab_problem.parameter_df['objectivePriorParameters'].values[i].split(';')
+            for t in range(10):
+                rv = np.random.laplace(loc=float(loc), scale=float(scale))
+                if lb[i] <= rv <= ub[i]:  # sample from truncated laplace
+                    break
+            prior_dict[name] = rv
+        else:
+            raise ValueError("Unknown prior type:", prior_type[i])
+        # scale params and make list
+        prior_dict[name] = np.array([scale_values(prior_dict[name], param_scale[i])])
+
+    # prepare variables for simulation
+    x = get_samples_from_dict(prior_dict, pypesto_problem=pypesto_problem)
+    prior_dict['amici_params'] = x  # scaled parameters for amici
+    return prior_dict
+
+
+def simulator_amici(amici_params, amici_predictor, factory, petab_problem, pypesto_problem, return_df=False):
+    pred = amici_predictor(amici_params)  # expect amici_params to be scaled
+    sim_df, failed = amici_pred_to_df(pred, amici_params,
+                                      factory=factory, petab_problem=petab_problem, pypesto_problem=pypesto_problem)
+    sim = amici_df_to_array(sim_df)
+    if failed:
+        sim = sim * np.nan  # set all to nan if simulation failed
+    if return_df:
+        return dict(sim_data=sim, sim_failed=failed, sim_data_df=sim_df)
+    return dict(sim_data=sim, sim_failed=failed)
 
 
 def create_pypesto_problem(petab_problem, measurement_df=None):
@@ -28,10 +200,8 @@ def create_pypesto_problem(petab_problem, measurement_df=None):
 
     if isinstance(_pypesto_problem.objective, pypesto.objective.AggregatedObjective):
         _pypesto_problem.objective._objectives[0].amici_solver.setAbsoluteTolerance(1e-8)
-        #_pypesto_problem.objective._objectives[0].amici_solver.setSensitivityMethod(amici.SensitivityMethod.adjoint)
     else:
         _pypesto_problem.objective.amici_solver.setAbsoluteTolerance(1e-8)
-        #_pypesto_problem.objective.amici_solver.setSensitivityMethod(amici.SensitivityMethod.adjoint)
 
     if not measurement_df is None:
         return _pypesto_problem, _petab_problem
@@ -62,6 +232,7 @@ def scale_values(x, scale):
     if return_scalar:
         return out.item()
     return out
+
 
 def values_to_linear_scale(x, scale):
     if np.isscalar(x):
@@ -138,6 +309,7 @@ def apply_noise_to_data(sim_df, params, field, pypesto_problem, petab_problem):
                                                                        obs_transformation)
     return sim_df
 
+
 def amici_pred_to_df(pred, params, factory, pypesto_problem, petab_problem, field='simulation'):
     """
         Convert amici prediction results to a dataframe with noise applied.
@@ -213,6 +385,7 @@ def amici_df_to_array(sim_df, field='simulation'):
     arr[np.isinf(arr)] = np.nan
     return arr
 
+
 def compute_likelihood(petab_problem, measurement_df, eval_params) -> float:
     if not 'measurement' in measurement_df.columns:
         measurement_df['measurement'] = measurement_df['simulation']  # pypesto expects measurement column
@@ -252,16 +425,11 @@ def sample_in_batches(data, workflow, num_samples, batch_size=64, sampler_settin
     return posterior_samples
 
 
-def compute_metrics(model_name, workflow, test_data, sampler_settings, get_samples_from_dict, petab_problem,
+def compute_metrics(model_name, workflow, test_data, sampler_settings, petab_problem, pypesto_problem,
                     num_samples_inference, n_jobs=1):
     metrics = []
 
     # augment test data
-    #obj_val = np.zeros((len(test_data['sim_data_df']), 1))
-    #for i in range(len(test_data['sim_data_df'])):
-    #    obj_val[i] = compute_likelihood(petab_problem, test_data['sim_data_df'][i], test_data['amici_params'][i])
-    #test_data_aug = np.concatenate((test_data['amici_params'], obj_val), axis=-1)
-    #del obj_val
     test_data_aug = compute_likelihood_parallel(petab_problem, test_data['amici_params'], test_data, n_jobs=n_jobs)
 
     for solver_name in sampler_settings:
@@ -282,7 +450,7 @@ def compute_metrics(model_name, workflow, test_data, sampler_settings, get_sampl
             'posterior_contraction_mad': posterior_contraction(workflow_samples_dict, test_data, aggregation=median_abs_deviation)['values'].mean(),
             'posterior_calibration_error': calibration_error(workflow_samples_dict, test_data, aggregation=np.nanmedian)['values'].mean(),
             'posterior_calibration_error_mad': calibration_error(workflow_samples_dict, test_data, aggregation=median_abs_deviation)['values'].mean(),
-            'count_nan_data': np.sum(np.isnan(get_samples_from_dict(workflow_samples_dict)).any(axis=(1, 2)))
+            'count_nan_data': np.sum(np.isnan(get_samples_from_dict(workflow_samples_dict, pypesto_problem)).any(axis=(1, 2)))
         })
 
         del workflow_samples_dict  # free memory
@@ -290,20 +458,10 @@ def compute_metrics(model_name, workflow, test_data, sampler_settings, get_sampl
         # compute C2ST with augmented data (objective value)
         if 'consistency' in model_name:
             workflow_samples_dict = sample_in_batches(test_data, workflow, num_samples=1)
-            #workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=1)
         else:
             workflow_samples_dict = sample_in_batches(test_data, workflow, num_samples=1,
                                                       sampler_settings=sampler_settings[solver_name])
-            #workflow_samples_dict = workflow.sample(conditions=test_data, num_samples=1,
-            #                                        **sampler_settings[solver_name])
-        workflow_samples = get_samples_from_dict(workflow_samples_dict)[:, 0]
-
-        #obj_val = np.zeros((len(test_data['sim_data_df']), 1))
-        #for i in range(len(test_data['sim_data_df'])):
-        #    obj_val[i] = compute_likelihood(petab_problem, test_data['sim_data_df'][i], workflow_samples[i])
-        #workflow_samples_aug = np.concatenate((workflow_samples, obj_val), axis=-1)
-        #del obj_val
-        #del workflow_samples
+        workflow_samples = get_samples_from_dict(workflow_samples_dict, pypesto_problem)[:, 0]
         workflow_samples_aug = compute_likelihood_parallel(petab_problem, workflow_samples, test_data, n_jobs=n_jobs)
 
         # compute C2ST
