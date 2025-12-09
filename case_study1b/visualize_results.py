@@ -12,11 +12,17 @@ def _():
     import pandas as pd
     import numpy as np
     import matplotlib.pyplot as plt
+    from pathlib import Path
 
     import sbibm
+    import sys
 
-    from model_settings_benchmark import SAMPLER_SETTINGS
-    return SAMPLER_SETTINGS, np, pd, plt, sbibm
+    BASE = Path(__file__).resolve().parent
+    PROJECT_ROOT = BASE.parent 
+    sys.path.append(str(PROJECT_ROOT))
+    
+    from case_study1b.model_settings_benchmark import SAMPLER_SETTINGS
+    return BASE, SAMPLER_SETTINGS, np, pd, plt, sbibm
 
 
 @app.cell
@@ -82,8 +88,8 @@ def _():
 
 
 @app.cell
-def _(pd):
-    results_lueckmann = pd.read_csv('lueckmann_results.csv')
+def _(BASE, pd):
+    results_lueckmann = pd.read_csv(BASE / 'plots' / 'lueckmann_results.csv')
     results_lueckmann = results_lueckmann.loc[results_lueckmann['num_simulations'] == max(results_lueckmann['num_simulations']),
         ['task', 'algorithm', 'C2ST']]
     results_lueckmann = results_lueckmann[results_lueckmann['algorithm'] == 'NPE']
@@ -91,7 +97,7 @@ def _(pd):
     #results_lueckmann = results_lueckmann.groupby(['task', 'algorithm']).mean().groupby(['task']).min().reset_index()
 
     # Load the dataset
-    results = pd.read_csv('c2st_benchmark_results.csv')
+    results = pd.read_csv(BASE / 'plots' / 'c2st_benchmark_results.csv')
     results.head()
     return results, results_lueckmann
 
@@ -174,6 +180,7 @@ def _(SHOW_SAMPLER, create_model_config, np, pd, results, sbibm):
 
 @app.cell
 def _(
+    BASE,
     SHOW_SAMPLER,
     colors,
     long_df,
@@ -226,13 +233,13 @@ def _(
         _axes[5].set_ylabel(r'$\vert 0.5-\text{C2ST}\vert$', fontsize=11)
         _handles = _fig.axes[0].get_legend_handles_labels()[0]
         _fig.legend(labels=_labels + ['Lueckmann et. al. NPE'], handles=_handles[1:] + _handles[:1], loc='lower center', bbox_to_anchor=(0.5, -0.3), ncol=3, fancybox=False, fontsize=11)
-        _fig.savefig(f"plots/c2st_benchmark_boxplot_{SHOW_SAMPLER}.pdf", bbox_inches='tight')
+        _fig.savefig(BASE / 'plots' / f"c2st_benchmark_boxplot_{SHOW_SAMPLER}.pdf", bbox_inches='tight')
         plt.show()
     return
 
 
 @app.cell
-def _(SHOW_SAMPLER, colors, long_df, model_name, np, plt, sampler_name):
+def _(BASE, SHOW_SAMPLER, colors, long_df, model_name, np, plt, sampler_name):
     if long_df.problem[0] == 'all':
         # Boxplot showing distribution of model performances per sampler
         _fig, _axes = plt.subplots(2, len(long_df.sampler.unique())//2+1, figsize=(12, 4), sharex=True, sharey=True, layout='constrained')
@@ -274,7 +281,7 @@ def _(SHOW_SAMPLER, colors, long_df, model_name, np, plt, sampler_name):
         _axes[-1].set_visible(False)
         _handles = _fig.axes[4].get_legend_handles_labels()[0]
         _fig.legend(labels=_labels, handles=_handles, loc='lower center', bbox_to_anchor=(0.5, -0.3), ncol=3, fancybox=False, fontsize=11)
-        _fig.savefig(f"plots/time_benchmark_boxplot_{SHOW_SAMPLER}.pdf", bbox_inches='tight')
+        _fig.savefig(BASE / 'plots' / f"time_benchmark_boxplot_{SHOW_SAMPLER}.pdf", bbox_inches='tight')
         plt.show()
 
         # Boxplot showing distribution of model performances per sampler
@@ -316,7 +323,7 @@ def _(SHOW_SAMPLER, colors, long_df, model_name, np, plt, sampler_name):
         _axes[-1].set_visible(False)
         _handles = _fig.axes[4].get_legend_handles_labels()[0]
         _fig.legend(labels=_labels, handles=_handles, loc='lower center', bbox_to_anchor=(0.5, -0.3), ncol=3, fancybox=False, fontsize=11)
-        _fig.savefig(f"plots/c2st_benchmark_boxplot_{SHOW_SAMPLER}.pdf", bbox_inches='tight')
+        _fig.savefig(BASE / 'plots' / f"c2st_benchmark_boxplot_{SHOW_SAMPLER}.pdf", bbox_inches='tight')
         plt.show()
     return
 
@@ -337,6 +344,7 @@ def _(long_df):
 
 @app.cell
 def _(
+    BASE,
     SAMPLER_SETTINGS,
     colors,
     long_df_copy,
@@ -442,7 +450,7 @@ def _(
                 fontsize=9,
             )
 
-        fig.savefig(f"plots/c2st_benchmark_all_samplers_{problem}.pdf", bbox_inches="tight")
+        fig.savefig(BASE / 'plots' / f"c2st_benchmark_all_samplers_{problem}.pdf", bbox_inches="tight")
         plt.show()
     return
 
@@ -450,8 +458,6 @@ def _(
 @app.cell
 def _():
     import bayesflow as bf
-    import itertools
-    import torch
 
     from model_settings_benchmark import load_model, MODELS
     return MODELS, bf, load_model

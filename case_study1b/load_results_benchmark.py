@@ -5,12 +5,13 @@ import pickle
 import numpy as np
 import pandas as pd
 import itertools
+from pathlib import Path
 import sbibm
 
-from model_settings_benchmark import MODELS, SAMPLER_SETTINGS
+from case_study1b.model_settings_benchmark import MODELS, SAMPLER_SETTINGS
 
 benchmarks = itertools.product(range(len(MODELS)), range(len(sbibm.get_available_tasks())))
-storage = 'plots/sbi_benchmark/'
+BASE = Path(__file__).resolve().parent
 
 results_dict = {}
 results_dict_std = {}
@@ -41,7 +42,7 @@ for model_i, task_i in benchmarks:
     task_name = sbibm.get_available_tasks()[task_i]
     model_name = list(MODELS.keys())[model_i]
 
-    with open(f'{storage}c2st_results_{model_name}_{task_name}.pkl', 'rb') as f:
+    with open(BASE / 'metrics' / f'c2st_results_{model_name}_{task_name}.pkl', 'rb') as f:
         c2st_results = pickle.load(f)
 
     for sampler in SAMPLER_SETTINGS.keys():
@@ -73,5 +74,5 @@ for task in sbibm.get_available_tasks():
 df = df[ordered_columns]
 df['sampler'] = ['-'.join(name.split('-')[1:]) for name in df.index]
 df['model'] = [name.split('-')[0] for name in df.index]
-df.to_csv(f'{storage}c2st_benchmark_results.csv')
+df.to_csv(BASE / 'plots' / 'c2st_benchmark_results.csv')
 print(df)

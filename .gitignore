@@ -1,14 +1,8 @@
 # Custom ignores
-data/
 checkpoints/
-results/
-samples/
-/amici_models/
-/case_study2/amici_models/
-/case_study2/metrics/
-/case_study2/models/
-/models/
-/case_study4/models/
+*/amici_models/
+*/metrics/
+*/models/
 **pkl
 
 # Byte-compiled / optimized / DLL files

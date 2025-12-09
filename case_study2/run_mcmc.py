@@ -38,7 +38,7 @@ from case_study2.helper_pypesto import load_problem, simulate_parallel, get_samp
 
 job_id = int(os.environ.get('SLURM_ARRAY_TASK_ID', 0))
 n_cpus = int(os.environ.get('SLURM_CPUS_PER_TASK', 1))
-BASE = Path(__file__).resolve().parent  # folder of run_diffusion_models.py
+BASE = Path(__file__).resolve().parent
 num_training_sets = 512 * 64
 num_validation_sets = 1000
 problem_name = "Beer_MolBioSystems2014"

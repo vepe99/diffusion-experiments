@@ -4,7 +4,7 @@ os.environ["KERAS_BACKEND"] = "tensorflow"
 import bayesflow as bf
 import keras
 
-from ema_callback import EMA, save_ema_models
+from case_study1b.ema_callback import EMA, save_ema_models
 
 
 EPOCHS = 1_000
@@ -183,8 +183,8 @@ def load_model(conf_tuple, simulator, training_data, storage, problem_name, mode
         standardize='all'
     )
 
-    model_path = f'{storage}benchmark_{problem_name}_{model_name}.keras'
-    model_path_ema = f'{storage}benchmark_{problem_name}_{model_name}_ema.keras'
+    model_path = storage / f'benchmark_{problem_name}_{model_name}.keras'
+    model_path_ema = storage / f'benchmark_{problem_name}_{model_name}_ema.keras'
     if 'ema' in model_name:
         cbs = [EMA()]
     else:

@@ -4,22 +4,23 @@ os.environ["KERAS_BACKEND"] = "tensorflow"
 import pickle
 import itertools
 import time
+from pathlib import Path
+import logging
 
 import torch
 import sbibm
 from sbibm.metrics import c2st
 import bayesflow as bf
 
-import logging
+from case_study1b.model_settings_benchmark import load_model, MODELS, SAMPLER_SETTINGS
+
+
 logging.getLogger("bayesflow").setLevel(logging.DEBUG)
-
-from model_settings_benchmark import load_model, MODELS, SAMPLER_SETTINGS
-
 
 job_id = int(os.environ.get('SLURM_ARRAY_TASK_ID', 0))
 benchmarks = list(itertools.product(range(len(MODELS)), range(len(sbibm.get_available_tasks()))))
 model_i, task_i = benchmarks[job_id]
-storage = 'plots/sbi_benchmark/'
+BASE = Path(__file__).resolve().parent
 
 task_name = sbibm.get_available_tasks()[task_i]
 print(task_name)
@@ -58,9 +59,8 @@ else:
 workflow = load_model(conf_tuple=conf_tuple,
                       training_data=training_data,
                       simulator=simulator,
-                      storage=storage,
-                      problem_name=task_name, model_name=model_name,
-                      use_ema=True)
+                      storage=BASE / "models",
+                      problem_name=task_name, model_name=model_name)
 
 c2st_results = {sampler: [] for sampler in SAMPLER_SETTINGS.keys()}
 for sampler in SAMPLER_SETTINGS.keys():
@@ -92,6 +92,6 @@ for sampler in SAMPLER_SETTINGS.keys():
         print(f"{num_observation} C2ST accuracy: {c2st_accuracy}")
         print(f"Sampling time: {end_time - start_time} seconds.")
 
-with open(f'{storage}c2st_results_{model_name}_{task_name}.pkl', 'wb') as f:
+with open(BASE / 'metrics' / f'c2st_results_{model_name}_{task_name}.pkl', 'wb') as f:
     pickle.dump(c2st_results, f)
 print('Done.')

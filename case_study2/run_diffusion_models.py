@@ -21,7 +21,7 @@ from case_study2.helper_pypesto import load_problem, simulate_parallel, compute_
 # generate petab problem
 job_id = int(os.environ.get('SLURM_ARRAY_TASK_ID', 0))
 n_cpus = int(os.environ.get('SLURM_CPUS_PER_TASK', 1))
-BASE = Path(__file__).resolve().parent  # folder of run_diffusion_models.py
+BASE = Path(__file__).resolve().parent
 problem_name = sys.argv[1] if len(sys.argv) > 1 else "Beer_MolBioSystems2014"
 num_training_sets = 512*64
 num_validation_sets = 1000
