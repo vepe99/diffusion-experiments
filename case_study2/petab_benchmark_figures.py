@@ -1,4 +1,4 @@
-#%% md
+#%%
 # # PEtab benchmark model
 import os
 if "KERAS_BACKEND" not in os.environ:
@@ -9,10 +9,7 @@ else:
 import numpy as np
 import pandas as pd
 import pickle
-import pypesto.petab
 
-import logging
-pypesto.logging.log(level=logging.ERROR, name="pypesto.petab", console=True)
 
 from case_study2.model_settings import MODELS
 from case_study2.helper_visualize import plot_model_comparison_grid
@@ -120,7 +117,6 @@ if __name__ == "__main__":
 
     metrics_df_joint['rank'] = metrics_df_joint['rank'].rank()
     metrics_df_joint.sort_values(['family', 'rank'], inplace=True)
-    metrics_df_joint.to_csv("plots/metrics.csv", index=False)
     print(np.corrcoef(metrics_df_joint[['posterior_calibration_error', 'c2st']].values.T))
     plot_model_comparison_grid(metrics_df_joint, save_path='plots', plot_shade=True)
 
@@ -153,6 +149,34 @@ if __name__ == "__main__":
         "rank": "Rank",
     })
 
+    design_choice_map = {
+        # Flow Matching
+        "ot_flow_matching": "OT",
+        "flow_matching": "vanilla",
+        "flow_matching_edm": r"$\rho=-0.6$",
+
+        # Diffusion
+        "diffusion_cosine_v": r"Cosine, VP, $\v$",
+        "diffusion_cosine_F": r"Cosine, VP, $\boldsymbol{F}$",
+        "diffusion_edm_vp": r"EDM, VP, $\boldsymbol{F}$",
+        "diffusion_edm_ve": r"EDM, VE, $\boldsymbol{F}$",
+        "diffusion_cosine_noise": r"Cosine, VP, $\epsilonb$",
+
+        # Diffusion (EMA)
+        "diffusion_edm_vp_ema": r"EDM, VP, $\boldsymbol{F}$",
+
+        # Consistency
+        "consistency_model": "Discrete",
+        "stable_consistency_model": "Continuous",
+
+        # MCMC
+        "MCMC": "-",
+    }
+    df["Design Choice"] = df["Design Choice"].map(design_choice_map)
+    df["Sampler"] = df["Sampler"].apply(lambda x: x.upper())
+    df["Rank"] = df["Rank"].apply(lambda x: int(x))
+    df["C2ST"] = df["C2ST"].apply(lambda x: str(round(x, 3)))
+
     cols = ["Family", "Design Choice", "Sampler",
             "NRMSE", "Calibration Error", "Contraction", "C2ST", "Rank"]
 
@@ -160,8 +184,7 @@ if __name__ == "__main__":
         index=False,
         escape=False,  # keep math like $\v$ if you put it in the DataFrame
     )
-    print(df)
 
-    #with open("plots/metrics_table.tex", "w") as f:
-    #    f.write(latex_code)
+    with open("plots/metrics_table.tex", "w") as f:
+        f.write(latex_code)
 

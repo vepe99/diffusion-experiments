@@ -1,31 +1,24 @@
-\begin{tabular}{llllllrr}
+\begin{tabular}{lllllllr}
 \toprule
 Family & Design Choice & Sampler & NRMSE & Calibration Error & Contraction & C2ST & Rank \\
 \midrule
-\multirow{3}{*}{Flow Matching}
-& OT          & ODE & 0.118 (0.002) & 0.046 (0.021) & 0.706 (0.026) & 0.534000 & 1 \\
-& vanilla     & ODE & 0.119 (0.002) & 0.048 (0.023) & 0.706 (0.026) & 0.536000 & 2 \\
-& $\rho=-0.6$ & ODE & 0.131 (0.009) & 0.067 (0.028) & 0.653 (0.059) & 0.544000 & 11 \\
-\midrule
-\multirow{10}{*}{Diffusion}
-& Cosine, VP, $\v$                  & ODE & 0.123 (0.003) & 0.049 (0.020) & 0.701 (0.023) & 0.534000 & 3 \\
-& EDM, VP, $\boldsymbol{F}$         & SDE & 0.127 (0.003) & 0.047 (0.019) & 0.673 (0.029) & 0.514000 & 4 \\
-& Cosine, VP, $\boldsymbol{F}$      & SDE & 0.121 (0.002) & 0.058 (0.025) & 0.703 (0.020) & 0.555000 & 5 \\
-& Cosine, VP, $\v$                  & SDE & 0.121 (0.002) & 0.058 (0.024) & 0.702 (0.020) & 0.542000 & 6 \\
-& EDM, VP, $\boldsymbol{F}$         & ODE & 0.135 (0.003) & 0.048 (0.019) & 0.647 (0.030) & 0.544000 & 7 \\
-& Cosine, VP, $\boldsymbol{F}$      & ODE & 0.127 (0.003) & 0.062 (0.025) & 0.688 (0.024) & 0.532000 & 8 \\
-& EDM, VE, $\boldsymbol{F}$         & SDE & 0.110 (0.002) & 0.091 (0.034) & 0.844 (0.014) & 0.605000 & 12 \\
-& EDM, VE, $\boldsymbol{F}$         & ODE & 0.109 (0.002) & 0.144 (0.053) & 0.868 (0.012) & 0.689000 & 14 \\
-& Cosine, VP, $\epsilonb$           & ODE & 0.928 (---) & 0.064 (0.025) & 0.264 (---) & 0.510020 & 17 \\
-& Cosine, VP, $\epsilonb$           & SDE & 1.083 (---) & 0.178 (0.104) & 0.299 (---) & 0.523000 & 18 \\
-\midrule
-\multirow{2}{*}{Diffusion (EMA)}
-& EDM, VP, $\boldsymbol{F}$ & SDE & 0.146 (0.007) & 0.049 (0.020) & 0.640 (0.057) & 0.550000 & 9 \\
-& EDM, VP, $\boldsymbol{F}$ & ODE & 0.145 (0.007) & 0.051 (0.020) & 0.624 (0.051) & 0.520000 & 10 \\
-\multirow{2}{*}{Consistency}
-& Discrete   & ODE & 0.119 (0.002) & 0.087 (0.041) & 0.727 (0.027) & 0.540000 & 13 \\
-& Continuous & ODE & 0.185 (0.003) & 0.159 (0.069) & 0.229 (0.038) & 0.579000 & 15 \\
-\multirow{1}{*}{MCMC}
-& - & MCMC & 0.124 (0.000) & 0.427 (0.217) & 1.000 (0.000) & 0.888646 & 16 \\
+Consistency Model & Discrete & ODE & 0.119 (0.002) & 0.087 (0.041) & 0.727 (0.027) & 0.54 & 13 \\
+Consistency Model & Continuous & ODE & 0.185 (0.003) & 0.159 (0.069) & 0.229 (0.038) & 0.579 & 15 \\
+Diffusion & Cosine, VP, $\v$ & ODE & 0.123 (0.003) & 0.049 (0.020) & 0.701 (0.023) & 0.534 & 3 \\
+Diffusion & EDM, VP, $\boldsymbol{F}$ & SDE & 0.127 (0.003) & 0.047 (0.019) & 0.673 (0.029) & 0.514 & 4 \\
+Diffusion & Cosine, VP, $\boldsymbol{F}$ & SDE & 0.121 (0.002) & 0.058 (0.025) & 0.703 (0.020) & 0.555 & 5 \\
+Diffusion & Cosine, VP, $\v$ & SDE & 0.121 (0.002) & 0.058 (0.024) & 0.702 (0.020) & 0.542 & 6 \\
+Diffusion & EDM, VP, $\boldsymbol{F}$ & ODE & 0.135 (0.003) & 0.048 (0.019) & 0.647 (0.030) & 0.544 & 7 \\
+Diffusion & Cosine, VP, $\boldsymbol{F}$ & ODE & 0.127 (0.003) & 0.062 (0.025) & 0.688 (0.024) & 0.532 & 8 \\
+Diffusion & EDM, VP, $\boldsymbol{F}$ & SDE & 0.147 (0.007) & 0.049 (0.020) & 0.639 (0.057) & 0.559 & 9 \\
+Diffusion & EDM, VP, $\boldsymbol{F}$ & ODE & 0.146 (0.007) & 0.051 (0.020) & 0.621 (0.054) & 0.527 & 10 \\
+Diffusion & EDM, VE, $\boldsymbol{F}$ & SDE & 0.110 (0.002) & 0.091 (0.034) & 0.844 (0.014) & 0.605 & 12 \\
+Diffusion & EDM, VE, $\boldsymbol{F}$ & ODE & 0.109 (0.002) & 0.144 (0.053) & 0.868 (0.012) & 0.689 & 14 \\
+Diffusion & Cosine, VP, $\epsilonb$ & ODE & 0.934 (0.012) & 0.067 (0.027) & 0.263 (0.164) & 0.509 & 17 \\
+Diffusion & Cosine, VP, $\epsilonb$ & SDE & 1.051 (0.010) & 0.174 (0.102) & 0.338 (0.076) & 0.537 & 18 \\
+Flow Matching & OT & ODE & 0.118 (0.002) & 0.046 (0.021) & 0.706 (0.026) & 0.534 & 1 \\
+Flow Matching & vanilla & ODE & 0.119 (0.002) & 0.048 (0.023) & 0.706 (0.026) & 0.536 & 2 \\
+Flow Matching & $\rho=-0.6$ & ODE & 0.131 (0.009) & 0.066 (0.028) & 0.653 (0.059) & 0.529 & 11 \\
+MCMC & - & MCMC & 0.124 (0.000) & 0.427 (0.217) & 1.000 (0.000) & 0.889 & 16 \\
 \bottomrule
 \end{tabular}
