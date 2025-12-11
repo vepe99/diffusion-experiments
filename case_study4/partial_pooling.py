@@ -66,12 +66,13 @@ else:
 test_data = simulator_hierarchical.sample_parallel(N_TEST, n_subjects=N_SUBJECTS, n_trials=N_TRIALS)
 
 #%%
+print("Starting Partial-Pooling (global) inference...")
 global_posterior = workflow_global.compositional_sample(
     num_samples=N_SAMPLES,
     conditions={'sim_data': test_data['sim_data']},
     compute_prior_score=prior_global_score,
     compositional_bridge_d1=1/N_SUBJECTS,
-    mini_batch_size=10,
+    mini_batch_size=3,
     method=METHOD,
     steps=STEPS,
     max_steps=MAX_STEP
@@ -140,6 +141,7 @@ else:
     workflow_local.approximator = keras.models.load_model(model_path)
 
 #%%
+print("Starting Partial-Pooling (local) inference...")
 test_data_local = np.repeat(
     test_data['sim_data'][:, :, None, ...],  # (N_TEST, N_SUBJECTS, 1, N_TRIALS, 2)
     N_SAMPLES,

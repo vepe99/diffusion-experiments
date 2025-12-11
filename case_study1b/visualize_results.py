@@ -20,7 +20,7 @@ def _():
     BASE = Path(__file__).resolve().parent
     PROJECT_ROOT = BASE.parent 
     sys.path.append(str(PROJECT_ROOT))
-    
+
     from case_study1b.model_settings_benchmark import SAMPLER_SETTINGS
     return BASE, SAMPLER_SETTINGS, np, pd, plt, sbibm
 
@@ -219,7 +219,7 @@ def _(
             for _i, _color in enumerate(_colors_list):
                 _axes[_idx].errorbar(_x_positions[_i], _data_to_plot[_i], yerr=_std_to_plot[_i],
                                      fmt='o', markersize=6, capsize=3, color=_color, markeredgewidth=0.5, label=_labels[_i])
-            _axes[_idx].set_title(problem_names_nice[_problem_idx], fontsize=11)
+            _axes[_idx].set_title(problem_names_nice[_problem_idx], fontsize=12)
             _axes[_idx].spines['right'].set_visible(False)
             _axes[_idx].spines['top'].set_visible(False)
             _axes[_idx].grid(True)
@@ -229,10 +229,10 @@ def _(
             ref_val = results_lueckmann.loc[results_lueckmann['task'] == problem_names[_problem_idx], 'C2ST'].item()
             _axes[_idx].axhline(y=np.abs(0.5 - ref_val), color='black', linestyle='--', linewidth=1,
                                 label='Lueckmann et. al. NPE', zorder=-1)
-        _axes[0].set_ylabel(r'$\vert 0.5-\text{C2ST}\vert$', fontsize=11)
-        _axes[5].set_ylabel(r'$\vert 0.5-\text{C2ST}\vert$', fontsize=11)
+        _axes[0].set_ylabel(r'$\vert 0.5-\text{C2ST}\vert$', fontsize=12)
+        _axes[5].set_ylabel(r'$\vert 0.5-\text{C2ST}\vert$', fontsize=12)
         _handles = _fig.axes[0].get_legend_handles_labels()[0]
-        _fig.legend(labels=_labels + ['Lueckmann et. al. NPE'], handles=_handles[1:] + _handles[:1], loc='lower center', bbox_to_anchor=(0.5, -0.3), ncol=3, fancybox=False, fontsize=11)
+        _fig.legend(labels=_labels + ['Lueckmann et. al. NPE'], handles=_handles[1:] + _handles[:1], loc='lower center', bbox_to_anchor=(0.5, -0.3), ncol=3, fancybox=False, fontsize=12)
         _fig.savefig(BASE / 'plots' / f"c2st_benchmark_boxplot_{SHOW_SAMPLER}.pdf", bbox_inches='tight')
         plt.show()
     return

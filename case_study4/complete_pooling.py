@@ -61,6 +61,7 @@ else:
 test_data = simulator_flat.sample_parallel(N_TEST, n_subjects=N_SUBJECTS, n_trials=N_TRIALS)
 
 #%%
+print("Starting No-Pooling inference...")
 no_pooling_data = test_data.copy()
 no_pooling_data['sim_data'] = test_data['sim_data'][:, 0]  # only first subject, no pooling
 no_pooling_ps = workflow_trials.sample(conditions=no_pooling_data, num_samples=N_SAMPLES,
@@ -100,13 +101,14 @@ with open(BASE / 'metrics' / f'no_pooling_metrics_{N_TRIALS}.pkl', 'wb') as f:
 
 
 #%%
+print("Starting Complete-Pooling inference...")
 ## Complete Pooling
 test_posterior_comp = workflow_trials.compositional_sample(
     num_samples=N_SAMPLES,
     conditions={'sim_data': test_data['sim_data']},
     compute_prior_score=prior_flat_score,
     ompositional_bridge_d1=1/N_SUBJECTS,
-    mini_batch_size=10,
+    mini_batch_size=3,
     method=METHOD,
     steps=STEPS,
     max_steps=MAX_STEP
