@@ -5,7 +5,6 @@ description = "A collection of experiments with diffusion models."
 requires-python = ">=3.11.0, <3.12"
 dependencies = [
     "amici==0.34.2",
-    "bayesflow",
     "benchmark-models-petab",
     "fides==0.8.0",
     "joblib==1.5.2",
@@ -22,6 +21,5 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-bayesflow = { git = "https://github.com/bayesflow-org/bayesflow.git", rev = "new_samplers" }
 benchmark-models-petab = { git = "https://github.com/Benchmarking-Initiative/Benchmark-Models-PEtab.git", subdirectory = "src/python", rev = "master" }
 pypesto = { git = "https://github.com/ICB-DCM/pyPESTO.git", rev = "prior_sample" }

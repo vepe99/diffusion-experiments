@@ -1,13 +1,21 @@
+import os
+if "KERAS_BACKEND" not in os.environ:
+    os.environ["KERAS_BACKEND"] = "tensorflow"
+else:
+    print(f"Using '{os.environ['KERAS_BACKEND']}' backend")
+
 import numpy as np
 from scipy.stats import beta as beta_dist, norm as norm_dist
-
 from numba import njit
 
+import bayesflow as bf
 
-def beta_from_normal(z, a, b):
+
+def beta_from_normal(z, a=50, b=50):
     u = norm_dist.cdf(z)
     x = beta_dist.ppf(u, a, b)  # Beta inverse CDF
     return x
+
 
 @njit
 def simulate_ddm_trial(nu, alpha, t0, beta, dt=1e-3, scale=1.0, max_time=10.0):
@@ -76,3 +84,116 @@ def simulate_ddm(nu, alpha, t0, beta, n_subjects=1, n_trials=1):
     elif n_trials == 1:
         data = data[:, 0]
     return dict(sim_data=data)
+
+
+def score_log_norm(x, m, s):
+    return -(x-m) / s**2
+
+
+# ---------------------------
+# Priors
+# ---------------------------
+def sample_hierarchical_priors(n_subjects=1):
+    """
+    Hierarchical draws as in your specification.
+    Returns a dict with group params and per subject params.
+    """
+    # Group level
+    mu_nu = np.random.normal(0.5, 0.3)
+    mu_log_alpha = np.random.normal(0.0, 0.05)
+    mu_log_t0 = np.random.normal(-1.0, 0.3)
+
+    log_sigma_nu = np.random.normal(-1.0, 1.0)
+    log_sigma_log_alpha = np.random.normal(-3.0, 1.0)
+    log_sigma_log_t0 = np.random.normal(-1.0, 0.3)
+
+    sigma_nu = np.exp(log_sigma_nu)
+    sigma_log_alpha = np.exp(log_sigma_log_alpha)
+    sigma_log_t0 = np.exp(log_sigma_log_t0)
+
+    beta_raw = np.random.normal(0.0, 1.0)
+    beta = beta_from_normal(beta_raw, a=50, b=50)
+
+    # Subject level
+    nu = np.random.normal(mu_nu, sigma_nu, size=n_subjects)
+    log_alpha = np.random.normal(mu_log_alpha, sigma_log_alpha, size=n_subjects)
+    log_t0 = np.random.normal(mu_log_t0, sigma_log_t0, size=n_subjects)
+    alpha = np.exp(log_alpha)
+    t0 = np.exp(log_t0)
+
+    return {
+        # group
+        "mu_nu": mu_nu,
+        "mu_log_alpha": mu_log_alpha,
+        "mu_log_t0": mu_log_t0,
+        "log_sigma_nu": log_sigma_nu,
+        "log_sigma_log_alpha": log_sigma_log_alpha,
+        "log_sigma_log_t0": log_sigma_log_t0,
+        "beta_raw": beta_raw,
+        "beta": beta,
+        # subjects
+        "nu": nu,
+        "alpha": alpha,
+        "t0": t0,
+    }
+
+
+def prior_global_score(x: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    mu_nu = x["mu_nu"]
+    mu_log_alpha = x["mu_log_alpha"]
+    mu_log_t0 = x["mu_log_t0"]
+    log_sigma_nu = x["log_sigma_nu"]
+    log_sigma_log_alpha = x["log_sigma_log_alpha"]
+    log_sigma_log_t0 = x["log_sigma_log_t0"]
+    beta_raw = x["beta_raw"]
+
+    parts = {
+        "mu_nu": score_log_norm(mu_nu, m=0.5, s=0.3),
+        "mu_log_alpha": score_log_norm(mu_log_alpha, m=0.0, s=0.05),
+        "mu_log_t0": score_log_norm(mu_log_t0, m=-1.0, s=0.3),
+        "log_sigma_nu": score_log_norm(log_sigma_nu, m=-1.0, s=1.0),
+        "log_sigma_log_alpha": score_log_norm(log_sigma_log_alpha, m=-3.0, s=1.0),
+        "log_sigma_log_t0": score_log_norm(log_sigma_log_t0, m=-1.0, s=0.3),
+        "beta_raw": score_log_norm(beta_raw, m=0.0, s=1.0),
+    }
+    return parts
+
+
+def sample_flat_priors():
+    # Subject level
+    nu = np.random.normal(0.5, np.exp(-1.0))
+    log_alpha = np.random.normal(0.0, np.exp(-3.0))
+    log_t0 = np.random.normal(-1.0, np.exp(-1.0))
+
+    #beta = np.random.beta(a=50, b=50)
+    beta_raw = np.random.normal(0.0, 1.0)
+    beta = beta_from_normal(beta_raw, a=50, b=50)
+
+    return {
+        "nu": nu,
+        "log_alpha": log_alpha,
+        "alpha": np.exp(log_alpha),
+        "log_t0": log_t0,
+        "t0": np.exp(log_t0),
+        "beta_raw": beta_raw,
+        "beta": beta,
+    }
+
+
+def prior_flat_score(x: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    nu = x["nu"]
+    log_alpha = x["log_alpha"]
+    log_t0 = x["log_t0"]
+    beta_raw = x["beta_raw"]
+
+    parts = {
+        "nu": score_log_norm(nu, m=0.5, s=np.exp(-1.0)),
+        "log_alpha": score_log_norm(log_alpha, m=0.0, s=np.exp(-3.0)),
+        "log_t0": score_log_norm(log_t0, m=-1.0, s=np.exp(-1.0)),
+        "beta_raw":  score_log_norm(beta_raw, m=0.0, s=1.0)
+    }
+    return parts
+
+
+simulator_flat = bf.make_simulator([sample_flat_priors, simulate_ddm])
+simulator_hierarchical = bf.make_simulator([sample_hierarchical_priors, simulate_ddm])
