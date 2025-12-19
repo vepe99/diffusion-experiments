@@ -1,5 +1,5 @@
 import os
-os.environ["KERAS_BACKEND"] = "torch"
+os.environ["KERAS_BACKEND"] = "tensorflow"
 
 import pickle
 import numpy as np
@@ -42,8 +42,12 @@ for model_i, task_i in benchmarks:
     task_name = sbibm.get_available_tasks()[task_i]
     model_name = list(MODELS.keys())[model_i]
 
-    with open(BASE / 'metrics' / f'c2st_results_{model_name}_{task_name}.pkl', 'rb') as f:
-        c2st_results = pickle.load(f)
+    if os.path.exists(BASE / 'metrics' / f'c2st_results_{model_name}_{task_name}.pkl'):
+        with open(BASE / 'metrics' / f'c2st_results_{model_name}_{task_name}.pkl', 'rb') as f:
+            c2st_results = pickle.load(f)
+    else:
+        print(f"Missing results for {model_name} on {task_name}, skipping.")
+        continue
 
     for sampler in SAMPLER_SETTINGS.keys():
         if sampler.startswith('sde') and not model_name.startswith('diffusion'):

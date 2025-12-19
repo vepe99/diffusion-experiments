@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.18.2"
+__generated_with = "0.18.4"
 app = marimo.App(width="full")
 
 
@@ -31,8 +31,12 @@ def _():
         colors = {
             # Flow Matching family
             "flow_matching": "#1B9E77",
-            "ot_flow_matching": "#33A02C",
-            "flow_matching_edm": "#66C2A5",
+            "ot_flow_matching": "#2E7D32",           # dark medium green
+            "ot_flow_matching_offline": "#388E3C",   # medium green
+            "ot_partial_flow_matching": "#43A047",   # balanced green
+            "cot_flow_matching": "#4CAF50",          # standard green
+            "cot_partial_flow_matching": "#66BB6A",  # light green
+            "flow_matching_edm": "#81C784",          # pale green
 
             # Consistency family
             "consistency_model": "#D95F02",
@@ -54,6 +58,10 @@ def _():
         names = {
             "flow_matching":r"Flow Matching$\,$",
             "ot_flow_matching":r"Flow Matching (OT)$\,$",
+            "ot_flow_matching_offline":r"Flow Matching (OT, offline)$\,$",
+            "ot_partial_flow_matching":r"Flow Matching (POT)$\,$",
+            "cot_flow_matching":r"Flow Matching (COT)$\,$",
+            "cot_partial_flow_matching":r"Flow Matching (CPOT)$\,$",
             "flow_matching_edm":r"Flow Matching ($\rho = -0.6$)$\,$",
             "consistency_model":r"Discrete Consistency Model$\,$",
             "stable_consistency_model":r"Continuous Consistency Model$\,$",
@@ -128,8 +136,7 @@ def _(SHOW_SAMPLER, create_model_config, np, pd, results, sbibm):
     time_long = results.melt(id_vars=['Model-Sampler'], value_vars=time_std_vars, var_name='problem_time', value_name='time_std')
     time_long['problem'] = time_long['problem_time'].str.replace('_std', '', regex=False)
     long_df['time_std'] = time_long['time_std']
-    long_df['error'] = np.abs(long_df['cs2t'] - 0.5)
-    #long_df['rank'] = long_df.groupby('problem')['error'].rank(method='min', ascending=True)
+    long_df['error'] = long_df['cs2t'] #np.abs(long_df['cs2t'] - 0.5)
     long_df['model'] = long_df['Model-Sampler'].apply(lambda x: x.split('-')[0])
     long_df['sampler'] = long_df['Model-Sampler'].apply(lambda x: '-'.join(x.split('-')[1:]))
     long_df_copy = long_df.copy()
@@ -147,10 +154,8 @@ def _(SHOW_SAMPLER, create_model_config, np, pd, results, sbibm):
         long_df['problem'] = 'all'
         long_df['time'] = long_df['time'] / 10
         long_df['error'] = long_df['error'] / 10
-        long_df[(long_df.model == 'consistency') & (long_df.sampler != 'ode-euler')] = np.nan
     else:
         long_df = long_df[long_df['sampler'] == SHOW_SAMPLER]
-    #long_df['rank'] = long_df.groupby('problem')['error'].rank(method='min', ascending=True)
 
     config = create_model_config()
     colors = config['visualization']['colors']
@@ -159,12 +164,19 @@ def _(SHOW_SAMPLER, create_model_config, np, pd, results, sbibm):
         problem_names_nice = np.array([sbibm.get_task(long_df.problem.unique()[_i]).name_display for _i in range(10)])
         problem_dim = [sbibm.get_task(long_df.problem.unique()[_i]).dim_parameters for _i in range(10)]  
         data_dim = [sbibm.get_task(long_df.problem.unique()[_i]).dim_data for _i in range(10)]
-        problem_names_nice = np.array([f'{n}\n' + '$\\text{dim}(\\boldsymbol{\\theta})$' + f'$={p_dim}$' + ', $\\text{dim}(\\boldsymbol{y})$' + f'$={d_dim}$' for n, p_dim, d_dim in zip(problem_names_nice, problem_dim, data_dim)])
+        problem_names_nice = np.array([f'{n}\n' + '$\\mathrm{dim}(\\boldsymbol{\\theta})$' + f'$={p_dim}$' + ', $\\mathrm{dim}(\\mathbf{y})$' + f'$={d_dim}$' for n, p_dim, d_dim in zip(problem_names_nice, problem_dim, data_dim)])
         problem_order = np.lexsort((data_dim, problem_dim))
 
     model_order = list(colors.keys())
     long_df["model"] = pd.Categorical(long_df["model"], categories=model_order, ordered=True)
     long_df = long_df.sort_values("model")
+
+    # just for which OT works better
+    #long_df = long_df[long_df["model"].str.contains('flow_matching')].reset_index()
+    if SHOW_SAMPLER == 'best':
+        long_df = long_df[(long_df["model"].str.contains('diffusion')) | (long_df["model"].str.contains('consistency')) | (long_df["model"] == 'flow_matching') | (long_df["model"] == 'cot_flow_matching')| (long_df["model"] == 'flow_matching_edm')].reset_index()
+
+    #long_df = long_df.dropna()
 
     long_df.head()
     return (
@@ -223,16 +235,17 @@ def _(
             _axes[_idx].spines['right'].set_visible(False)
             _axes[_idx].spines['top'].set_visible(False)
             _axes[_idx].grid(True)
-            _axes[_idx].set_ylim(0, 0.55)
+            _axes[_idx].set_ylim(0.48, 1)
             _axes[_idx].set_xticks([])
             #ref_val = results_lueckmann.loc[results_lueckmann['task'] == problem_names[_problem_idx], 'mean'].item()
             ref_val = results_lueckmann.loc[results_lueckmann['task'] == problem_names[_problem_idx], 'C2ST'].item()
-            _axes[_idx].axhline(y=np.abs(0.5 - ref_val), color='black', linestyle='--', linewidth=1,
+            _axes[_idx].axhline(y=ref_val, color='black', linestyle='--', linewidth=1,
                                 label='Lueckmann et. al. NPE', zorder=-1)
-        _axes[0].set_ylabel(r'$\vert 0.5-\text{C2ST}\vert$', fontsize=12)
-        _axes[5].set_ylabel(r'$\vert 0.5-\text{C2ST}\vert$', fontsize=12)
+        _axes[0].set_ylabel(r'$\mathrm{C2ST}$', fontsize=12)
+        _axes[5].set_ylabel(r'$\mathrm{C2ST}$', fontsize=12)
         _handles = _fig.axes[0].get_legend_handles_labels()[0]
-        _fig.legend(labels=_labels + ['Lueckmann et. al. NPE'], handles=_handles[1:] + _handles[:1], loc='lower center', bbox_to_anchor=(0.5, -0.3), ncol=3, fancybox=False, fontsize=12)
+        _fig.legend(labels=_labels + ['Lueckmann et al. NPE'], handles=_handles[1:] + _handles[:1], loc='lower center',
+                    bbox_to_anchor=(0.5, -0.32), ncol=3, fancybox=False, fontsize=12)
         _fig.savefig(BASE / 'plots' / f"c2st_benchmark_boxplot_{SHOW_SAMPLER}.pdf", bbox_inches='tight')
         plt.show()
     return
@@ -267,9 +280,10 @@ def _(BASE, SHOW_SAMPLER, colors, long_df, model_name, np, plt, sampler_name):
             if len(_x_positions) != len(long_df.model.unique()):
                 _x_positions += 5
             for _i, _color in enumerate(_colors_list):
-                if _sampler != 'ode-euler' and (_x_positions[_i] == 4 or _x_positions[_i] == 3):
+                if _sampler != 'ode-euler' and 'Consistency' in _labels[_i]:
                     continue  # consistency models
-                _axes[_idx].errorbar(_x_positions[_i], _data_to_plot[_i], yerr=_std_to_plot[_i],
+                _yerr = np.array([np.minimum(_data_to_plot[_i], _std_to_plot[_i]), _std_to_plot[_i]])[:, None]
+                _axes[_idx].errorbar(_x_positions[_i], _data_to_plot[_i], yerr=_yerr, #_std_to_plot[_i],
                                      fmt='o', markersize=6, capsize=3, color=_color, markeredgewidth=0.5, label=_labels[_i])
             _axes[_idx].set_title(sampler_name(_sampler), fontsize=11)
             _axes[_idx].spines['right'].set_visible(False)
@@ -279,8 +293,10 @@ def _(BASE, SHOW_SAMPLER, colors, long_df, model_name, np, plt, sampler_name):
         _axes[0].set_ylabel(r'Time [s]', fontsize=11)
         _axes[len(long_df.sampler.unique())//2+1].set_ylabel(r'Time [s]', fontsize=11)
         _axes[-1].set_visible(False)
+        #_axes[0].set_yscale('log')
+        _axes[0].set_ylim(0.1, 150)
         _handles = _fig.axes[4].get_legend_handles_labels()[0]
-        _fig.legend(labels=_labels, handles=_handles, loc='lower center', bbox_to_anchor=(0.5, -0.3), ncol=3, fancybox=False, fontsize=11)
+        _fig.legend(labels=_labels, handles=_handles, loc='lower center', bbox_to_anchor=(0.5, -0.3), ncol=4, fancybox=False, fontsize=11)
         _fig.savefig(BASE / 'plots' / f"time_benchmark_boxplot_{SHOW_SAMPLER}.pdf", bbox_inches='tight')
         plt.show()
 
@@ -309,7 +325,7 @@ def _(BASE, SHOW_SAMPLER, colors, long_df, model_name, np, plt, sampler_name):
             if len(_x_positions) != len(long_df.model.unique()):
                 _x_positions += 5
             for _i, _color in enumerate(_colors_list):
-                if _sampler != 'ode-euler' and (_x_positions[_i] == 4 or _x_positions[_i] == 3):
+                if _sampler != 'ode-euler' and 'Consistency' in _labels[_i]:
                     continue  # consistency models
                 _axes[_idx].errorbar(_x_positions[_i], _data_to_plot[_i], yerr=_std_to_plot[_i],
                                      fmt='o', markersize=6, capsize=3, color=_color, markeredgewidth=0.5, label=_labels[_i])
@@ -318,11 +334,11 @@ def _(BASE, SHOW_SAMPLER, colors, long_df, model_name, np, plt, sampler_name):
             _axes[_idx].spines['top'].set_visible(False)
             _axes[_idx].grid(True)
             _axes[_idx].set_xticks([])
-        _axes[0].set_ylabel(r'$\vert 0.5-\text{C2ST}\vert$', fontsize=11)
-        _axes[len(long_df.sampler.unique())//2+1].set_ylabel(r'$\vert 0.5-\text{C2ST}\vert$', fontsize=11)
+        _axes[0].set_ylabel(r'$\mathrm{C2ST}$', fontsize=11)
+        _axes[len(long_df.sampler.unique())//2+1].set_ylabel(r'$\mathrm{C2ST}$', fontsize=11)
         _axes[-1].set_visible(False)
         _handles = _fig.axes[4].get_legend_handles_labels()[0]
-        _fig.legend(labels=_labels, handles=_handles, loc='lower center', bbox_to_anchor=(0.5, -0.3), ncol=3, fancybox=False, fontsize=11)
+        _fig.legend(labels=_labels, handles=_handles, loc='lower center', bbox_to_anchor=(0.5, -0.3), ncol=4, fancybox=False, fontsize=11)
         _fig.savefig(BASE / 'plots' / f"c2st_benchmark_boxplot_{SHOW_SAMPLER}.pdf", bbox_inches='tight')
         plt.show()
     return
@@ -344,7 +360,6 @@ def _(long_df):
 
 @app.cell
 def _(
-    BASE,
     SAMPLER_SETTINGS,
     colors,
     long_df_copy,
@@ -420,7 +435,7 @@ def _(
                 rotation=45,
                 ha="right",
             )
-        ax.set_ylabel("$\\vert 0.5-\\text{C2ST}\\vert$")
+        ax.set_ylabel(r"$\mathrm{C2ST}$")
         ax.set_title(problem_to_title.get(problem, problem), fontsize=11)
         ax.grid(True)
         ax.spines["right"].set_visible(False)
@@ -450,7 +465,7 @@ def _(
                 fontsize=9,
             )
 
-        fig.savefig(BASE / 'plots' / f"c2st_benchmark_all_samplers_{problem}.pdf", bbox_inches="tight")
+        #fig.savefig(BASE / 'plots' / f"c2st_benchmark_all_samplers_{problem}.pdf", bbox_inches="tight")
         plt.show()
     return
 

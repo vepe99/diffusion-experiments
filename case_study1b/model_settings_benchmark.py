@@ -1,3 +1,4 @@
+#%%
 import os
 os.environ["KERAS_BACKEND"] = "tensorflow"
 
@@ -19,6 +20,15 @@ MODELS = {
         "flow_matching": (bf.networks.FlowMatching, {"subnet_kwargs": SUBNET_KWARGS}),
         "flow_matching_edm": (bf.networks.FlowMatching, {'time_power_law_alpha': -0.6, "subnet_kwargs": SUBNET_KWARGS}),
         "ot_flow_matching": (bf.networks.FlowMatching, {"use_optimal_transport": True, "subnet_kwargs": SUBNET_KWARGS}),
+        "ot_flow_matching_offline": (bf.networks.FlowMatching, {"use_optimal_transport": True, "subnet_kwargs": SUBNET_KWARGS}),
+        "ot_partial_flow_matching": (bf.networks.FlowMatching, {"use_optimal_transport": True, "subnet_kwargs": SUBNET_KWARGS,
+                                                                "optimal_transport_kwargs": {"partial_ot_factor": 0.8}}),
+        "cot_flow_matching": (bf.networks.FlowMatching,
+                              {"use_optimal_transport": True, "subnet_kwargs": SUBNET_KWARGS,
+                               "optimal_transport_kwargs": {"conditional_ot_ratio": 0.01}}),
+        "cot_partial_flow_matching": (bf.networks.FlowMatching,
+                                  {"use_optimal_transport": True, "subnet_kwargs": SUBNET_KWARGS,
+                                   "optimal_transport_kwargs": {"conditional_ot_ratio": 0.01, "partial_ot_factor": 0.9}}),
         "consistency_model": (bf.networks.ConsistencyModel, {"total_steps": EPOCHS*BATCH_SIZE, "subnet_kwargs": SUBNET_KWARGS}),
         "stable_consistency_model": (bf.experimental.StableConsistencyModel, {"subnet_kwargs": SUBNET_KWARGS}),
         "diffusion_edm_vp": (bf.networks.DiffusionModel, {
@@ -51,62 +61,74 @@ MODELS = {
 
 NUM_STEPS_SAMPLER = 500
 MIN_STEPS = 50
+MAX_STEPS = 1_000
 SAMPLER_SETTINGS = {
     'ode-euler': {
         'method': 'euler',
         'steps': NUM_STEPS_SAMPLER,
-        'min_steps': MIN_STEPS
+        'min_steps': MIN_STEPS,
+        'max_steps': MAX_STEPS
     },
     'ode-rk45': {
         'method': 'rk45',
         'steps': NUM_STEPS_SAMPLER,
-        'min_steps': MIN_STEPS
+        'min_steps': MIN_STEPS,
+        'max_steps': MAX_STEPS
     },
     'ode-tsit5': {
         'method': 'tsit5',
         'steps': NUM_STEPS_SAMPLER,
-        'min_steps': MIN_STEPS
+        'min_steps': MIN_STEPS,
+        'max_steps': MAX_STEPS
     },
     'ode-rk45-adaptive': {
         'method': 'rk45',
         'steps': "adaptive",
-        'min_steps': MIN_STEPS
+        'min_steps': MIN_STEPS,
+        'max_steps': MAX_STEPS
     },
     'ode-tsit5-adaptive': {
         'method': 'tsit5',
         'steps': "adaptive",
-        'min_steps': MIN_STEPS
+        'min_steps': MIN_STEPS,
+        'max_steps': MAX_STEPS
     },
     'sde-euler': {
         'method': 'euler_maruyama',
         'steps': NUM_STEPS_SAMPLER,
-        'min_steps': MIN_STEPS
+        'min_steps': MIN_STEPS,
+        'max_steps': MAX_STEPS
     },
     'sde-euler-adaptive': {
         'method': 'euler_maruyama',
         'steps': "adaptive",
-        'min_steps': MIN_STEPS
+        'min_steps': MIN_STEPS,
+        'max_steps': MAX_STEPS
     },
     'sde-euler-pc': {
         'method': 'euler_maruyama',
         'steps': NUM_STEPS_SAMPLER,
         'corrector_steps': 1,
-        'min_steps': MIN_STEPS
+        'min_steps': MIN_STEPS,
+        'max_steps': MAX_STEPS
     },
     'sde-sea': {
         'method': 'sea',
         'steps': NUM_STEPS_SAMPLER,
-        'min_steps': MIN_STEPS
+        'min_steps': MIN_STEPS,
+        'max_steps': MAX_STEPS
     },
     'sde-shark': {
         'method': 'shark',
         'steps': NUM_STEPS_SAMPLER,
-        'min_steps': MIN_STEPS
+        'min_steps': MIN_STEPS,
+        'max_steps': MAX_STEPS
     },
     'sde-two_step-adaptive': {
         'method': 'two_step_adaptive',
         'steps': "adaptive",
-        'min_steps': MIN_STEPS
+        'min_steps': MIN_STEPS,
+        'max_steps': MAX_STEPS
     },
     'sde-langevin': {
         'method': 'langevin',
@@ -190,9 +212,8 @@ def load_model(conf_tuple, simulator, training_data, storage, problem_name, mode
     else:
         cbs = None
 
-
     if not os.path.exists(model_path):
-        if simulator is not None:
+        if training_data is None:
             workflow.fit_online(
                 num_batches_per_epoch=NUM_BATCHES_PER_EPOCH,
                 epochs=EPOCHS,

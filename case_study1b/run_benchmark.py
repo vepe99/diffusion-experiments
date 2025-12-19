@@ -1,3 +1,4 @@
+#%%
 import os
 os.environ["KERAS_BACKEND"] = "tensorflow"
 
@@ -12,7 +13,7 @@ import sbibm
 from sbibm.metrics import c2st
 import bayesflow as bf
 
-from case_study1b.model_settings_benchmark import load_model, MODELS, SAMPLER_SETTINGS
+from case_study1b.model_settings_benchmark import load_model, MODELS, SAMPLER_SETTINGS, NUM_BATCHES_PER_EPOCH, BATCH_SIZE
 
 
 logging.getLogger("bayesflow").setLevel(logging.DEBUG)
@@ -30,6 +31,10 @@ conf_tuple = list(MODELS.values())[model_i]
 model_name = list(MODELS.keys())[model_i]
 print(model_name)
 
+if 'offline' in model_name:
+    sim_budget = NUM_BATCHES_PER_EPOCH*BATCH_SIZE
+
+#%%
 if task_name == 'lotka_volterra':
     # sbibm requires julia for this task
     simulator = bf.simulators.LotkaVolterra(subsample='original')
@@ -56,12 +61,26 @@ else:
     training_data = None
     print(f"Using online simulation.")
 
+#%%
 workflow = load_model(conf_tuple=conf_tuple,
                       training_data=training_data,
                       simulator=simulator,
                       storage=BASE / "models",
                       problem_name=task_name, model_name=model_name)
 
+if 'flow' in model_name:
+    diagnostics = workflow.compute_default_diagnostics(test_data=500,
+                                                    approximator_kwargs=dict(method='tsit5', steps='adaptive'))
+elif 'consistency' in model_name:
+    diagnostics = workflow.compute_default_diagnostics(test_data=500)
+else:
+    diagnostics = workflow.compute_default_diagnostics(test_data=500,
+                                                    approximator_kwargs=dict(method='two_step_adaptive', steps='adaptive'))
+#for k, fig in diagnostics.items():
+#    fig.savefig(BASE / 'plots' / f'diagnostic_{model_name}_{task_name}_{k}.png')
+diagnostics.to_csv(BASE / 'plots' / f'diagnostic_{model_name}_{task_name}.csv')
+
+#%%
 c2st_results = {sampler: [] for sampler in SAMPLER_SETTINGS.keys()}
 for sampler in SAMPLER_SETTINGS.keys():
     if sampler.startswith('sde') and not model_name.startswith('diffusion'):

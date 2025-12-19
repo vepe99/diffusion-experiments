@@ -5,15 +5,17 @@ description = "A collection of experiments with diffusion models."
 requires-python = ">=3.11.0, <3.12"
 dependencies = [
     "amici==0.34.2",
+    "bayesflow",
     "benchmark-models-petab",
     "fides==0.8.0",
+    "jax>=0.7.1",
     "joblib==1.5.2",
-    "marimo==0.18.2",
+    "marimo>=0.18.4",
     "matplotlib==3.10.7",
-    "numpy==1.26.0",
+    "numpy==1.26.4",
     "petab==0.7.0",
     "pypesto",
-    "sbibm==1.1.0",
+    "sbibm",
     "scipy==1.12.0",
     "tensorflow==2.20.0",
     "torch==2.9.1",
@@ -22,4 +24,6 @@ dependencies = [
 
 [tool.uv.sources]
 benchmark-models-petab = { git = "https://github.com/Benchmarking-Initiative/Benchmark-Models-PEtab.git", subdirectory = "src/python", rev = "master" }
-pypesto = { git = "https://github.com/ICB-DCM/pyPESTO.git", rev = "prior_sample" }
+pypesto = { git = "https://github.com/ICB-DCM/pyPESTO.git", rev = "develop" }
+bayesflow = { git = "https://github.com/bayesflow-org/bayesflow.git", rev = "compositional_sampling_diffusion" }
+sbibm = { git = "https://github.com/arrjon/sbibm.git", rev = "dev" }
