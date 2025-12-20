@@ -3,7 +3,6 @@ checkpoints/
 */amici_models/
 */metrics/
 */models/
-models/
 **pkl
 
 # Byte-compiled / optimized / DLL files

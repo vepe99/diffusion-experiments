@@ -1,13 +1,12 @@
 import os
 import pickle
-import numpy as np
 
 import bayesflow as bf
+import matplotlib.pyplot as plt
+import numpy as np
+from keras.utils import clear_session
 
 from resnet import ResNetSummary
-
-from keras.utils import clear_session
-import matplotlib.pyplot as plt
 
 
 def train_model(model_kwargs, dataset_kwargs, conf_tuple, data_dict):

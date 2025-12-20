@@ -1,10 +1,7 @@
 import pickle
-import numpy as np
 
 import bayesflow as bf
-
 from keras.utils import clear_session
-
 
 EPOCHS = 300
 BATCH_SIZE = 64
