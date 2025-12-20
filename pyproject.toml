@@ -7,6 +7,7 @@ dependencies = [
     "amici==0.34.2",
     "bayesflow",
     "benchmark-models-petab",
+    "colorcet>=3.1.0",
     "fides==0.8.0",
     "fyeldgenerator>=0.1.7",
     "jax>=0.7.1",

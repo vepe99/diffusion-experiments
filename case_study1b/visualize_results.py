@@ -68,7 +68,7 @@ def _():
             "diffusion_edm_vp":r"VP EDM$\,$",
             "diffusion_edm_ve":r"VE EDM$\,$",
             "diffusion_edm_vp_ema":r"VP EDM EMA$\,$",
-            "diffusion_cosine_F":r"Cosine $\boldsymbol{F}$-pred.$\,$",
+            "diffusion_cosine_F":r"Cosine $\mathbf{F}$-pred.$\,$",
             "diffusion_cosine_v":r"Cosine $\boldsymbol{v}$-pred.$\,$",
             "diffusion_cosine_noise":r"Cosine $\boldsymbol{\epsilon}$-pred.$\,$",
             "MCMC":"MCMC",

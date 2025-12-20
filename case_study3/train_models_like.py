@@ -1,5 +1,6 @@
 import os
 import pickle
+from pathlib import Path
 
 import bayesflow as bf
 import matplotlib.pyplot as plt
@@ -8,12 +9,14 @@ from keras.utils import clear_session
 
 from cnn import ResNetSubnet
 
+BASE = Path(__file__).resolve().parent
+
 
 def train_model(model_kwargs, dataset_kwargs, conf_tuple, data_dict):
     model_name = model_kwargs["model_name"]
-    proj_dir = os.path.join(f"{model_name}", "NLE")
-    ckpt_dir = os.path.join(proj_dir, "checkpoints")
-    figure_dir = os.path.join(proj_dir, "figures")
+    proj_dir = BASE / f"{model_name}" / "NLE"
+    ckpt_dir = proj_dir / "checkpoints"
+    figure_dir = proj_dir / "plots"
     os.makedirs(proj_dir, exist_ok=True)
     os.makedirs(ckpt_dir, exist_ok=True)
     os.makedirs(figure_dir, exist_ok=True)
@@ -50,7 +53,6 @@ def train_model(model_kwargs, dataset_kwargs, conf_tuple, data_dict):
     f = bf.diagnostics.plots.loss(history)
     f.savefig(os.path.join(figure_dir, f"like_loss_{dataset_kwargs['shape'][0]}_{model_config}.png"))
     plt.close(f)
-
 
 
 def get_data_dict(dataset_kwargs):
@@ -96,8 +98,8 @@ def get_data_dict(dataset_kwargs):
         }
     else:
         data_dict = {
-            "train": pickle.load(open(f"data/{dataset_name}_train_data.pkl", "rb")),
-            "validation": pickle.load(open(f"data/{dataset_name}_validation_data.pkl", "rb")),
+            "train": pickle.load(open(BASE / "data" / f"{dataset_name}_train_data.pkl", "rb")),
+            "validation": pickle.load(open(BASE / "data" / f"{dataset_name}_validation_data.pkl", "rb")),
         }
     return data_dict
 

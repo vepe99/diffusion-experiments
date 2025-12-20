@@ -1,5 +1,5 @@
 # Custom ignores
-checkpoints/
++/checkpoints/
 */amici_models/
 */metrics/
 */models/
