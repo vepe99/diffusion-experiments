@@ -6,7 +6,7 @@ class EMA(keras.callbacks.Callback):
     """ Exponential Moving Average (EMA) callback for Keras models.
 
     Following the ideas from
-    * Karras et. al., https://arxiv.org/pdf/2312.02696
+    * Karras et al., https://arxiv.org/pdf/2312.02696
     """
     def __init__(self, gamma=6.94):
         super().__init__()

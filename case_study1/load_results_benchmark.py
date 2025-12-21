@@ -8,7 +8,7 @@ import itertools
 from pathlib import Path
 import sbibm
 
-from case_study1b.model_settings_benchmark import MODELS, SAMPLER_SETTINGS
+from case_study1.model_settings_benchmark import MODELS, SAMPLER_SETTINGS
 
 benchmarks = itertools.product(range(len(MODELS)), range(len(sbibm.get_available_tasks())))
 BASE = Path(__file__).resolve().parent

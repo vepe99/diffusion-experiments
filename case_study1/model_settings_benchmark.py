@@ -5,7 +5,7 @@ os.environ["KERAS_BACKEND"] = "tensorflow"
 import bayesflow as bf
 import keras
 
-from case_study1b.ema_callback import EMA, save_ema_models
+from case_study1.ema_callback import EMA, save_ema_models
 
 
 EPOCHS = 1_000

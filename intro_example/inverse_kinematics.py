@@ -1,6 +1,5 @@
 from collections import OrderedDict
 
-import matplotlib as mpl
 import numpy as np
 import scipy
 from matplotlib import cm, patches
@@ -18,7 +17,6 @@ latex_fonts = {
     "font.size": 10,
     "legend.fontsize": 10,
 }
-# mpl.rcParams.update(latex_fonts)
 
 
 class InverseKinematicsModel:
@@ -47,7 +45,8 @@ class InverseKinematicsModel:
     def sample_prior(self, N):
         return np.random.randn(N, 4) * self.sigmas
 
-    def segment_points(self, p_, length, angle):
+    @staticmethod
+    def segment_points(p_, length, angle):
         p = np.array(p_)
         angle = np.array(angle)
         p[:, 0] += length * np.cos(angle)
@@ -61,7 +60,8 @@ class InverseKinematicsModel:
         _, y = self.segment_points(x2, self.lens[2], x[:, 1] + x[:, 2] + x[:, 3])
         return y
 
-    def find_MAP(self, x):
+    @staticmethod
+    def find_MAP(x):
         mean_shift = MeanShift()
         mean_shift.fit(x)
         centers = mean_shift.cluster_centers_
@@ -76,8 +76,8 @@ class InverseKinematicsModel:
         dist_to_best = np.sum((x - best_center[0]) ** 2, axis=1)
         return np.argmin(dist_to_best)
 
+    @staticmethod
     def arcarrow(
-        self,
         start,
         target,
         dist=0.3,
@@ -126,7 +126,8 @@ class InverseKinematicsModel:
         else:
             ax.contour(X, Y, hist.T, [q], colors=color, linewidths=0.7, zorder=3)
 
-    def init_plot(self):
+    @staticmethod
+    def init_plot():
         return plt.figure(figsize=(8, 8))
 
 
@@ -198,14 +199,8 @@ class InverseKinematicsModel:
         ax.quiver(x0[:, 0], x0[:, 1], (x1 - x0)[:, 0], (x1 - x0)[:, 1], **{"color": self.linecolors[0], **opts})
         ax.quiver(x1[:, 0], x1[:, 1], (x2 - x1)[:, 0], (x2 - x1)[:, 1], **{"color": self.linecolors[1], **opts})
         ax.quiver(x2[:, 0], x2[:, 1], (x3 - x2)[:, 0], (x3 - x2)[:, 1], **{"color": self.linecolors[2], **opts})
-        #        plt.quiver(x0[:,0], x0[:,1], (x1-x0)[:,0], (x1-x0)[:,1], **{'color': self.colors[0], **opts})
-        #        plt.quiver(x1[:,0], x1[:,1], (x2-x1)[:,0], (x2-x1)[:,1], **{'color': self.colors[1], **opts})
-        #        plt.quiver(x2[:,0], x2[:,1], (x3-x2)[:,0], (x3-x2)[:,1], **{'color': self.colors[2], **opts})
         ax.scatter(x3[:, 0], x3[:, 1], color=self.linecolors[0], s=1, rasterized=True, alpha=0.20)
 
-        # plt.plot([x0[exemplar,0], x1[exemplar,0], x2[exemplar,0], x3[exemplar,0]],
-        #          [x0[exemplar,1], x1[exemplar,1], x2[exemplar,1], x3[exemplar,1]],
-        #          '-', color=exemplar_color, linewidth=1, zorder=4)
         ax.plot(
             [x0[exemplar, 0], x1[exemplar, 0], x2[exemplar, 0]],
             [x0[exemplar, 1], x1[exemplar, 1], x2[exemplar, 1]],
@@ -246,8 +241,6 @@ class InverseKinematicsModel:
             length_includes_head=True,
             zorder=4,
         )
-        # plt.scatter([x3[exemplar,0],], [x3[exemplar,1],],
-        #             s=5, linewidth=1, edgecolors='none', facecolors=exemplar_color, zorder=5)
         ax.scatter(
             [
                 x0[exemplar, 0],
@@ -280,7 +273,6 @@ class InverseKinematicsModel:
         ax.set_ylim(*self.rangey)
         ax.set_aspect("equal")
 
-        # self.draw_isolines(x, 'white', filter_width, ax=ax)
         ax.set_xticks([])
         ax.set_yticks([])
 

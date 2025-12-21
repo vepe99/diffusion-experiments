@@ -1,14 +1,18 @@
 import os
 import tempfile
+import logging
+from pathlib import Path
 
 import numpy as np
 
 import pyabc
-
 from bayesflow.simulators import InverseKinematics
 
+logging.getLogger("bayesflow").setLevel(logging.ERROR)
 
-MIN_EPSILON = 0.001
+BASE = Path(__file__).resolve().parent
+MIN_EPSILON = 0.002
+NUM_SAMPLES_INFERENCE = 1000
 
 if __name__ == "__main__":
 
@@ -27,16 +31,13 @@ if __name__ == "__main__":
         p = np.array([p["p1"], p["p2"], p["p3"], p["p4"]])
         return {"observables": simulator.observation_model(p)}
 
-    def distance(x, x0):
-        return np.linalg.norm(x["observables"] - x0["observables"])
-
-    abc = pyabc.ABCSMC(model, prior, distance, population_size=1000)
+    abc = pyabc.ABCSMC(model, prior, population_size=NUM_SAMPLES_INFERENCE)
 
     db_path = os.path.join(tempfile.gettempdir(), "test.db")
     abc.new("sqlite:///" + db_path, obs)
+    history = abc.run(minimum_epsilon=MIN_EPSILON)
 
-    history = abc.run(minimum_epsilon=MIN_EPSILON, max_nr_populations=50)
-
-    abc_samples = history.get_distribution()[0].values
-
-    np.save("samples/abc_inverse_kinematics.npy", abc_samples)
+    abc_samples_weighted, weights = history.get_distribution()
+    abc_samples = pyabc.resample(abc_samples_weighted.values, weights, n=NUM_SAMPLES_INFERENCE)
+    np.save(BASE / "models" / "abc_inverse_kinematics.npy", abc_samples)
+    logging.info(f"ABC-SMC inference completed. Samples saved.")

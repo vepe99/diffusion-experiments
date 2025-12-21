@@ -13,7 +13,7 @@ import sbibm
 from sbibm.metrics import c2st
 import bayesflow as bf
 
-from case_study1b.model_settings_benchmark import load_model, MODELS, SAMPLER_SETTINGS, NUM_BATCHES_PER_EPOCH, BATCH_SIZE
+from case_study1.model_settings_benchmark import load_model, MODELS, SAMPLER_SETTINGS, NUM_BATCHES_PER_EPOCH, BATCH_SIZE
 
 
 logging.getLogger("bayesflow").setLevel(logging.DEBUG)
@@ -67,18 +67,6 @@ workflow = load_model(conf_tuple=conf_tuple,
                       simulator=simulator,
                       storage=BASE / "models",
                       problem_name=task_name, model_name=model_name)
-
-if 'flow' in model_name:
-    diagnostics = workflow.compute_default_diagnostics(test_data=500,
-                                                    approximator_kwargs=dict(method='tsit5', steps='adaptive'))
-elif 'consistency' in model_name:
-    diagnostics = workflow.compute_default_diagnostics(test_data=500)
-else:
-    diagnostics = workflow.compute_default_diagnostics(test_data=500,
-                                                    approximator_kwargs=dict(method='two_step_adaptive', steps='adaptive'))
-#for k, fig in diagnostics.items():
-#    fig.savefig(BASE / 'plots' / f'diagnostic_{model_name}_{task_name}_{k}.png')
-diagnostics.to_csv(BASE / 'plots' / f'diagnostic_{model_name}_{task_name}.csv')
 
 #%%
 c2st_results = {sampler: [] for sampler in SAMPLER_SETTINGS.keys()}

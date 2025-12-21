@@ -21,7 +21,7 @@ def _():
     PROJECT_ROOT = BASE.parent 
     sys.path.append(str(PROJECT_ROOT))
 
-    from case_study1b.model_settings_benchmark import SAMPLER_SETTINGS
+    from case_study1.model_settings_benchmark import SAMPLER_SETTINGS
     return BASE, SAMPLER_SETTINGS, np, pd, plt, sbibm
 
 
