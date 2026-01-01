@@ -49,7 +49,7 @@ def _(BASE, pd):
 @app.cell
 def _(SAMPLER_SETTINGS):
     all_samplers= ['best', 'merge_problems'] + [k for k in SAMPLER_SETTINGS.keys()]
-    SHOW_SAMPLER = all_samplers[0]
+    SHOW_SAMPLER = all_samplers[1]
     print(SHOW_SAMPLER)
     return (SHOW_SAMPLER,)
 

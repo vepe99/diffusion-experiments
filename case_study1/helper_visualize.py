@@ -25,9 +25,9 @@ def create_model_config():
         "ot_flow_matching": "#2E7D32",  # dark medium green
         "ot_partial_flow_matching": "#43A047",  # balanced green
         "cot_flow_matching": "#4CAF50",  # standard green
-        "cot_0_02_flow_matching": "#4CAF50",  # standard green  # todo: change color
-        "cot_0_05_flow_matching": "#4CAF50",  # standard green  # todo: change color
-        "cot_0_1_flow_matching": "#4CAF50",  # standard green  # todo: change color
+        "cot_0_02_flow_matching": "#66BB6A",  # light green
+        "cot_0_05_flow_matching": "#81C784",  # lighter green
+        "cot_0_1_flow_matching": "#A5D6A7",  # very light green
         "cot_partial_flow_matching": "#66BB6A",  # light green
         "flow_matching_edm": "#81C784",  # pale green
 
@@ -485,7 +485,7 @@ def plot_by_sampler(df, col='c2st', col_std='std', save_path=None):
         axes[0].set_ylabel(r'Time [s]', fontsize=10)
         axes[n_cols].set_ylabel(r'Time [s]', fontsize=10)
     axes[0].set_yscale('log')
-    axes[0].set_ylim(0.01, 125)
+    #axes[0].set_ylim(0.01, 125)
 
     # Hide unused subplots
     if n_samplers < len(axes):
@@ -622,6 +622,7 @@ def plot_low_budget_results(df, save_path=None):
     data_to_plot = []
     data_to_plot_std = []
     samplers = ['ode-euler-mini', 'ode-euler-small', 'ode-euler']
+    colors = ["#0072B2", "#E69F00", "#009E73"]
 
     for s in samplers:
         subset = df[df.sampler == s]
@@ -637,7 +638,7 @@ def plot_low_budget_results(df, save_path=None):
     ax = axs[0]
     for s_i, s in enumerate(samplers):
         ax.errorbar(x=np.arange(len(model_labels)), y=np.array(data_to_plot)[s_i],
-                    yerr=np.array(data_to_plot_std)[s_i], marker='o', markersize=5)
+                    yerr=np.array(data_to_plot_std)[s_i], marker='o', markersize=5, color=colors[s_i])
     ax.set_ylabel(r'$\mathrm{C2ST}$', fontsize=10)
     ax.set_xticks(ticks=np.arange(len(model_labels)), labels=model_labels, rotation=45, ha='right')
     ax.grid(True, alpha=0.3)
@@ -657,7 +658,7 @@ def plot_low_budget_results(df, save_path=None):
     ax = axs[1]
     for s_i, s in enumerate(samplers):
         ax.errorbar(x=np.arange(len(model_labels)), y=np.array(data_to_plot)[s_i], yerr=np.array(data_to_plot_std)[s_i],
-                marker='o', markersize=5)
+                marker='o', markersize=5, color=colors[s_i])
     ax.set_ylabel(r'Time [s]', fontsize=10)
     ax.set_xticks(ticks=np.arange(len(model_labels)), labels=model_labels, rotation=45, ha='right')
     ax.grid(True, alpha=0.3)
