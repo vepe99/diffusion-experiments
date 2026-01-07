@@ -1,6 +1,6 @@
 # Diffusion Models In Simulation-Based Inference: A Tutorial Review
 
-This repository hosts the experimental results for a review on diffusion models in Simulation-Based Inference (SBI).
+This repository hosts the experimental results for a [review](https://arxiv.org/abs/2512.20685) on diffusion models in Simulation-Based Inference (SBI).
 
 ## Contents
 Several case studies illustrating the application of diffusion models in SBI:

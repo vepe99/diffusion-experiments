@@ -20,7 +20,7 @@ from case_study4.settings import EPOCHS, BATCH_SIZE, N_TRAINING_BATCHES, N_TRIAL
 from case_study4.ddm_simulator import simulator_flat, beta_from_normal, prior_flat_score
 
 import logging
-logging.getLogger('bayesflow').setLevel(logging.INFO)
+logging.getLogger('bayesflow').setLevel(logging.DEBUG)
 
 param_names = ['nu', 'log_alpha', 'log_t0', 'beta_raw']
 param_metrics = ['nu', 'alpha', 't0', 'beta']

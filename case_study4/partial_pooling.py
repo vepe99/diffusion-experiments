@@ -16,7 +16,7 @@ from bayesflow.diagnostics.metrics import root_mean_squared_error as nrmse
 from bayesflow.diagnostics.metrics import calibration_error as ece
 
 import logging
-logging.getLogger('bayesflow').setLevel(logging.INFO)
+logging.getLogger('bayesflow').setLevel(logging.DEBUG)
 
 from case_study4.settings import EPOCHS, BATCH_SIZE, N_TRAINING_BATCHES, N_TRIALS, N_SUBJECTS, N_TEST, N_SAMPLES, BASE, METHOD, STEPS, MAX_STEP, sample_in_batches
 from case_study4.ddm_simulator import simulator_hierarchical, prior_global_score, beta_from_normal
@@ -66,7 +66,7 @@ else:
 test_data = simulator_hierarchical.sample_parallel(N_TEST, n_subjects=N_SUBJECTS, n_trials=N_TRIALS)
 
 #%%
-print("Starting Partial-Pooling (global) inference...")
+logging.info("Starting Partial-Pooling (global) inference...")
 global_posterior = workflow_global.compositional_sample(
     num_samples=N_SAMPLES,
     conditions={'sim_data': test_data['sim_data']},
@@ -95,7 +95,6 @@ fig = bf.diagnostics.calibration_ecdf(
     difference=True,
     variable_names=pretty_param_names_global
 )
-fig.savefig(BASE / "plots" / "partial_pooling_global_calibration.png")
 plt.show()
 
 metrics = {
@@ -105,7 +104,6 @@ metrics = {
     'calibration_error-mad': ece(ps, test_data,
                                  aggregation=median_abs_deviation)['values'],
 }
-
 with open(BASE / 'metrics' / 'partial_pooling_global_metrics.pkl', 'wb') as f:
     pickle.dump(metrics, f)
 
@@ -141,7 +139,7 @@ else:
     workflow_local.approximator = keras.models.load_model(model_path)
 
 #%%
-print("Starting Partial-Pooling (local) inference...")
+logging.info("Starting Partial-Pooling (local) inference...")
 test_data_local = np.repeat(
     test_data['sim_data'][:, :, None, ...],  # (N_TEST, N_SUBJECTS, 1, N_TRIALS, 2)
     N_SAMPLES,
@@ -223,9 +221,7 @@ fig = bf.diagnostics.calibration_ecdf(
     variable_names=pretty_param_names_local,
     variable_keys=param_metrics
 )
-fig.savefig(BASE / "plots" / "partial_pooling_local_calibration.png")
 plt.show()
-
 
 metrics = {
     'NRMSE': nrmse(samples, test_params_local, variable_keys=param_metrics)['values'],
@@ -238,3 +234,4 @@ metrics = {
 
 with open(BASE / 'metrics' / f'partial_pooling_local_metrics.pkl', 'wb') as f:
     pickle.dump(metrics, f)
+logging.info('Done.')

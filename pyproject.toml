@@ -14,6 +14,7 @@ dependencies = [
     "joblib==1.5.2",
     "marimo>=0.18.4",
     "matplotlib==3.10.7",
+    "numba>=0.63.1",
     "numpy==1.26.4",
     "petab==0.7.0",
     "pyabc>=0.12.16",

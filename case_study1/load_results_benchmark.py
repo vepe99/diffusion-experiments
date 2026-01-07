@@ -1,82 +1,86 @@
 import os
-os.environ["KERAS_BACKEND"] = "tensorflow"
+import logging
 
 import pickle
 import numpy as np
 import pandas as pd
 import itertools
 from pathlib import Path
+from scipy.stats import median_abs_deviation as mad
 import sbibm
 
-from case_study1.model_settings_benchmark import MODELS, SAMPLER_SETTINGS
+from case_study1.model_settings_benchmark import MODELS, SAMPLER_SETTINGS, is_compatible
 
-benchmarks = itertools.product(range(len(MODELS)), range(len(sbibm.get_available_tasks())))
+
+def model_sampler_key(_model: str, _sampler: str) -> str:
+    return f"{_model}-{_sampler}"
+
+benchmarks = [
+    (m, t, s)
+    for m, t, s in itertools.product(
+        MODELS.keys(),
+        sbibm.get_available_tasks(),
+        SAMPLER_SETTINGS.keys(),
+    )
+    if is_compatible(m, s)
+]
 BASE = Path(__file__).resolve().parent
 
-results_dict = {}
-results_dict_std = {}
-results_dict_time = {}
-results_dict_time_std = {}
-for model_name in MODELS.keys():
-    for sampler in SAMPLER_SETTINGS.keys():
-        if sampler.startswith('sde') and not model_name.startswith('diffusion'):
-            continue
-        results_dict.update({
-                model_name+'-'+sampler:
-                    np.ones(len(sbibm.get_available_tasks())) * np.nan
-            })
-        results_dict_std.update({
-                model_name+'-'+sampler:
-                    np.ones(len(sbibm.get_available_tasks())) * np.nan
-            })
-        results_dict_time.update({
-            model_name + '-' + sampler:
-                np.ones(len(sbibm.get_available_tasks())) * np.nan
-        })
-        results_dict_time_std.update({
-            model_name + '-' + sampler:
-                np.ones(len(sbibm.get_available_tasks())) * np.nan
-        })
+model_names = list(MODELS.keys())
+sampler_names = list(SAMPLER_SETTINGS.keys())
+tasks = sbibm.get_available_tasks()
+task_to_idx = {t: i for i, t in enumerate(tasks)}
+n_tasks = len(sbibm.get_available_tasks())
+keys = [model_sampler_key(m, s) for m in model_names for s in sampler_names]
+def nan_matrix():
+    return {k: np.full(n_tasks, np.nan, dtype=float) for k in keys}
 
-for model_i, task_i in benchmarks:
-    task_name = sbibm.get_available_tasks()[task_i]
-    model_name = list(MODELS.keys())[model_i]
+results_mean = nan_matrix()
+results_std = nan_matrix()
+results_median = nan_matrix()
+results_mad = nan_matrix()
+times = nan_matrix()
+times_std = nan_matrix()
 
-    if os.path.exists(BASE / 'metrics' / f'c2st_results_{model_name}_{task_name}.pkl'):
-        with open(BASE / 'metrics' / f'c2st_results_{model_name}_{task_name}.pkl', 'rb') as f:
+for model_name, task_name, sampler_name in benchmarks:
+    pkl = BASE / 'metrics' / f'c2st_results_{model_name}_{task_name}_{sampler_name}.pkl'
+    if os.path.exists(pkl):
+        with open(pkl, 'rb') as f:
             c2st_results = pickle.load(f)
     else:
-        print(f"Missing results for {model_name} on {task_name}, skipping.")
+        logging.warning(f"Missing results for {model_name} on {task_name} with {sampler_name}, skipping.")
         continue
 
-    for sampler in SAMPLER_SETTINGS.keys():
-        if sampler.startswith('sde') and not model_name.startswith('diffusion'):
-            continue
-        results_dict[model_name+'-'+sampler][task_i] = np.mean([c[0] for c in c2st_results[sampler]])
-        results_dict_std[model_name+'-'+sampler][task_i] = np.std([c[0] for c in c2st_results[sampler]])
-        results_dict_time[model_name+'-'+sampler][task_i] = np.mean([c[1] for c in c2st_results[sampler]])
-        results_dict_time_std[model_name + '-' + sampler][task_i] = np.std([c[1] for c in c2st_results[sampler]])
+    task_i = task_to_idx.get(task_name)
+    if task_i is None:
+        logging.warning("Unknown task %s; skipping.", task_name)
+        continue
 
-df = pd.DataFrame.from_dict(results_dict, orient='index', columns=sbibm.get_available_tasks())
-df_std = pd.DataFrame.from_dict(results_dict_std, orient='index', columns=sbibm.get_available_tasks())
-df_time = pd.DataFrame.from_dict(results_dict_time, orient='index', columns=sbibm.get_available_tasks())
-df_time_std = pd.DataFrame.from_dict(results_dict_time_std, orient='index', columns=sbibm.get_available_tasks())
-df.index.name = 'Model-Sampler'
-df_std.index.name = 'Model-Sampler'
-df_time.index.name = 'Model-Sampler'
-df_time_std.index.name = 'Model-Sampler'
-df_std = df_std.add_suffix('_std', axis='columns')
-df_time = df_time.add_suffix('_time', axis='columns')
-df_time_std = df_time_std.add_suffix('_time_std', axis='columns')
-df = pd.concat([df, df_std, df_time, df_time_std], axis=1)
-ordered_columns = []
-for task in sbibm.get_available_tasks():
-    ordered_columns.append(task)
-    ordered_columns.append(task + '_std')
-    ordered_columns.append(task + '_time')
-    ordered_columns.append(task + '_time_std')
-df = df[ordered_columns]
-df['sampler'] = ['-'.join(name.split('-')[1:]) for name in df.index]
-df['model'] = [name.split('-')[0] for name in df.index]
-df.to_csv(BASE / 'plots' / 'c2st_benchmark_results.csv')
-print(df)
+    key = model_sampler_key(model_name, sampler_name)
+    results_mean[key][task_i] = np.mean([max(v['c2st'], 1-v['c2st']) for v in c2st_results])
+    results_std[key][task_i] = np.std([max(v['c2st'], 1-v['c2st']) for v in c2st_results])
+    results_median[key][task_i] = np.median([max(v['c2st'], 1 - v['c2st']) for v in c2st_results])
+    results_mad[key][task_i] = mad([max(v['c2st'], 1 - v['c2st']) for v in c2st_results])
+    times[key][task_i] = np.mean([v['time'] for v in c2st_results])
+    times_std[key][task_i] = np.std([v['time'] for v in c2st_results])
+
+# Build long format dataframe
+rows = []
+for key in keys:
+    model, sampler = key.split("-", 1)
+    for task_idx, task_name in enumerate(tasks):
+        rows.append({
+            'model': model,
+            'sampler': sampler,
+            'task': task_name,
+            'c2st': results_mean[key][task_idx],
+            'c2st_std': results_std[key][task_idx],
+            'c2st_median': results_median[key][task_idx],
+            'c2st_mad': results_mad[key][task_idx],
+            'time': times[key][task_idx],
+            'time_std': times_std[key][task_idx]
+        })
+
+df = pd.DataFrame(rows)
+
+df.to_csv(BASE / "plots" / "c2st_benchmark_results.csv", index=False)
