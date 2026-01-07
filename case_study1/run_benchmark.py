@@ -86,9 +86,9 @@ for num_observation in range(1, 11):
     observation = task.get_observation(num_observation=num_observation).numpy()
     if task_name == 'sir':
         observation = observation / simulator.total_count  # sbibm SIR uses scale_by_total=False
-    elif task_name == 'lotka_volterra' and not ('ot_' in model_name or 'diffusion_cosine_v_lw' == model_name):
-        # error in earlier version of bayesflow simulator for lotka volterra, needs to be reshaped
-        observation = np.array([observation[0, :10], observation[0, 10:]]).T.flatten()[np.newaxis]
+    #elif task_name == 'lotka_volterra' and not ('ot_' in model_name or 'diffusion_cosine_v_lw' == model_name):
+    #    # error in earlier version of bayesflow simulator for lotka volterra, needs to be reshaped
+    #    observation = np.array([observation[0, :10], observation[0, 10:]]).T.flatten()[np.newaxis]
     reference_samples = task.get_reference_posterior_samples(num_observation=num_observation)
     num_samples = reference_samples.shape[0]
     observations.append(observation)
