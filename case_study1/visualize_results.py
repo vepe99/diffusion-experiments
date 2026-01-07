@@ -22,7 +22,7 @@ def _():
     sys.path.append(str(PROJECT_ROOT))
 
     from case_study1.model_settings_benchmark import SAMPLER_SETTINGS
-    from case_study1.helper_visualize import plot_benchmark_results, plot_by_sampler, plot_by_model, plot_low_budget_results, pareto_best_sampler
+    from case_study1.helper_visualize import plot_benchmark_results, plot_by_sampler, plot_by_model, plot_low_budget_c2st_by_problem, pareto_best_sampler
     return (
         BASE,
         SAMPLER_SETTINGS,
@@ -32,7 +32,7 @@ def _():
         plot_benchmark_results,
         plot_by_model,
         plot_by_sampler,
-        plot_low_budget_results,
+        plot_low_budget_c2st_by_problem,
         plt,
         sbibm,
     )
@@ -49,7 +49,7 @@ def _(BASE, pd):
 @app.cell
 def _(SAMPLER_SETTINGS):
     all_samplers= ['best', 'merge_problems'] + [k for k in SAMPLER_SETTINGS.keys()]
-    SHOW_SAMPLER = all_samplers[1]
+    SHOW_SAMPLER = all_samplers[0]
     print(SHOW_SAMPLER)
     return (SHOW_SAMPLER,)
 
@@ -92,10 +92,13 @@ def _(SHOW_SAMPLER, pareto_best_sampler, results):
     ].reset_index(drop=True)
 
     # only flow matching
-    long_df_fm = long_df[
+    long_df_reduced_fm = long_df[
         long_df["model"].str.contains('flow_matching')
     ].reset_index(drop=True)
-    return long_df, long_df_fm, long_df_reduced
+    long_df_fm = long_df_copy[
+        long_df_copy["model"].str.contains('flow_matching')
+    ].reset_index(drop=True)
+    return long_df, long_df_fm, long_df_reduced, long_df_reduced_fm
 
 
 @app.cell
@@ -157,26 +160,28 @@ def _(
     BASE,
     SHOW_SAMPLER,
     long_df_fm,
-    plot_benchmark_results,
-    plot_low_budget_results,
+    long_df_reduced_fm,
+    plot_by_sampler,
+    plot_low_budget_c2st_by_problem,
 ):
-    plot_benchmark_results(
-        long_df_fm,
-        SHOW_SAMPLER,
-        BASE / 'plots' / f"c2st_benchmark_boxplot_{SHOW_SAMPLER}_fm.pdf"
+    plot_by_sampler(
+        long_df_reduced_fm,
+        col='time',
+        col_std='time_std',
+        save_path=BASE / 'plots' / f"time_benchmark_boxplot_{SHOW_SAMPLER}_fm.pdf"
     )
 
-    #plot_by_sampler(
-    #    long_df_fm,
-    #    col='time',
-    #    col_std='time_std',
-    #    save_path=BASE / 'plots' / f"time_benchmark_boxplot_{SHOW_SAMPLER}_fm.pdf"
-    #)
-
-    plot_low_budget_results(
+    plot_low_budget_c2st_by_problem(
         long_df_fm,
-        BASE / 'plots' / f"euler_benchmark_boxplot_{SHOW_SAMPLER}_fm.pdf"
+        BASE / 'plots' / f"euler_benchmark_boxplot_fm.pdf"
     )
+    return
+
+
+@app.cell
+def _():
+
+
     return
 
 

@@ -256,35 +256,19 @@ def plot_benchmark_results(df, show_sampler, save_path=None):
     # Collect all unique model-sampler combinations across all problems
     all_combinations = []
     for model_key in get_model_name():
-        if show_sampler == 'all':
-            # Group by model across all samplers
-            model_data = df[df['model'] == model_key]
-            if len(model_data) > 0:
-                samplers = model_data['sampler'].unique()
-                for sampler in samplers:
-                    label = get_model_name(model_key)
-                    if 'consistency' not in model_key:
-                        label += f' ({get_sampler_name(sampler)})'
-                    all_combinations.append({
-                        'model': model_key,
-                        'sampler': sampler,
-                        'label': label,
-                        'color': colors.get(model_key, 'gray')
-                    })
-        else:
-            # Single sampler per model
-            model_data = df[df['model'] == model_key]
-            if len(model_data) > 0:
-                sampler = model_data['sampler'].iloc[0]
-                label = get_model_name(model_key)
-                if 'consistency' not in model_key and show_sampler != 'all':
-                    label += f' ({get_sampler_name(sampler)})'
-                all_combinations.append({
-                    'model': model_key,
-                    'sampler': sampler,
-                    'label': label,
-                    'color': colors.get(model_key, 'gray')
-                })
+        # Single sampler per model
+        model_data = df[df['model'] == model_key]
+        if len(model_data) > 0:
+            sampler = model_data['sampler'].iloc[0]
+            label = get_model_name(model_key)
+            if 'consistency' not in model_key and show_sampler != 'all':
+                label += f' ({get_sampler_name(sampler)})'
+            all_combinations.append({
+                'model': model_key,
+                'sampler': sampler,
+                'label': label,
+                'color': colors.get(model_key, 'gray')
+            })
 
     # Create a consistent mapping from combination to x-position
     combination_to_x = {
@@ -485,7 +469,6 @@ def plot_by_sampler(df, col='c2st', col_std='std', save_path=None):
         axes[0].set_ylabel(r'Time [s]', fontsize=10)
         axes[n_cols].set_ylabel(r'Time [s]', fontsize=10)
     axes[0].set_yscale('log')
-    #axes[0].set_ylim(0.01, 125)
 
     # Hide unused subplots
     if n_samplers < len(axes):
@@ -612,59 +595,71 @@ def plot_by_model(df, col='c2st', col_std='std', save_path=None):
     plt.show()
 
 
-def plot_low_budget_results(df, save_path=None):
-    """Plot C2ST and time results for low-budget samplers across models."""
-    if df['problem'].iloc[0] != 'all':
+def plot_low_budget_c2st_by_problem(df, save_path=None):
+    """Plot C2ST results for low-budget samplers, one subplot per problem."""
+    if df['problem'].iloc[0] == 'all':
         return
-
-    # C2ST plot
-    labels = []
-    data_to_plot = []
-    data_to_plot_std = []
     samplers = ['ode-euler-mini', 'ode-euler-small', 'ode-euler']
     colors = ["#0072B2", "#E69F00", "#009E73"]
 
-    for s in samplers:
-        subset = df[df.sampler == s]
-        data_to_plot.append(subset.c2st.values)
-        data_to_plot_std.append(subset['std'].values)
-        labels.append(get_sampler_name(s))
+    problem_names = sbibm.get_available_tasks()
+    problem_names_nice = np.array([sbibm.get_task(p).name_display for p in problem_names])
+    problem_dim = [sbibm.get_task(p).dim_parameters for p in problem_names]
+    data_dim = [sbibm.get_task(p).dim_data for p in problem_names]
+    problem_order = np.lexsort((data_dim, problem_dim))
+    n_problems = len(problem_names)
 
-    # Get model names for x-axis
-    subset = df[df.sampler == samplers[0]]
-    model_labels = [get_model_name(m) for m in subset.model.values]
+    fig, axs = plt.subplots(
+        ncols=n_problems // 2,
+        nrows=2,
+        figsize=(12, 4),
+        layout='constrained',
+        sharey=True, sharex=True
+    )
 
-    fig, axs = plt.subplots(ncols=2, figsize=(12, 4), layout='constrained')
-    ax = axs[0]
-    for s_i, s in enumerate(samplers):
-        ax.errorbar(x=np.arange(len(model_labels)), y=np.array(data_to_plot)[s_i],
-                    yerr=np.array(data_to_plot_std)[s_i], marker='o', markersize=5, color=colors[s_i])
-    ax.set_ylabel(r'$\mathrm{C2ST}$', fontsize=10)
-    ax.set_xticks(ticks=np.arange(len(model_labels)), labels=model_labels, rotation=45, ha='right')
-    ax.grid(True, alpha=0.3)
-    ax.spines['right'].set_visible(False)
-    ax.spines['top'].set_visible(False)
+    # Ensure axs is iterable for n_problems == 1
+    if n_problems == 1:
+        axs = np.array([axs])
+    axs = axs.flatten()
 
-    # Time plot
-    labels = []
-    data_to_plot = []
-    data_to_plot_std = []
-    for s in samplers:
-        subset = df[df.sampler == s]
-        data_to_plot.append(subset.time.values)
-        data_to_plot_std.append(subset.time_std.values)
-        labels.append(get_sampler_name(s))
+    for p_i, problem_idx in enumerate(problem_order):
+        ax = axs[p_i]
+        df_p = df[df['problem'] == problem_names[problem_idx]]
 
-    ax = axs[1]
-    for s_i, s in enumerate(samplers):
-        ax.errorbar(x=np.arange(len(model_labels)), y=np.array(data_to_plot)[s_i], yerr=np.array(data_to_plot_std)[s_i],
-                marker='o', markersize=5, color=colors[s_i])
-    ax.set_ylabel(r'Time [s]', fontsize=10)
-    ax.set_xticks(ticks=np.arange(len(model_labels)), labels=model_labels, rotation=45, ha='right')
-    ax.grid(True, alpha=0.3)
-    ax.spines['right'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-    fig.legend(labels, fontsize=10, ncols=3, loc='lower center', bbox_to_anchor=(0.5, -0.1), fancybox=False)
+        # Model labels from the first sampler (assumed consistent)
+        subset_models = df_p[df_p.sampler == samplers[0]]
+        model_labels = [get_model_name(m) for m in subset_models.model.values]
+        x = np.arange(len(model_labels))
+
+        for s_i, s in enumerate(samplers):
+            subset = df_p[df_p.sampler == s]
+            ax.errorbar(
+                x=x,
+                y=subset.c2st.values,
+                yerr=subset['std'].values,
+                marker='o',
+                markersize=5,
+                color=colors[s_i],
+                label=get_sampler_name(s) if p_i == 0 else None
+            )
+
+        ax.set_title(problem_names_nice[problem_idx], fontsize=10)
+        ax.set_xticks(x, model_labels, rotation=90, ha='right')
+        ax.grid(True, alpha=0.3)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+
+        if p_i == 0 or p_i == n_problems // 2:
+            ax.set_ylabel(r'$\mathrm{C2ST}$', fontsize=10)
+
+    fig.legend(
+        fontsize=10,
+        ncols=3,
+        loc='lower center',
+        bbox_to_anchor=(0.5, -0.15),
+        fancybox=False
+    )
+
     if save_path is not None:
         fig.savefig(save_path, bbox_inches='tight')
     plt.show()
