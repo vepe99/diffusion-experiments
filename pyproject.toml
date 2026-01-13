@@ -4,14 +4,17 @@ version = "0.1.0"
 description = "A collection of experiments with diffusion models."
 requires-python = ">=3.11.0, <3.12"
 dependencies = [
+    "autocvd",
     "amici==0.34.2",
     "bayesflow",
     "benchmark-models-petab",
     "colorcet>=3.1.0",
     "fides==0.8.0",
     "fyeldgenerator>=0.1.7",
-    "jax>=0.7.1",
+    "galax",
+    "jax[cuda]>=0.7.1",
     "joblib==1.5.2",
+    "keras==3.10",
     "marimo>=0.18.4",
     "matplotlib==3.10.7",
     "numba>=0.63.1",

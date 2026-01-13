@@ -1,3 +1,6 @@
+from autocvd import autocvd
+autocvd(num_gpus = 1)
+
 import os
 if "KERAS_BACKEND" not in os.environ:
     os.environ["KERAS_BACKEND"] = "torch"
@@ -10,6 +13,7 @@ import pickle
 from scipy.stats import median_abs_deviation
 
 import keras
+print("keras version:", keras.__version__)
 import bayesflow as bf
 
 from bayesflow.diagnostics.metrics import root_mean_squared_error as nrmse
@@ -50,7 +54,9 @@ workflow_global = bf.BasicWorkflow(
 
 model_path = BASE / 'models' / 'partial_pooling_global.keras'
 if not os.path.exists(model_path):
-    training_data = simulator_hierarchical.sample_parallel((N_TRAINING_BATCHES * BATCH_SIZE), n_trials=N_TRIALS)
+    os.makedirs(name= BASE / 'models', exist_ok=True)
+    # training_data = simulator_hierarchical.sample_parallel((N_TRAINING_BATCHES * BATCH_SIZE), n_trials=N_TRIALS, n_jobs=1)
+    training_data = simulator_hierarchical.sample((N_TRAINING_BATCHES * BATCH_SIZE), n_trials=N_TRIALS, )
 
     history = workflow_global.fit_offline(
         training_data,
@@ -63,7 +69,7 @@ else:
     workflow_global.approximator = keras.models.load_model(model_path)
 
 #%%
-test_data = simulator_hierarchical.sample_parallel(N_TEST, n_subjects=N_SUBJECTS, n_trials=N_TRIALS)
+test_data = simulator_hierarchical.sample_parallel(N_TEST, n_subjects=N_SUBJECTS, n_trials=N_TRIALS, n_jobs=1)
 
 #%%
 logging.info("Starting Partial-Pooling (global) inference...")
@@ -104,7 +110,10 @@ metrics = {
     'calibration_error-mad': ece(ps, test_data,
                                  aggregation=median_abs_deviation)['values'],
 }
-with open(BASE / 'metrics' / 'partial_pooling_global_metrics.pkl', 'wb') as f:
+
+metrics_dir = BASE / 'metrics'
+os.makedirs(metrics_dir, exist_ok=True)
+with open(metrics_dir / 'partial_pooling_global_metrics.pkl', 'wb') as f:
     pickle.dump(metrics, f)
 
 #%% Local model
@@ -126,7 +135,7 @@ workflow_local = bf.BasicWorkflow(
 
 model_path = BASE / 'models' / 'partial_pooling_local.keras'
 if not os.path.exists(model_path):
-    training_data = simulator_hierarchical.sample_parallel((N_TRAINING_BATCHES * BATCH_SIZE), n_trials=N_TRIALS)
+    training_data = simulator_hierarchical.sample_parallel((N_TRAINING_BATCHES * BATCH_SIZE), n_trials=N_TRIALS, n_jobs=1)
 
     history = workflow_local.fit_offline(
         training_data,
