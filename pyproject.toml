@@ -5,6 +5,7 @@ description = "A collection of experiments with diffusion models."
 requires-python = ">=3.11.0, <3.12"
 dependencies = [
     "autocvd",
+    "astropy",
     "amici==0.34.2",
     "bayesflow",
     "benchmark-models-petab",

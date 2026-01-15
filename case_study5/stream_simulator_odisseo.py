@@ -14,6 +14,8 @@ from jax import jit, random
 import jax.numpy as jnp
 from astropy import units as u
 from functools import partial
+import astropy.coordinates as coord
+
 
 import odisseo
 from odisseo import construct_initial_state
@@ -167,6 +169,19 @@ def simulate_stream(prog_mass, t_end,
 # priors #
 ##########
 
+#score
+def prior_global_score(x: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    m_nfw = x["m_nfw"]
+    r_s = x["r_s"]
+
+    score = {
+        "m_nfw": np.zeros_like(m_nfw),
+        "r_s": np.zeros_like(r_s),
+    }
+
+    return score
+
+
 def sample_hierarchical_stream_priors(n_streams=1):
 
     # Group level: 
@@ -190,25 +205,26 @@ def sample_hierarchical_stream_priors(n_streams=1):
     # Subject level: stream/progenitor parameters
         if j == 0:
             # GD-1 like stream
-            prog_mass = np.random.uniform(1e4, 5e4,)  #
-            t_end = np.random.uniform(3000.0, 5000.0,)  # in Myr
-            x_c = np.random.uniform(-15.0, -5.0,)  # in kpc
-            y_c = np.random.uniform(5.0, 15.0,)  # in kpc
-            z_c = np.random.uniform(10.0, 20.0,)  # in kpc
-            v_xc = np.random.uniform(-100.0, 0.0,)  # in km/s
-            v_yc = np.random.uniform(100.0, 200.0,)  # in km/s
-            v_zc = np.random.uniform(-200.0, -100.0,)  # in km/s
+            samples_gd1_prior = sample_gd1_priors()
+            prog_mass = samples_gd1_prior['prog_mass']
+            t_end = samples_gd1_prior['t_end']
+            x_c = samples_gd1_prior['x_c']
+            y_c = samples_gd1_prior['y_c']
+            z_c = samples_gd1_prior['z_c']
+            v_xc = samples_gd1_prior['v_xc']
+            v_yc = samples_gd1_prior['v_yc']    
+            v_zc = samples_gd1_prior['v_zc']
         elif j == 1:
             # Pal 5 like stream
-            prog_mass = np.random.uniform(1e4, 5e4,)  #
-            t_end = np.random.uniform(2000.0, 4000.0,)  # in Myr
-            x_c = np.random.uniform(5.0, 15.0,)  # in kpc
-            y_c = np.random.uniform(-15.0, -5.0,)  # in kpc
-            z_c = np.random.uniform(-10.0, 0.0,)  # in kpc
-            v_xc = np.random.uniform(0.0, 100.0,)  # in km/s
-            v_yc = np.random.uniform(-200.0, -100.0,)  # in km/s
-            v_zc = np.random.uniform(100.0, 200.0,)  # in km/s
-    
+            samples_pal5_prior = sample_pal5_priors()
+            prog_mass = samples_pal5_prior['prog_mass']
+            t_end = samples_pal5_prior['t_end']
+            x_c = samples_pal5_prior['x_c']
+            y_c = samples_pal5_prior['y_c']
+            z_c = samples_pal5_prior['z_c']
+            v_xc = samples_pal5_prior['v_xc']
+            v_yc = samples_pal5_prior['v_yc']    
+            v_zc = samples_pal5_prior['v_zc']
     else:
         prog_mass = np.zeros((n_streams,))
         t_end = np.zeros((n_streams,))
@@ -221,24 +237,26 @@ def sample_hierarchical_stream_priors(n_streams=1):
         for s in range(n_streams):
             if j[s] == 0:
                 # GD-1 like stream
-                prog_mass[s] = np.random.uniform(1e4, 5e4,)  #
-                t_end[s] = np.random.uniform(3000.0, 5000.0,)  # in Myr
-                x_c[s] = np.random.uniform(-15.0, -5.0,)  # in kpc
-                y_c[s] = np.random.uniform(5.0, 15.0,)  # in kpc
-                z_c[s] = np.random.uniform(10.0, 20.0,)  # in kpc
-                v_xc[s] = np.random.uniform(-100.0, 0.0,)  # in km/s
-                v_yc[s] = np.random.uniform(100.0, 200.0,)  # in km/s
-                v_zc[s] = np.random.uniform(-200.0, -100.0,)  # in km/s
+                samples_gd1_prior = sample_gd1_priors()
+                prog_mass[s] = samples_gd1_prior['prog_mass']
+                t_end[s] = samples_gd1_prior['t_end']
+                x_c[s] = samples_gd1_prior['x_c']
+                y_c[s] = samples_gd1_prior['y_c']
+                z_c[s] = samples_gd1_prior['z_c']
+                v_xc[s] = samples_gd1_prior['v_xc']
+                v_yc[s] = samples_gd1_prior['v_yc']    
+                v_zc[s] = samples_gd1_prior['v_zc']
             elif j[s] == 1:
                 # Pal 5 like stream
-                prog_mass[s] = np.random.uniform(1e4, 5e4,)  #
-                t_end[s] = np.random.uniform(2000.0, 4000.0,)  # in Myr
-                x_c[s] = np.random.uniform(5.0, 15.0,)  # in kpc
-                y_c[s] = np.random.uniform(-15.0, -5.0,)  # in kpc
-                z_c[s] = np.random.uniform(-10.0, 0.0,)  # in kpc
-                v_xc[s] = np.random.uniform(0.0, 100.0,)  # in km/s
-                v_yc[s] = np.random.uniform(-200.0, -100.0,)  # in km/s
-                v_zc[s] = np.random.uniform(100.0, 200.0,)  # in km/s
+                samples_pal5_prior = sample_pal5_priors()
+                prog_mass[s] = samples_pal5_prior['prog_mass']
+                t_end[s] = samples_pal5_prior['t_end']
+                x_c[s] = samples_pal5_prior['x_c']
+                y_c[s] = samples_pal5_prior['y_c']
+                z_c[s] = samples_pal5_prior['z_c']
+                v_xc[s] = samples_pal5_prior['v_xc']
+                v_yc[s] = samples_pal5_prior['v_yc']    
+                v_zc[s] = samples_pal5_prior['v_zc']
 
     return dict(
         j=j,
@@ -256,16 +274,56 @@ def sample_hierarchical_stream_priors(n_streams=1):
     )
 
 
-def prior_global_score(x: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
-    m_nfw = x["m_nfw"]
-    r_s = x["r_s"]
+# prior GD1
+def sample_gd1_priors():
+    #from https://arxiv.org/pdf/2304.02032
+    prog_mass = np.random.uniform(1e3, 10**4.5,)  #
+    t_end = np.random.uniform(3000.0, 5000.0,)  # in Myr
+    pos = (11.8,0.79,6.4) # kpc
+    vel = (109.5, - 254.5, -90.3) #km / s
+    x_c = np.random.uniform(pos[0] - pos[0]*0.1, pos[0] + 0.1*pos[0])  # in kpc
+    y_c = np.random.uniform(pos[1] - 0.1*pos[1]*0.1, pos[1] + 0.1*pos[1]*0.1 )  # in kpc
+    z_c = np.random.uniform(pos[2] - 0.1*pos[2]*0.1, pos[2] + 0.1*pos[2]*0.1)  # in kpc
+    v_xc = np.random.uniform(vel[0] - 0.1*vel[0], vel[0] + 0.1*vel[0])  # in km/s
+    v_yc = np.random.uniform(vel[1] - 0.1*vel[1], vel[1] + 0.1*vel[1])  # in km/s
+    v_zc = np.random.uniform(vel[2] - 0.1*vel[2], vel[2] + 0.1*vel[2])  # in km/s
 
-    score = {
-        "m_nfw": np.zeros_like(m_nfw),
-        "r_s": np.zeros_like(r_s),
-    }
+    return dict(
+        prog_mass=prog_mass,
+        t_end=t_end,
+        x_c=x_c,
+        y_c=y_c,
+        z_c=z_c,
+        v_xc=v_xc,
+        v_yc=v_yc,
+        v_zc=v_zc
+    )
 
-    return score
+#prior Pal5
+def sample_pal5_priors():
+    prog_mass = np.random.uniform(1e4, 5e4,)  #
+    t_end = np.random.uniform(2000.0, 4000.0,)  # in Myr
+
+    #from https://gala.adrian.pw/en/latest/tutorials/mock-stream-heliocentric.html#
+    pos=(7.86390455, 0.22748727, 16.41622487) # kpc
+    vel=(-42.35458106, -103.69384675, -15.48729026) #km / s
+    x_c = np.random.uniform(pos[0] - pos[0]*0.1, pos[0] + 0.1*pos[0])  # in kpc
+    y_c = np.random.uniform(pos[1] - 0.1*pos[1]*0.1, pos[1] + 0.1*pos[1]*0.1 )  # in kpc
+    z_c = np.random.uniform(pos[2] - 0.1*pos[2]*0.1, pos[2] + 0.1*pos[2]*0.1)  # in kpc
+    v_xc = np.random.uniform(vel[0] - 0.1*vel[0], vel[0] + 0.1*vel[0])  # in km/s
+    v_yc = np.random.uniform(vel[1] - 0.1*vel[1], vel[1] + 0.1*vel[1])  # in km/s
+    v_zc = np.random.uniform(vel[2] - 0.1*vel[2], vel[2] + 0.1*vel[2])  # in km/s
+    return dict(
+        prog_mass=prog_mass,
+        t_end=t_end,
+        x_c=x_c,
+        y_c=y_c,
+        z_c=z_c,
+        v_xc=v_xc,
+        v_yc=v_yc,
+        v_zc=v_zc
+    )
+
 
 
 

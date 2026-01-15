@@ -7,7 +7,7 @@ import os
 #     os.environ["KERAS_BACKEND"] = "jax"
 # else:
 #     print(f"Using '{os.environ['KERAS_BACKEND']}' backend")
-os.environ["CUDA_VISIBLE_DEVICES"] = "5"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "5"
 
 # import bayesflow as bf
 
@@ -30,7 +30,7 @@ from astropy import units as u
 from stream_simulator_odisseo import sample_hierarchical_stream_priors, simulate_stream
 # from stream_simulator_odisseo import simulator_hierarchical
 
-n_training = 10
+n_training = 100
 batch_training = 10
 n_stars = 1000 
 n_streams = 2
