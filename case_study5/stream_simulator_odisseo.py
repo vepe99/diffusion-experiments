@@ -149,14 +149,14 @@ def simulate_stream(prog_mass, t_end,
             )
             data = data[0]
     else:
-        for s in range(n_streams):
+        for s in range(n_streams):          #TODO: INSTEAD OF FOR LOOP USE A VMAP
             key = random.split(key, 2)[1]
             data = data.at[s].set(jnp.array(
                 run_simulation(
                 prog_mass[s], t_end[s],
                 x_c[s], y_c[s], z_c[s],
                 v_xc[s], v_yc[s], v_zc[s],
-                m_nfw[s], r_s[s], gamma[s],
+                m_nfw, r_s, gamma, #this are not array ! they are the shared parameters
                 key, n_stars)
                 )
             )
@@ -255,8 +255,17 @@ def sample_hierarchical_stream_priors(n_streams=1):
         v_zc=v_zc
     )
 
-# simulator_hierarchical = bf.make_simulator([sample_hierarchical_stream_priors, simulate_stream]) #not really used
 
+def prior_global_score(x: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    m_nfw = x["m_nfw"]
+    r_s = x["r_s"]
+
+    score = {
+        "m_nfw": np.zeros_like(m_nfw),
+        "r_s": np.zeros_like(r_s),
+    }
+
+    return score
 
 
 

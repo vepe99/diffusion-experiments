@@ -30,19 +30,20 @@ from astropy import units as u
 from stream_simulator_odisseo import sample_hierarchical_stream_priors, simulate_stream
 # from stream_simulator_odisseo import simulator_hierarchical
 
-n_training = 1_0
+n_training = 10
 batch_training = 10
 n_stars = 1000 
+n_streams = 2
 
 
 prior_samples = {}
 for i in range(0, n_training, ):
     if i == 0:
-        sample = sample_hierarchical_stream_priors(n_streams=1, )
+        sample = sample_hierarchical_stream_priors(n_streams=n_streams, )
         for key in sample.keys():
             prior_samples[key] = [sample[key]]
     else:
-        sample = sample_hierarchical_stream_priors(n_streams=1, )
+        sample = sample_hierarchical_stream_priors(n_streams=n_streams, )
         for key in sample.keys():
             prior_samples[key].append(sample[key])
 
@@ -60,7 +61,7 @@ def simulate_one(p):
         r_s=p["r_s"],
         gamma=p["gamma"],
         j=p["j"],                    # or fixed global j
-        n_streams=1,
+        n_streams=n_streams,
         n_stars=n_stars,
         key=p["key"],
     )["sim_data"]
@@ -77,13 +78,11 @@ batched_map = partial(
 )
 
 sim_data = batched_map(params_with_keys)
-print(sim_data.shape)   # (n_training, n_stars, 6)
 
 sim_data = {"sim_data": sim_data,}
+print(sim_data["sim_data"].shape)   # (n_training, n_stars, 6)
+print(prior_samples)
 
-np.savez('./training_set_odisseo.npz', 
+np.savez('./case_study5/test_set_multistream_odisseo.npz', 
          **sim_data,
          **prior_samples)
-
-
-    

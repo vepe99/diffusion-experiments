@@ -11,7 +11,6 @@ dependencies = [
     "colorcet>=3.1.0",
     "fides==0.8.0",
     "fyeldgenerator>=0.1.7",
-    "galax",
     "jax[cuda]>=0.7.1",
     "joblib==1.5.2",
     "keras==3.10",
