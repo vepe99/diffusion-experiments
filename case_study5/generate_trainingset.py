@@ -13,8 +13,8 @@ from astropy import units as u
 
 from stream_simulator_odisseo import sample_hierarchical_stream_priors, simulate_stream
 
-n_training = 20_000
-batch_training = 400
+n_training = 100_000
+batch_training = 500
 n_stars = 1000 
 
 
@@ -56,7 +56,6 @@ def simulate_one(p):
         v_zc=p["v_zc"],
         m_nfw=p["m_nfw"],
         r_s=p["r_s"],
-        gamma=p["gamma"],
         j=p["j"],
         n_streams=1,
         n_stars=n_stars,
@@ -132,7 +131,6 @@ std_v_zc = np.std(v_zc, axis=0)
 
 np.savez('./case_study5/training_set_odisseo.npz',
         j=data['j'],
-        gamma=data['gamma'],
         sim_data = sim_data,
         mean_sim_data = mean_sim_data,
         std_sim_data = std_sim_data,

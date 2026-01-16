@@ -37,7 +37,7 @@ from odisseo.utils import halo_to_gd1_velocity_vmap, halo_to_gd1_vmap, projectio
 code_length = 10 * u.kpc
 code_mass = 1e4 * u.Msun
 G = 1
-code_time = 3 * u.Gyr
+code_time = 1 * u.Gyr
 code_units = CodeUnits(code_length, code_mass, G=1, unit_time = code_time )  
 
 
@@ -46,19 +46,18 @@ code_units = CodeUnits(code_length, code_mass, G=1, unit_time = code_time )
 # simulation #
 ##############
 @jit
-def stream_to_array(stream):
-    pos = jnp.array([stream.q.x.to('kpc').value, stream.q.y.to('kpc').value, stream.q.z.to('kpc').value]).T
-    vel = jnp.array([stream.p.x.to('km/s').value, stream.p.y.to('km/s').value, stream.p.z.to('km/s').value]).T
+def stream_codeunits2realunits(stream):
+    pos = stream[:, :3] * code_units.code_length.to('kpc')
+    vel = stream[:, 3:] * code_units.code_velocity.to('km/s')
     pos_vel = jnp.concatenate([pos, vel], axis=1)
     return pos_vel
 
 @partial(jit, static_argnames=['n_stars'])
-def run_simulation(prog_mass, t_end, x_c, y_c, z_c, v_xc, v_yc, v_zc, m_nfw, r_s, gamma, key, n_stars):
+def run_simulation(prog_mass, t_end, x_c, y_c, z_c, v_xc, v_yc, v_zc, m_nfw, r_s, key, n_stars):
 
 
     config = SimulationConfig(N_particles = n_stars, 
                             return_snapshots = False, 
-                            num_snapshots = 1000, 
                             num_timesteps = 1000, 
                             external_accelerations=(NFW_POTENTIAL, MN_POTENTIAL, PSP_POTENTIAL), 
                             acceleration_scheme = DIRECT_ACC_MATRIX,
@@ -68,7 +67,7 @@ def run_simulation(prog_mass, t_end, x_c, y_c, z_c, v_xc, v_yc, v_zc, m_nfw, r_s
                             diffrax_solver=TSIT5
                             ) #default values
     
-    params = SimulationParams(t_end = t_end * (u.Gyr).to(code_units.code_time),  
+    params = SimulationParams(t_end = t_end * (u.Myr).to(code_units.code_time),  
                           Plummer_params= PlummerParams(Mtot=prog_mass * u.Msun.to(code_units.code_mass),
                                                         a=8 * u.pc.to(code_units.code_length)
                                                         ),
@@ -111,13 +110,19 @@ def run_simulation(prog_mass, t_end, x_c, y_c, z_c, v_xc, v_yc, v_zc, m_nfw, r_s
 
     #run the simulation
     final_state = time_integration(initial_state_stream, mass, config, params)
+    # Reshape from (n_stars, 2, 3) to (n_stars, 6)
+    # final_state[:, 0, :] is positions (n_stars, 3)
+    # final_state[:, 1, :] is velocities (n_stars, 3)
+    final_state = jnp.concatenate([final_state[:, 0, :], final_state[:, 1, :]], axis=1)  # (n_stars, 6)
     
-    return final_state.reshape(n_stars, 6)
+    final_state = stream_codeunits2realunits(final_state)
+    
+    return final_state
 
 @partial(jit, static_argnames=['n_stars', 'n_streams'])
 def simulate_stream(prog_mass, t_end, 
                     x_c, y_c, z_c, v_xc, v_yc, v_zc, 
-                    m_nfw, r_s, gamma, 
+                    m_nfw, r_s, 
                     j, 
                     n_streams=1, n_stars=500, key=random.PRNGKey(0)):
     if isinstance(prog_mass, (float, int)):
@@ -131,7 +136,6 @@ def simulate_stream(prog_mass, t_end,
         v_zc = jnp.ones((n_streams,)) * v_zc
         m_nfw = jnp.ones((n_streams,)) * m_nfw
         r_s = jnp.ones((n_streams,)) * r_s
-        gamma = jnp.ones((n_streams,)) * gamma
     
     #generate data array
     # TO DO IS TO IMPLEMENT A VMAP AND BATCHED VERSION
@@ -145,7 +149,7 @@ def simulate_stream(prog_mass, t_end,
                 prog_mass=prog_mass, t_end=t_end,
                 x_c=x_c, y_c=y_c, z_c=z_c,
                 v_xc=v_xc, v_yc=v_yc, v_zc=v_zc,
-                m_nfw=m_nfw, r_s=r_s, gamma=gamma,
+                m_nfw=m_nfw, r_s=r_s, 
                 key=key, n_stars=n_stars)
                 )
             )
@@ -158,7 +162,7 @@ def simulate_stream(prog_mass, t_end,
                 prog_mass=prog_mass[s], t_end=t_end[s],
                 x_c=x_c[s], y_c=y_c[s], z_c=z_c[s],
                 v_xc=v_xc[s], v_yc=v_yc[s], v_zc=v_zc[s],
-                m_nfw=m_nfw, r_s=r_s, gamma=gamma, #this are not array ! they are the shared parameters
+                m_nfw=m_nfw, r_s=r_s, #this are not array ! they are the shared parameters
                 key=key, n_stars=n_stars)
                 )
             )
@@ -198,7 +202,6 @@ def sample_hierarchical_stream_priors(n_streams=1):
 
     # Galaxy potential parameters
     m_nfw = np.random.uniform(0.5e12, 2.0e12,)  # in Msun
-    gamma = np.random.uniform(0.3, 1.9,)  # unitless
     r_s = np.random.uniform(10.0, 30.0,)  # in kpc
 
     if n_streams == 1:
@@ -262,7 +265,6 @@ def sample_hierarchical_stream_priors(n_streams=1):
         j=j,
         m_nfw=m_nfw,
         r_s=r_s,
-        gamma=gamma,
         prog_mass=prog_mass,
         t_end=t_end,
         x_c=x_c,
@@ -338,7 +340,6 @@ if __name__ == "__main__":
         v_zc=-90.3,
         m_nfw=1e12,
         r_s=20.0,
-        gamma=1.0,
         n_streams=1,
         n_stars=1000,
         key=key

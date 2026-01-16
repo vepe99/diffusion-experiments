@@ -13,8 +13,8 @@ from astropy import units as u
 
 from stream_simulator_galax import sample_hierarchical_stream_priors, simulate_stream
 
-n_training = 20_000
-batch_training = 400
+n_training = 100_000
+batch_training = 1_000
 n_stars = 1000 
 
 

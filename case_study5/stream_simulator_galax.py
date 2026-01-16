@@ -43,7 +43,7 @@ def run_simulation(prog_mass, t_end, x_c, y_c, z_c, v_xc, v_yc, v_zc, m_nfw, r_s
     prog_mass = Quantity(prog_mass, "Msun")
     
     #total time integration
-    t_array = Quantity(-jnp.linspace(0, -t_end, int(n_stars/2)), "Myr")
+    t_array = Quantity(jnp.linspace(0, -t_end, int(n_stars/2)), "Myr")
 
     #Milky Way base potential
     milky_way_pot = gp.BovyMWPotential2014()
