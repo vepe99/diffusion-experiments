@@ -36,6 +36,14 @@ param_names_local = ['nu', 'alpha', 't0']
 param_metrics = ['nu', 'alpha', 't0', 'beta']
 pretty_param_names_local = [r'$\nu_p$', r'$\alpha_p$', r'$t_{0,p}$'] + [r'$\beta$']
 
+test_data = simulator_hierarchical.sample_parallel(N_TEST, n_subjects=N_SUBJECTS, n_trials=N_TRIALS, n_jobs=1)
+print('shapes of test data:')
+for k, v in test_data.items():
+    if hasattr(v, 'shape'):
+        print(f"  {k}: {v.shape}")
+    else:
+        print(f"  {k}: type = {type(v)}")
+exit()
 
 #%%
 adapter = (
@@ -57,6 +65,12 @@ if not os.path.exists(model_path):
     os.makedirs(name= BASE / 'models', exist_ok=True)
     # training_data = simulator_hierarchical.sample_parallel((N_TRAINING_BATCHES * BATCH_SIZE), n_trials=N_TRIALS, n_jobs=1)
     training_data = simulator_hierarchical.sample((N_TRAINING_BATCHES * BATCH_SIZE), n_trials=N_TRIALS, )
+    print("shapes of training data:")
+    for k, v in training_data.items():
+        if hasattr(v, 'shape'):
+            print(f"  {k}: {v.shape}")
+        else:
+            print(f"  {k}: type = {type(v)}")
 
     history = workflow_global.fit_offline(
         training_data,
@@ -70,6 +84,12 @@ else:
 
 #%%
 test_data = simulator_hierarchical.sample_parallel(N_TEST, n_subjects=N_SUBJECTS, n_trials=N_TRIALS, n_jobs=1)
+print('shapes of test data:')
+for k, v in test_data.items():
+    if hasattr(v, 'shape'):
+        print(f"  {k}: {v.shape}")
+    else:
+        print(f"  {k}: type = {type(v)}")
 
 #%%
 logging.info("Starting Partial-Pooling (global) inference...")
