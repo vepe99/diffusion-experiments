@@ -324,7 +324,26 @@ def sample_pal5_priors():
         v_zc=v_zc
     )
 
-
+if __name__ == "__main__":
+    #test simulation
+    key = random.PRNGKey(0)
+    sim_data = simulate_stream(
+        prog_mass=5e3,
+        t_end=4000.0,
+        x_c=11.8,
+        y_c=0.79,
+        z_c=6.4,
+        v_xc=109.5,
+        v_yc=-254.5,
+        v_zc=-90.3,
+        m_nfw=1e12,
+        r_s=20.0,
+        gamma=1.0,
+        n_streams=1,
+        n_stars=1000,
+        key=key
+    )
+    print("sim_data shape:", sim_data['sim_data'].shape)  # (n_stars, 6)
 
 
 
