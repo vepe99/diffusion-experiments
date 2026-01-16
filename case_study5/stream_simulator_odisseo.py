@@ -142,11 +142,11 @@ def simulate_stream(prog_mass, t_end,
             key = random.split(key, 2)[1]
             data = data.at[s].set(jnp.array(
                 run_simulation(
-                prog_mass, t_end,
-                x_c, y_c, z_c,
-                v_xc, v_yc, v_zc,
-                m_nfw, r_s, gamma,
-                key, n_stars)
+                prog_mass=prog_mass, t_end=t_end,
+                x_c=x_c, y_c=y_c, z_c=z_c,
+                v_xc=v_xc, v_yc=v_yc, v_zc=v_zc,
+                m_nfw=m_nfw, r_s=r_s, gamma=gamma,
+                key=key, n_stars=n_stars)
                 )
             )
             data = data[0]
@@ -155,11 +155,11 @@ def simulate_stream(prog_mass, t_end,
             key = random.split(key, 2)[1]
             data = data.at[s].set(jnp.array(
                 run_simulation(
-                prog_mass[s], t_end[s],
-                x_c[s], y_c[s], z_c[s],
-                v_xc[s], v_yc[s], v_zc[s],
-                m_nfw, r_s, gamma, #this are not array ! they are the shared parameters
-                key, n_stars)
+                prog_mass=prog_mass[s], t_end=t_end[s],
+                x_c=x_c[s], y_c=y_c[s], z_c=z_c[s],
+                v_xc=v_xc[s], v_yc=v_yc[s], v_zc=v_zc[s],
+                m_nfw=m_nfw, r_s=r_s, gamma=gamma, #this are not array ! they are the shared parameters
+                key=key, n_stars=n_stars)
                 )
             )
     return dict(sim_data=data)
