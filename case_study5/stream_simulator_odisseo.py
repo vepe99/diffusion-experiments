@@ -283,9 +283,9 @@ def sample_gd1_priors():
     t_end = np.random.uniform(3000.0, 5000.0,)  # in Myr
     pos = (11.8,0.79,6.4) # kpc
     vel = (109.5, - 254.5, -90.3) #km / s
-    x_c = np.random.uniform(pos[0] - pos[0]*0.1, pos[0] + 0.1*pos[0])  # in kpc
-    y_c = np.random.uniform(pos[1] - 0.1*pos[1]*0.1, pos[1] + 0.1*pos[1]*0.1 )  # in kpc
-    z_c = np.random.uniform(pos[2] - 0.1*pos[2]*0.1, pos[2] + 0.1*pos[2]*0.1)  # in kpc
+    x_c = np.random.uniform(pos[0] - 0.1*pos[0], pos[0] + 0.1*pos[0])  # in kpc
+    y_c = np.random.uniform(pos[1] - 0.1*pos[1], pos[1] + 0.1*pos[1])  # in kpc
+    z_c = np.random.uniform(pos[2] - 0.1*pos[2], pos[2] + 0.1*pos[2])  # in kpc
     v_xc = np.random.uniform(vel[0] - 0.1*vel[0], vel[0] + 0.1*vel[0])  # in km/s
     v_yc = np.random.uniform(vel[1] - 0.1*vel[1], vel[1] + 0.1*vel[1])  # in km/s
     v_zc = np.random.uniform(vel[2] - 0.1*vel[2], vel[2] + 0.1*vel[2])  # in km/s
@@ -309,9 +309,9 @@ def sample_pal5_priors():
     #from https://gala.adrian.pw/en/latest/tutorials/mock-stream-heliocentric.html#
     pos=(7.86390455, 0.22748727, 16.41622487) # kpc
     vel=(-42.35458106, -103.69384675, -15.48729026) #km / s
-    x_c = np.random.uniform(pos[0] - pos[0]*0.1, pos[0] + 0.1*pos[0])  # in kpc
-    y_c = np.random.uniform(pos[1] - 0.1*pos[1]*0.1, pos[1] + 0.1*pos[1]*0.1 )  # in kpc
-    z_c = np.random.uniform(pos[2] - 0.1*pos[2]*0.1, pos[2] + 0.1*pos[2]*0.1)  # in kpc
+    x_c = np.random.uniform(pos[0] - 0.1*pos[0], pos[0] + 0.1*pos[0])  # in kpc
+    y_c = np.random.uniform(pos[1] - 0.1*pos[1], pos[1] + 0.1*pos[1])  # in kpc
+    z_c = np.random.uniform(pos[2] - 0.1*pos[2], pos[2] + 0.1*pos[2])  # in kpc
     v_xc = np.random.uniform(vel[0] - 0.1*vel[0], vel[0] + 0.1*vel[0])  # in km/s
     v_yc = np.random.uniform(vel[1] - 0.1*vel[1], vel[1] + 0.1*vel[1])  # in km/s
     v_zc = np.random.uniform(vel[2] - 0.1*vel[2], vel[2] + 0.1*vel[2])  # in km/s
