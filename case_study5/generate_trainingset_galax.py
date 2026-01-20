@@ -13,8 +13,8 @@ from astropy import units as u
 
 from stream_simulator_galax import sample_hierarchical_stream_priors, simulate_stream
 
-n_training = 100_000
-batch_training = 1_000
+n_training = 1_000
+batch_training = 10
 n_stars = 1000 
 
 
@@ -77,6 +77,7 @@ batched_map = partial(
 )
 
 sim_data = batched_map(params_with_keys)
+# sim_data = jax.vmap(simulate_one)(params_with_keys)
 print("sim_data shape:", sim_data.shape)  # (n_training, n_stars, 6)
 
 # Save with expanded parameter shapes

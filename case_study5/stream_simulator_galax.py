@@ -156,7 +156,7 @@ def sample_hierarchical_stream_priors(n_streams=1):
     # Galaxy potential parameters
     m_nfw = np.random.uniform(0.5e12, 2.0e12,)  # in Msun
     r_s = np.random.uniform(10.0, 30.0,)  # in kpc
-    q1 = np.random.normal(1.0, 0.05)
+    q1 = np.random.normal(1.0, 0.005)
     q2 = np.random.uniform(0.5, 1.5)
 
     if n_streams == 1:
