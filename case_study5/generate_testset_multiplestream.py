@@ -59,7 +59,6 @@ def simulate_one(p):
         v_zc=p["v_zc"],
         m_nfw=p["m_nfw"],
         r_s=p["r_s"],
-        gamma=p["gamma"],
         j=p["j"],                    # or fixed global j
         n_streams=n_streams,
         n_stars=n_stars,
