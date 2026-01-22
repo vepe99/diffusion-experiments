@@ -216,3 +216,6 @@ __marimo__/
 # MacOS
 *.DS_Store
 /uv.lock
+
+# npz
+*.npz
