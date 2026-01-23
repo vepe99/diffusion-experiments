@@ -15,23 +15,21 @@ from case_study1.model_settings_benchmark import MODELS, SAMPLER_SETTINGS, is_co
 def model_sampler_key(_model: str, _sampler: str) -> str:
     return f"{_model}-{_sampler}"
 
-benchmarks = [
-    (m, t, s)
-    for m, t, s in itertools.product(
-        MODELS.keys(),
-        sbibm.get_available_tasks(),
-        SAMPLER_SETTINGS.keys(),
-    )
-    if is_compatible(m, s)
-]
+benchmarks = list(
+    (m, t, s) for s, m, t in itertools.product(
+    SAMPLER_SETTINGS, MODELS.keys(), sbibm.get_available_tasks()
+) if is_compatible(m, s)
+)
 BASE = Path(__file__).resolve().parent
+metrics_dir = BASE / 'metrics'
+#metrics_dir = Path('/lustre/scratch/data/jarruda_hpc-diffusion_experiments/case_study1/metrics')
 
 model_names = list(MODELS.keys())
 sampler_names = list(SAMPLER_SETTINGS.keys())
 tasks = sbibm.get_available_tasks()
 task_to_idx = {t: i for i, t in enumerate(tasks)}
 n_tasks = len(sbibm.get_available_tasks())
-keys = [model_sampler_key(m, s) for m in model_names for s in sampler_names]
+keys = [model_sampler_key(m, s) for m, _, s in benchmarks]
 def nan_matrix():
     return {k: np.full(n_tasks, np.nan, dtype=float) for k in keys}
 
@@ -43,7 +41,8 @@ times = nan_matrix()
 times_std = nan_matrix()
 
 for model_name, task_name, sampler_name in benchmarks:
-    pkl = BASE / 'metrics' / f'c2st_results_{model_name}_{task_name}_{sampler_name}.pkl'
+    model_name = model_name
+    pkl = metrics_dir / f'c2st_results_{model_name}_{task_name}_{sampler_name}.pkl'
     if os.path.exists(pkl):
         with open(pkl, 'rb') as f:
             c2st_results = pickle.load(f)
@@ -66,12 +65,19 @@ for model_name, task_name, sampler_name in benchmarks:
 
 # Build long format dataframe
 rows = []
+duplicates = []
 for key in keys:
-    model, sampler = key.split("-", 1)
+    if key in duplicates:
+        continue
+    model = key.split("-")[0]
+    rest = key.split("-")[1:]
+    sampler = "-".join(rest)
+    duplicates.append(key)
     for task_idx, task_name in enumerate(tasks):
         rows.append({
             'model': model,
             'sampler': sampler,
+            'subnet': 'time_mlp',
             'task': task_name,
             'c2st': results_mean[key][task_idx],
             'c2st_std': results_std[key][task_idx],
@@ -82,5 +88,4 @@ for key in keys:
         })
 
 df = pd.DataFrame(rows)
-
 df.to_csv(BASE / "plots" / "c2st_benchmark_results.csv", index=False)
