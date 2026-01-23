@@ -3,7 +3,7 @@ autocvd(num_gpus = 1)
 
 import os
 if "KERAS_BACKEND" not in os.environ:
-    os.environ["KERAS_BACKEND"] = "jax"
+    os.environ["KERAS_BACKEND"] = "torch"
 else:
     print(f"Using '{os.environ['KERAS_BACKEND']}' backend")
 
@@ -116,10 +116,10 @@ if not os.path.exists(model_path):
     print("Model trained")
 else:
     workflow_global.approximator = keras.models.load_model(model_path)
-exit()
+
 os.environ["KERAS_BACKEND"] = "torch"
 training_data_raw = dict(np.load('./case_study5/projection_training_set_odisseo_triaxial.npz', allow_pickle=True))
-test_data_npz = dict(np.load('./case_study5/test_set_multistream_odisseo_triaxial.npz', allow_pickle=True))
+test_data_npz = dict(np.load('./case_study5/projection_test_set_multistream_odisseo_triaxial.npz', allow_pickle=True))
 test_data_npz['m_nfw'] = (test_data_npz['m_nfw']  - training_data_raw['mean_m_nfw'])/ training_data_raw['std_m_nfw']
 test_data_npz['r_s'] = (test_data_npz['r_s']  - training_data_raw['mean_r_s'])/ training_data_raw['std_r_s']
 test_data_npz['q1'] = (test_data_npz['q1']  - training_data_raw['mean_q1'])/ training_data_raw['std_q1']
@@ -131,6 +131,8 @@ print('Shape after expand_dims')
 print({k: test_data[k].shape for k in test_data.keys()})
 
 logging.info("Starting Partial-Pooling (global) inference...")
+del training_data_raw  # free up memory
+
 global_posterior = workflow_global.compositional_sample(
     num_samples=N_SAMPLES,
     conditions={'sim_data': test_data['sim_data'], 
@@ -142,6 +144,7 @@ global_posterior = workflow_global.compositional_sample(
     steps=STEPS,
     max_steps=MAX_STEP
 )
+training_data_raw = dict(np.load('./case_study5/projection_training_set_odisseo_triaxial.npz', allow_pickle=True))
 
 test_data['m_nfw'] = (test_data_npz['m_nfw'] * training_data_raw['std_m_nfw'] + training_data_raw['mean_m_nfw']) 
 test_data['r_s'] = (test_data_npz['r_s'] *training_data_raw['std_r_s'] + training_data_raw['mean_r_s']) 
@@ -211,12 +214,13 @@ f = bf.diagnostics.plots.z_score_contraction(
 f.savefig(BASE / "plots" / "partial_pooling_global_zscore_contraction_triaxial.png")
 plt.show()
 
-
+exit()
+print('finish global model test')
 ###############
 # local model # 
 ###############
 inference_conditions_names = param_names_global + ["j"]  # Use + instead of .append()
-training_data_raw = dict(np.load('./case_study5/training_set_odisseo_triaxial.npz', allow_pickle=True))
+training_data_raw = dict(np.load('./case_study5/projection_train_multistream_odisseo_triaxial.npz', allow_pickle=True))
 adapter_subjects = (
     bf.adapters.Adapter()
     .to_array()
@@ -237,7 +241,7 @@ workflow_local = bf.BasicWorkflow(
 model_path_local = BASE / 'models' / 'partial_pooling_local_triaxial.keras'
 if not os.path.exists(model_path_local):
     os.makedirs(name= BASE / 'models', exist_ok=True)
-    training_data_raw = dict(np.load('./case_study5/training_set_odisseo_triaxial.npz', allow_pickle=True))
+    training_data_raw = dict(np.load('./case_study5/projection_train_multistream_odisseo_triaxial.npz', allow_pickle=True))
     training_data_raw['m_nfw'] = (training_data_raw['m_nfw']  - training_data_raw['mean_m_nfw'])/ training_data_raw['std_m_nfw']
     training_data_raw['r_s'] = (training_data_raw['r_s']  - training_data_raw['mean_r_s'])/ training_data_raw['std_r_s']
     training_data_raw['q1'] = (training_data_raw['q1']  - training_data_raw['mean_q1'])/ training_data_raw['std_q1']
@@ -252,6 +256,14 @@ if not os.path.exists(model_path_local):
     training_data_raw['v_zc'] = (training_data_raw['v_zc']  - training_data_raw['mean_v_zc'])/ training_data_raw['std_v_zc']
     # Filter out mean/std arrays from training data
     training_data = {k: v for k, v in training_data_raw.items() if not k.startswith('mean_') and not k.startswith('std_')}  
+    # Find and remove samples with NaN values
+    nan_mask = np.isnan(training_data['sim_data']).any(axis=(1, 2))
+    valid_mask = ~nan_mask
+    print(f"Removing {nan_mask.sum()} samples with NaN values")
+    for key in training_data:
+        if hasattr(training_data[key], 'shape') and len(training_data[key]) == len(nan_mask):
+            training_data[key] = training_data[key][valid_mask]
+
     # Debug: print shapes of training data
     print("Training data shapes:")
     for k, v in training_data.items():
