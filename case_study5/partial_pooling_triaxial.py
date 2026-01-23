@@ -103,6 +103,7 @@ if not os.path.exists(model_path):
 else:
     workflow_global.approximator = keras.models.load_model(model_path)
 
+os.environ["KERAS_BACKEND"] = "torch"
 training_data_raw = dict(np.load('./case_study5/training_set_odisseo_triaxial.npz', allow_pickle=True))
 test_data_npz = dict(np.load('./case_study5/test_set_multistream_odisseo_triaxial.npz', allow_pickle=True))
 test_data_npz['m_nfw'] = (test_data_npz['m_nfw']  - training_data_raw['mean_m_nfw'])/ training_data_raw['std_m_nfw']
