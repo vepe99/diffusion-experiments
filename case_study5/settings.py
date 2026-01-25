@@ -6,10 +6,11 @@ from tqdm import tqdm
 
 N_TRAINING_BATCHES = 256
 BATCH_SIZE = 256
-EPOCHS = 100
+EPOCHS = 500
 N_TRIALS = 30
 N_SUBJECTS = 2 #for us this is N_STREAM
-N_SAMPLES = 5000
+N_SAMPLES = 1000
+N_SAMPLES_LOCAL = 1000
 N_TEST = 100
 METHOD = 'two_step_adaptive'
 STEPS = "adaptive"
