@@ -19,6 +19,7 @@ dependencies = [
     "matplotlib>=3.10.7",
     "numba>=0.63.1",
     "numpy>=1.26.4",
+    "optuna",
     "petab==0.7.0",
     "playwright>=1.57.0",
     "pyabc>=0.12.16",
