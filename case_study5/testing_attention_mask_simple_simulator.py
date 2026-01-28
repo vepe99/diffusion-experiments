@@ -132,6 +132,8 @@ for b in range(B):
         valid_idx = np.random.choice(S, n_valid, replace=False)
         attention_mask_test[b, t, valid_idx] = True
 
+print('attention mask test shape', attention_mask_test.shape)
+
 if check_compositional_sampling:
 
     global_posterior = workflow_global.compositional_sample(
@@ -147,6 +149,7 @@ if check_compositional_sampling:
     )
 
 elif check_modified_compositional_sampling:
+    print('Modified compositional sampling')
     # Possible step in the right direction to avoid mixing tensor and non tensor kwargs as suggest by @Jonas aruda
     workflow_global.approximator.inference_network.integrate_kwargs.update({
     'method': 'two_step_adaptive',
