@@ -82,6 +82,50 @@ def galc_to_icrs_spherical(pos_vel_gal):
     return jnp.stack([ra, dec, dist, pm_lon_cosdec, pm_lat, rv], axis=-1)
 
 
+def icrs_equatorial_to_galc(pos_vel_icrs):
+    """
+    Transform ICRS equatorial coordinates to Galactocentric.
+    
+    Args:
+        pos_vel_icrs: Array of shape (N, 6) with columns [ra, dec, distance, pm_ra_cosdec, pm_dec, radial_velocity]
+                      ra, dec in deg; distance in kpc; pm in mas/yr; radial_velocity in km/s
+    
+    Returns:
+        Array of shape (N, 6) with columns [x, y, z, vx, vy, vz] in kpc and km/s
+    """
+    ra = u.Quantity(pos_vel_icrs[:, 0], "deg")
+    dec = u.Quantity(pos_vel_icrs[:, 1], "deg")
+    dist = u.Quantity(pos_vel_icrs[:, 2], "kpc")
+    pm_ra_cosdec = u.Quantity(pos_vel_icrs[:, 3], "mas/yr") #it needs to be divided by cos(dec) below
+    pm_dec = u.Quantity(pos_vel_icrs[:, 4], "mas/yr")
+    rv = u.Quantity(pos_vel_icrs[:, 5], "km/s")
+    
+    pos_sph = cxv.LonLatSphericalPos(lon=ra, lat=dec, distance=dist)
+    vel_sph = cxv.LonLatSphericalVel(lon=pm_ra_cosdec/jnp.cos(dec.to("rad").value), lat=pm_dec, distance=rv, )
+    
+    icrs_coord = cx.Coordinate(
+        {"length": pos_sph, "speed": vel_sph},
+        frame=cx.frames.ICRS()
+    )
+    
+    # Create the inverse transform operator
+    icrs_to_galc_op = cx.frames.frame_transform_op(cx.frames.ICRS(), cx.frames.Galactocentric())
+    
+    galc_coord = icrs_to_galc_op(icrs_coord)
+    
+    pos_cart = galc_coord.data["length"].vconvert(cxv.CartesianPos3D)
+    vel_cart = galc_coord.data["speed"].vconvert(cxv.CartesianVel3D, pos_cart)
+    
+    x = pos_cart.x.to("kpc").value
+    y = pos_cart.y.to("kpc").value
+    z = pos_cart.z.to("kpc").value
+    vx = vel_cart.x.to("km/s").value
+    vy = vel_cart.y.to("km/s").value
+    vz = vel_cart.z.to("km/s").value
+
+    return jnp.stack([x, y, z, vx, vy, vz], axis=-1)
+
+
 if __name__ == "__main__":
     # Example usage
     pos_vel = jnp.array([[8.0, 0.0, 0.0, 0.0, 220.0, 0.0],
