@@ -220,3 +220,6 @@ __marimo__/
 
 # npz
 *.npz
+
+#.db
+*.db
