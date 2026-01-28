@@ -43,112 +43,165 @@ def prior_global_score(x: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
 
         return score
 
+def clear_gpu_memory():
+    """Helper function to aggressively clear GPU memory."""
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+
 
 def objective(trial):
+    # Clear memory at the start of each trial
+    clear_gpu_memory()
     
-    summary_dim = trial.suggest_int("SetTransformer_summary_dim", 8, 64)
-    embed_dims = trial.suggest_int("SetTransformer_embed_dims", 8, 64)
-    num_heads = trial.suggest_int("SetTransformer_num_heads", 2, 8)
-    # mlp_depths = trial.suggest_int("SetTransformer_mlp_depths", 2, 4) 
-    # mlp_widths = trial.suggest_int("SetTransformer_mlp_widths", 32, 256)
+    try:
+        summary_dim = trial.suggest_int("SetTransformer_summary_dim", 8, 64)
+        embed_dims = trial.suggest_int("SetTransformer_embed_dims", 8, 64)
+        num_heads = trial.suggest_int("SetTransformer_num_heads", 2, 8)
+        # mlp_depths = trial.suggest_int("SetTransformer_mlp_depths", 2, 4) 
+        # mlp_widths = trial.suggest_int("SetTransformer_mlp_widths", 32, 256)
 
-    inference_mlp_depth = trial.suggest_int("inference_mlp_depth", 2, 6)
-    inference_mlp_width = trial.suggest_int("inference_mlp_width", 64, 512)
-    time_embedding_dim = trial.suggest_int("inference_time_embedding_dim", 16, 64, step=2)
+        inference_mlp_depth = trial.suggest_int("inference_mlp_depth", 2, 6)
+        inference_mlp_width = trial.suggest_int("inference_mlp_width", 64, 512)
+        time_embedding_dim = trial.suggest_int("inference_time_embedding_dim", 16, 64, step=2)
 
 
-    workflow_global = bf.BasicWorkflow(
-        adapter=adapter,
-        summary_network=bf.networks.SetTransformer(summary_dim=summary_dim, 
-                                                   embed_dims=(embed_dims, embed_dims), 
-                                                   num_heads=(num_heads, num_heads),
-                                                #    mlp_depths=(mlp_depths, mlp_depths),
-                                                #    mlp_widths=(mlp_widths, mlp_widths),
-                                                   dropout=0.1),
-        inference_network=bf.networks.CompositionalDiffusionModel(
-                                                    subnet_kwargs={
-                                                    "widths": [inference_mlp_width] * inference_mlp_depth,
-                                                    "activation": "mish",               #DEFAULT
-                                                    "kernel_initializer": "he_normal",  #DEFAULT
-                                                    "residual": True,                   #DEFAULT
-                                                    "dropout": 0.05,                    #DEFAULT
-                                                    "spectral_normalization": False,    #DEFAULT
-                                                    "time_embedding_dim": time_embedding_dim,
-                                                    "merge": "concat",                  #DEFAULT
-                                                    "norm": "layer",                    #DEFAULT
-                                                    }),
-        standardize=["inference_variables", "summary_variables"]
-        )
-    
-    history = workflow_global.fit_offline(
-        training_data,
-        epochs=50,
-        batch_size=BATCH_SIZE,
-        verbose=2,
-    )
-
-    # # Split test data into 4 quarters
-    n_test_total = test_data['sim_data'].shape[0]
-    quarter_size = n_test_total // 8
-
-    global_posteriors = []
-
-    for i in range(8):
-        start_idx = i * quarter_size
-        # For the last quarter, include any remaining samples
-        end_idx = (i + 1) * quarter_size if i < 7 else n_test_total
+        workflow_global = bf.BasicWorkflow(
+            adapter=adapter,
+            summary_network=bf.networks.SetTransformer(summary_dim=summary_dim, 
+                                                       embed_dims=(embed_dims, embed_dims), 
+                                                       num_heads=(num_heads, num_heads),
+                                                    #    mlp_depths=(mlp_depths, mlp_depths),
+                                                    #    mlp_widths=(mlp_widths, mlp_widths),
+                                                       dropout=0.1),
+            inference_network=bf.networks.CompositionalDiffusionModel(
+                                                        subnet_kwargs={
+                                                        "widths": [inference_mlp_width] * inference_mlp_depth,
+                                                        "activation": "mish",               #DEFAULT
+                                                        "kernel_initializer": "he_normal",  #DEFAULT
+                                                        "residual": True,                   #DEFAULT
+                                                        "dropout": 0.05,                    #DEFAULT
+                                                        "spectral_normalization": False,    #DEFAULT
+                                                        "time_embedding_dim": time_embedding_dim,
+                                                        "merge": "concat",                  #DEFAULT
+                                                        "norm": "layer",                    #DEFAULT
+                                                        }),
+            standardize=["inference_variables", "summary_variables"]
+            )
         
-        test_data_batch = {
-            'sim_data': test_data['sim_data'][start_idx:end_idx],
-            'j': test_data['j'][start_idx:end_idx]
+        history = workflow_global.fit_offline(
+            training_data,
+            epochs=50,
+            batch_size=BATCH_SIZE,
+            verbose=2,
+        )
+
+        # # Split test data into 4 quarters
+        n_test_total = test_data['sim_data'].shape[0]
+        quarter_size = n_test_total // 8
+
+        global_posteriors = []
+
+        for i in range(8):
+            start_idx = i * quarter_size
+            # For the last quarter, include any remaining samples
+            end_idx = (i + 1) * quarter_size if i < 7 else n_test_total
+            
+            test_data_batch = {
+                'sim_data': test_data['sim_data'][start_idx:end_idx],
+                'j': test_data['j'][start_idx:end_idx]
+            }
+            posterior_batch = workflow_global.compositional_sample(
+                num_samples=N_SAMPLES,
+                conditions={'sim_data': test_data_batch['sim_data'], 
+                            "j": test_data_batch["j"] },
+                compute_prior_score=prior_global_score,
+                compositional_bridge_d1=1/N_SUBJECTS,
+                mini_batch_size=2,
+                method=METHOD,
+                steps=STEPS,
+                max_steps=MAX_STEP
+            )
+            global_posteriors.append(posterior_batch)
+            
+            # Free GPU memory after each batch
+            del test_data_batch
+            clear_gpu_memory()
+
+        # Concatenate posterior samples from all quarters
+        global_posterior = {
+            k: np.concatenate([np.array(gp[k]) for gp in global_posteriors], axis=0)
+            for k in global_posteriors[0].keys()
         }
-        posterior_batch = workflow_global.compositional_sample(
-            num_samples=N_SAMPLES,
-            conditions={'sim_data': test_data_batch['sim_data'], 
-                        "j": test_data_batch["j"] },
-            compute_prior_score=prior_global_score,
-            compositional_bridge_d1=1/N_SUBJECTS,
-            mini_batch_size=2,
-            method=METHOD,
-            steps=STEPS,
-            max_steps=MAX_STEP
-        )
-        global_posteriors.append(posterior_batch)
+        ps = global_posterior.copy()
+        ps['m_nfw'] = (ps['m_nfw'] * training_data_mean_and_std['std_m_nfw'] + training_data_mean_and_std['mean_m_nfw'])
+        ps['r_s'] = (ps['r_s'] * training_data_mean_and_std['std_r_s'] + training_data_mean_and_std['mean_r_s'])
+        ps['q1'] = (ps['q1'] * training_data_mean_and_std['std_q1'] + training_data_mean_and_std['mean_q1'])
+        ps['q2'] = (ps['q2'] * training_data_mean_and_std['std_q2'] + training_data_mean_and_std['mean_q2'])
+
+        root_mean_squared_error = bf_metrics.root_mean_squared_error(
+                estimates=ps,
+                targets=test_data,
+                variable_keys=param_names_global,
+                variable_names=param_names_global,
+            )
         
-        # Free GPU memory after each batch
-        del test_data_batch
-        gc.collect()
-        torch.cuda.empty_cache()
-
-    # Concatenate posterior samples from all quarters
-    global_posterior = {
-        k: np.concatenate([np.array(gp[k]) for gp in global_posteriors], axis=0)
-        for k in global_posteriors[0].keys()
-    }
-    ps = global_posterior.copy()
-    ps['m_nfw'] = (ps['m_nfw'] * training_data_mean_and_std['std_m_nfw'] + training_data_mean_and_std['mean_m_nfw'])
-    ps['r_s'] = (ps['r_s'] * training_data_mean_and_std['std_r_s'] + training_data_mean_and_std['mean_r_s'])
-    ps['q1'] = (ps['q1'] * training_data_mean_and_std['std_q1'] + training_data_mean_and_std['mean_q1'])
-    ps['q2'] = (ps['q2'] * training_data_mean_and_std['std_q2'] + training_data_mean_and_std['mean_q2'])
-
-    root_mean_squared_error = bf_metrics.root_mean_squared_error(
-            estimates=ps,
-            targets=test_data,
-            variable_keys=param_names_global,
-            variable_names=param_names_global,
-        )
+        calibration_errors = bf_metrics.calibration_error(
+                estimates=ps,
+                targets=test_data,
+                variable_keys=param_names_global,
+                variable_names=param_names_global,
+            )
+        
+        average_rms = root_mean_squared_error['values'].mean()
+        average_calibration = calibration_errors['values'].mean()
+        
+        # Clean up before returning
+        del workflow_global, global_posteriors, global_posterior, ps
+        clear_gpu_memory()
+        
+        return average_rms, average_calibration
     
-    calibration_errors = bf_metrics.calibration_error(
-            estimates=ps,
-            targets=test_data,
-            variable_keys=param_names_global,
-            variable_names=param_names_global,
-        )
+    except (torch.cuda.OutOfMemoryError, RuntimeError) as e:
+        # Check if it's a CUDA OOM error
+        if "out of memory" in str(e).lower() or "CUDA" in str(e):
+            logging.warning(f"Trial {trial.number} failed due to CUDA OOM: {e}")
+            
+            # Aggressive cleanup
+            try:
+                del workflow_global
+            except NameError:
+                pass
+            try:
+                del global_posteriors
+            except NameError:
+                pass
+            clear_gpu_memory()
+            
+            # Raise TrialPruned to skip this trial and continue with the next
+            raise optuna.TrialPruned(f"CUDA out of memory: {e}")
+        else:
+            # Re-raise if it's a different RuntimeError
+            raise
     
-    average_rms = root_mean_squared_error['values'].mean()
-    average_calibration = calibration_errors['values'].mean()
-    
-    return average_rms, average_calibration 
+    except Exception as e:
+        # Catch any other unexpected errors
+        logging.error(f"Trial {trial.number} failed with unexpected error: {e}")
+        
+        # Cleanup
+        try:
+            del workflow_global
+        except NameError:
+            pass
+        try:
+            del global_posteriors
+        except NameError:
+            pass
+        clear_gpu_memory()
+        
+        # Optionally prune or re-raise
+        raise optuna.TrialPruned(f"Unexpected error: {e}")
 
 
 
