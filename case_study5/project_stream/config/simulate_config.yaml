@@ -1,6 +1,7 @@
-base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data"
-data_dir: "streams"
-n_simulations: 10
+base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams"
+data_dir: "data"
+n_simulations: 300000
+batch_size: 500
 
 parameters_global:
   - "a"
@@ -13,65 +14,153 @@ pretty_parameters_local:
   - "a"
 
 priors_global: #str for the type and a list of values for the parameters of the prior
+  #HALO TRIXIAL
+  m_Triaxial_halo:
+    type: uniform
+    prior_parameters: [5.e10, 2.5e12]
+  r_Triaxial_halo:
+    type: uniform
+    prior_parameters: [5.0, 50.0]
+  q1_Triaxial_halo:
+    type: identity
+    prior_parameters: [1.0]
+  q2_Triaxial_halo:
+    type: uniform
+    prior_parameters: [0.5, 6.0]
+  #HALO TWOPOWER TRIAXIAL
+  rho_TwoPowerTriaxial_halo:
+    type: uniform
+    prior_parameters: [1.e7, 1.5e8]
+  a_TwoPowerTriaxial_halo:
+    type: uniform
+    prior_parameters: [1.0, 100.0]
+  b_TwoPowerTriaxial_halo:
+    type: identity
+    prior_parameters: [1.0]
+  c_TwoPowerTriaxial_halo:
+    type: uniform
+    prior_parameters: [0.0, 6.0]
+  alpha_TwoPowerTriaxial_halo:
+    type: uniform
+    prior_parameters: [0.0, 2.0]
+  beta_TwoPowerTriaxial_halo:
+    type: uniform
+    prior_parameters: [2.0, 6.0]
+  #THIN AND THICK DISK
   rho_thin_disk:
     type: uniform
-    prior_parameters: [0.5e11, 2.5e11]
+    prior_parameters: [0.5e9, 2.0e9]
   hr_thin_disk:
-    type: uniform
-    prior_parameters: [1.0, 5.0]
+    type: normal
+    prior_parameters: [2.6, 0.5]
   hz_thin_disk:
-    type: uniform
-    prior_parameters: [0.1, 1.0]
+    type: normal
+    prior_parameters: [0.3, 0.05]
   rho_thick_disk:
     type: uniform
-    prior_parameters: [0.5e10, 2.5e10]
+    prior_parameters: [0.0, 1.5e9]
   hr_thick_disk:
-    type: uniform
-    prior_parameters: [1.0, 5.0]
+    type: normal
+    prior_parameters: [2.0, 0.2]
   hz_thick_disk:
-    type: uniform
-    prior_parameters: [0.5, 2.0]
+    type: normal
+    prior_parameters: [0.9, 0.18]
+  #BULGE
+  m_bulge:
+    type: identity
+    prior_parameters: [4501365375.06545]
+  alpha_bulge:
+    type: identity
+    prior_parameters: [1.8]
+  r_bulge:
+    type: identity
+    prior_parameters: [1.9]
 
 priors_local: #str for the type and a list of values for the parameters of the prior
   Pal5:
+    m_progenitor:
+      type: identity
+      prior_parameters: [4.3e3]
+    a_progenitor:
+      type: identity
+      prior_parameters: [8.43]
+    t_end:
+      type: identity
+      prior_parameters: [4.0]
+    ra:
+      type: identity
+      prior_parameters: [229.022]
+    dec:
+      type: identity
+      prior_parameters: [-0.112]
     vr:
-      type: uniform
-      prior_parameters: [-60.0, -40.0]
+      type: normal
+      prior_parameters: [-58.6, 0.21]
     r:
-      type: uniform
-      prior_parameters: [7.0, 9.0]
-    mu_alpha_cosdelta:
-      type: uniform
-      prior_parameters: [-3.0, -1.0]
-    mu_delta:
-      type: uniform
-      prior_parameters: [-3.5, -1.5]
+      type: normal
+      prior_parameters: [20.6, 0.2]
+    mu_ra_cosdec:
+      type: normal
+      prior_parameters: [-2.736, 0.064]
+    mu_dec:
+      type: normal
+      prior_parameters: [-2.646, 0.064]
   NGC3201:
+    m_progenitor:
+      type: identity
+      prior_parameters: [6.47e4]
+    a_progenitor:
+      type: identity
+      prior_parameters: [4.9]
+    t_end:
+      type: identity
+      prior_parameters: [1.5]
+    ra:
+      type: identity
+      prior_parameters: [154.403]
+    dec:
+      type: identity
+      prior_parameters: [-46.412]
     vr:
-      type: uniform
-      prior_parameters: [-60.0, -40.0]
+      type: normal
+      prior_parameters: [494.34, 0.14]
     r:
-      type: uniform
-      prior_parameters: [7.0, 9.0]
-    mu_alpha_cosdelta:
-      type: uniform
-      prior_parameters: [-3.0, -1.0]
-    mu_delta:
-      type: uniform
-      prior_parameters: [-3.5, -1.5]
+      type: normal
+      prior_parameters: [4.9, 0.11]
+    mu_ra_cosdec:
+      type: normal
+      prior_parameters: [8.324, 0.044]
+    mu_dec:
+      type: normal
+      prior_parameters: [-1.991, 0.044]
   M68:
+    m_progenitor:
+      type: identity
+      prior_parameters: [5.7e4]
+    a_progenitor:
+      type: identity
+      prior_parameters: [6.4]
+    t_end:
+      type: identity
+      prior_parameters: [1.5]
+    ra:
+      type: identity
+      prior_parameters: [189.867]
+    dec:
+      type: identity
+      prior_parameters: [-26.744]
     vr:
-      type: uniform
-      prior_parameters: [-60.0, -40.0]
+      type: normal
+      prior_parameters: [-92.99, 0.22]
     r:
-      type: uniform
-      prior_parameters: [7.0, 9.0]
-    mu_alpha_cosdelta:
-      type: uniform
-      prior_parameters: [-3.0, -1.0]
-    mu_delta:
-      type: uniform
-      prior_parameters: [-3.5, -1.5]
+      type: normal
+      prior_parameters: [10.3, 0.52]
+    mu_ra_cosdec:
+      type: normal
+      prior_parameters: [-2.752, 0.054]
+    mu_dec:
+      type: normal
+      prior_parameters: [1.762, 0.053]
 
 target_streams:
   Pal5: 0 #this is the j index
@@ -83,14 +172,18 @@ hydra:
     dir: ${base_dir}/${data_dir}
 
 odisseo_config: #default values
-  N_particles: 5000,
+  N_particles: 3000
   return_snapshots: False
   num_snapshots: 0
-  num_timesteps: 5000
-  external_accelerations: (PSP_POTENTIAL, THIN_MN3_DISK, THICK_MN3_DISK, TWO_POWER_TRIAXIAL)
-  acceleration_scheme: DIRECT_ACC_MATRIX,
-  softening: 0.1
-  integrator: DIFFRAX_BACKEND,
-  fixed_timestep: False,
-  diffrax_solver: TSIT5,
+  num_timesteps: 5_000
+  external_accelerations:
+    - PSP_POTENTIAL
+    - THIN_MN3_DISK
+    - THICK_MN3_DISK
+    - TRIAXIAL_NFW_POTENTIAL
+  acceleration_scheme: DIRECT_ACC_MATRIX
+  softening: 0.01 #in pc
+  integrator: DIFFRAX_BACKEND
+  fixed_timestep: False
+  diffrax_solver: TSIT5
   glorder: 50

@@ -19,6 +19,7 @@ class OdisseoConfig:
 class SimulatorConfig:
 
     n_simulations: int
+    batch_size: int
 
     base_dir: str
     data_dir: str
