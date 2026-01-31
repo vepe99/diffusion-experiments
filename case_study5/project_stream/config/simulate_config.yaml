@@ -1,0 +1,96 @@
+base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data"
+data_dir: "streams"
+n_simulations: 10
+
+parameters_global:
+  - "a"
+parameters_local:
+  - "a"
+
+pretty_parameters_global:
+  - "a"
+pretty_parameters_local:
+  - "a"
+
+priors_global: #str for the type and a list of values for the parameters of the prior
+  rho_thin_disk:
+    type: uniform
+    prior_parameters: [0.5e11, 2.5e11]
+  hr_thin_disk:
+    type: uniform
+    prior_parameters: [1.0, 5.0]
+  hz_thin_disk:
+    type: uniform
+    prior_parameters: [0.1, 1.0]
+  rho_thick_disk:
+    type: uniform
+    prior_parameters: [0.5e10, 2.5e10]
+  hr_thick_disk:
+    type: uniform
+    prior_parameters: [1.0, 5.0]
+  hz_thick_disk:
+    type: uniform
+    prior_parameters: [0.5, 2.0]
+
+priors_local: #str for the type and a list of values for the parameters of the prior
+  Pal5:
+    vr:
+      type: uniform
+      prior_parameters: [-60.0, -40.0]
+    r:
+      type: uniform
+      prior_parameters: [7.0, 9.0]
+    mu_alpha_cosdelta:
+      type: uniform
+      prior_parameters: [-3.0, -1.0]
+    mu_delta:
+      type: uniform
+      prior_parameters: [-3.5, -1.5]
+  NGC3201:
+    vr:
+      type: uniform
+      prior_parameters: [-60.0, -40.0]
+    r:
+      type: uniform
+      prior_parameters: [7.0, 9.0]
+    mu_alpha_cosdelta:
+      type: uniform
+      prior_parameters: [-3.0, -1.0]
+    mu_delta:
+      type: uniform
+      prior_parameters: [-3.5, -1.5]
+  M68:
+    vr:
+      type: uniform
+      prior_parameters: [-60.0, -40.0]
+    r:
+      type: uniform
+      prior_parameters: [7.0, 9.0]
+    mu_alpha_cosdelta:
+      type: uniform
+      prior_parameters: [-3.0, -1.0]
+    mu_delta:
+      type: uniform
+      prior_parameters: [-3.5, -1.5]
+
+target_streams:
+  Pal5: 0 #this is the j index
+  NGC3201: 1
+  M68: 2
+
+hydra:
+  run:
+    dir: ${base_dir}/${data_dir}
+
+odisseo_config: #default values
+  N_particles: 5000,
+  return_snapshots: False
+  num_snapshots: 0
+  num_timesteps: 5000
+  external_accelerations: (PSP_POTENTIAL, THIN_MN3_DISK, THICK_MN3_DISK, TWO_POWER_TRIAXIAL)
+  acceleration_scheme: DIRECT_ACC_MATRIX,
+  softening: 0.1
+  integrator: DIFFRAX_BACKEND,
+  fixed_timestep: False,
+  diffrax_solver: TSIT5,
+  glorder: 50
