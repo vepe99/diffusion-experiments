@@ -1,0 +1,68 @@
+base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
+data_dir: "streams/data/"
+results_dir: "models"
+
+#training hyperparameters
+n_epochs: 250
+batch_size: 128
+learning_rate: 0.01
+weight_decay: 0.0001 #not used
+lr_scheduler_step_size: 10 #not used
+lr_scheduler_gamma: 0.1 #not used
+verbose: 2
+
+#nmes of parameters
+sim_data: "sim_data_projected"
+inference_conditions:
+  - "j"
+parameters_global:
+  - "m_Triaxial_halo"
+  - "r_Triaxial_halo"
+  - "q2_Triaxial_halo"
+  - "rho_thin_disk"
+  - "hr_thin_disk"
+  - "hz_thin_disk"
+  - "rho_thick_disk"
+  - "hr_thick_disk"
+  - "hz_thick_disk"
+parameters_local:
+  - "m_progenitor"
+  - "a_progenitor"
+  - "vr"
+  - "r"
+  - "mu_ra_cosdec"
+  - "mu_dec"
+
+#names for printing
+paramater_global_pretty:
+  - r"$M_{NFW}$"
+  - r"$r_{NFW$}"
+  - r"$q_{NFW}$"
+  - r"$\rho_t"
+  - r"$h_t$"
+  - r"$z_t$"
+  - r"$\rho_k$
+  - r"$h_k$"
+  - r"$z_k$
+parameter_local_pretty:
+  - r"$M_{prog}$"
+  - r"$a_{prog}$"
+  - r"$v_r$"
+  - r"$r$"
+  - r"$\mu_{\alpha*}$"
+  - r"$\mu_{\delta}$"
+
+#global model network:
+global_model:
+  dropout: 0.1
+  summary_dim: 64
+  num_heads: 2
+
+#local model network:
+local_model:
+  dropout: 0.1
+  summary_dim: 16
+
+hydra:
+  run:
+    dir: ${base_dir}/${results_dir}
