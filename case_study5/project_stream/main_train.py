@@ -53,7 +53,7 @@ def main(cfg: TrainConfig):
     )
     # train_data_path = os.path.join(cfg.base_dir, cfg.data_dir)
     train_data_path = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data/"
-    training_data = dict(np.load(os.path.join(train_data_path, "training_data_150000.npz"), allow_pickle=True))
+    training_data = dict(np.load(os.path.join(train_data_path, "training_data_300000.npz"), allow_pickle=True))
     print("Training data keys", training_data.keys())
 
     history = workflow_global.fit_offline(

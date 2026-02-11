@@ -228,6 +228,14 @@ if evaluate and global_evalute:
     plt.show()
 
     # histograms 
+    print(f"Number of parameters: {len(cfg.parameters_global)}")
+    print(f"Number of pretty names: {len(cfg.paramater_global_pretty)}")
+    print(f"Pretty names: {cfg.paramater_global_pretty}")
+    print(f"Pretty names type: {type(cfg.paramater_global_pretty)}")
+    
+    # Check posterior shape
+    for k, v in ps.items():
+        print(f"Posterior {k}: shape = {np.array(v).shape}")
     f = bf.diagnostics.plots.calibration_histogram(
         estimates=ps, 
         targets=test_data,
