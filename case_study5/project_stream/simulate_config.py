@@ -16,7 +16,20 @@ class OdisseoConfig:
     glorder: int
 
 @dataclass
+class GalaConfig:
+    df_type: str
+    n_timesteps: int
+    use_prog_potential: bool
+
+@dataclass
+class GalaxConfig:
+    df_type: str
+    n_timesteps: int
+
+@dataclass
 class SimulatorConfig:
+
+    simulator: str
 
     n_simulations: int
     batch_size: int
@@ -40,6 +53,10 @@ class SimulatorConfig:
     batch_size: int
 
     odisseo_config: OdisseoConfig 
+
+    gala_config: GalaConfig
+
+    galax_config: GalaxConfig
 
     hydra: Optional[Any] = field(default=None)
 
