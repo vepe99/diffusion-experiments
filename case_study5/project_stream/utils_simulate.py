@@ -94,8 +94,7 @@ def sample_parameters_parallel(prior_global_dict: dict, prior_local_dict: dict, 
         output[key] = get_prior_sample(prior_global_dict[key], size=n_samples)
 
     # Vectorized sampling for j
-    output['j'] = np.repeat(possible_j, n_samples).reshape(-1, len(possible_j), 1) #j has shape (n_samples, n_streams, 1) and each column is a different stream, we will use this to sample the local parameters in a vectorized way
-
+    output['j'] = np.tile(np.array(possible_j)[np.newaxis, :, np.newaxis], (n_samples, 1, 1)) #j has shape (n_samples, n_streams, 1) and each column is a different stream, we will use this to sample the local parameters in a vectorized way
 
     # Vectorized sampling for local parameters
     stream_keys = {v: k for k, v in target_streams.items()} #this gets the string of the stream given the j value, we will use this to get the correct local parameters for each stream
