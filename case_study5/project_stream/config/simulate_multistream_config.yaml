@@ -1,7 +1,7 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams"
 data_dir: "data_multistream"
 n_simulations: 1000
-batch_size: 50
+batch_size: 200
 
 parameters_global:
   - "a"
@@ -20,13 +20,13 @@ priors_global: #str for the type and a list of values for the parameters of the 
     prior_parameters: [5.e10, 2.5e12]
   r_Triaxial_halo:
     type: uniform
-    prior_parameters: [5.0, 50.0]
+    prior_parameters: [10.0, 25.0]
   q1_Triaxial_halo:
     type: identity
     prior_parameters: [1.0]
   q2_Triaxial_halo:
     type: uniform
-    prior_parameters: [0.5, 6.0]
+    prior_parameters: [0.5, 1.5]
   #HALO TWOPOWER TRIAXIAL
   rho_TwoPowerTriaxial_halo:
     type: uniform
@@ -172,10 +172,10 @@ hydra:
     dir: ${base_dir}/${data_dir}
 
 odisseo_config: #default values
-  N_particles: 3000
+  N_particles: 1000
   return_snapshots: False
   num_snapshots: 0
-  num_timesteps: 5_000
+  num_timesteps: 1_000
   external_accelerations:
     - PSP_POTENTIAL
     - THIN_MN3_DISK
