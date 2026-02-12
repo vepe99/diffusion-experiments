@@ -60,11 +60,12 @@ def main(cfg: SimulatorConfig):
                                 fixed_timestep= cfg.odisseo_config.fixed_timestep,
                                 diffrax_solver= convert_to_integer_config(cfg.odisseo_config.diffrax_solver),
                                 glorder=cfg.odisseo_config.glorder) #default values
+        
     elif cfg.simulator == "gala":
         config = cfg.gala_config
         code_units = None #gala does not use code units, but we need to pass something to the function
-
         pass
+    
     elif cfg.simulator == "galax":
         from utils_galax_simulator import simulate_stream_galax
 

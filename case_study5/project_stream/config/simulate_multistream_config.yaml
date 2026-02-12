@@ -1,5 +1,6 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams"
-data_dir: "data_multistream"
+data_dir: "data_multistream_galax"
+simulator: "galax" #odisseo, gala, galax
 n_simulations: 1000
 batch_size: 200
 
@@ -20,7 +21,7 @@ priors_global: #str for the type and a list of values for the parameters of the 
     prior_parameters: [5.e10, 2.5e12]
   r_Triaxial_halo:
     type: uniform
-    prior_parameters: [10.0, 25.0]
+    prior_parameters: [5.0, 50.0]
   q1_Triaxial_halo:
     type: identity
     prior_parameters: [1.0]
@@ -187,3 +188,12 @@ odisseo_config: #default values
   fixed_timestep: False
   diffrax_solver: TSIT5
   glorder: 50
+
+galax_config:
+  df_type: "ChenStreamDF" #FardalStreamDF, ChenStreamDF, MockStreamGenerator
+  n_timesteps: 1000
+
+gala_config:
+  df_type: "ChenStreamDF" #FardalStreamDF, ChenStreamDF, MockStreamGenerator
+  n_timesteps: 1000
+  use_prog_potential: True

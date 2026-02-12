@@ -1,7 +1,7 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams"
 data_dir: "data_galax"
 simulator: "galax" #odisseo, gala, galax
-n_simulations: 100_000
+n_simulations: 300_000
 batch_size: 500
 
 parameters_global:
@@ -21,7 +21,7 @@ priors_global: #str for the type and a list of values for the parameters of the 
     prior_parameters: [5.e10, 2.5e12]
   r_Triaxial_halo:
     type: uniform
-    prior_parameters: [10.0, 25.0]
+    prior_parameters: [5.0, 50.0]
   q1_Triaxial_halo:
     type: identity
     prior_parameters: [1.0]
