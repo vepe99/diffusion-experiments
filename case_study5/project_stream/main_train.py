@@ -61,6 +61,7 @@ def main(cfg: TrainConfig):
         epochs=cfg.n_epochs,
         batch_size=cfg.batch_size,
         verbose=cfg.verbose,
+        # augmentations = func #This can also add keys
     )
     workflow_global.approximator.save(os.path.join(model_path, 'global_model.keras'))
 

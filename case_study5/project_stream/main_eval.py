@@ -88,6 +88,7 @@ def main(cfg: EvalConfig):
                         steps=cfg.steps,
                         max_steps=cfg.max_steps
                         )
+    np.savez(os.path.join(cfg.base_dir, cfg.results_dir, 'global_posterior.npz'), **ps)
     ###############
     # PLOTS GLOBAL#
     ###############
@@ -101,6 +102,7 @@ def main(cfg: EvalConfig):
         variable_names = param_names_global
     )
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_recovery.pdf'))
+    print('Saved global recovery plot')
     plt.show()
     #corner plot
     dataset_id = 0
@@ -112,6 +114,7 @@ def main(cfg: EvalConfig):
         variable_names = param_names_global,
     )
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'global_cornerplot_datasetid_{dataset_id}.pdf'))
+    print(f'Saved global corner plot for dataset id {dataset_id}')
     plt.show()
     #calibration plot
     fig = bf.diagnostics.calibration_ecdf(
@@ -122,6 +125,7 @@ def main(cfg: EvalConfig):
         variable_names = param_names_global
     )
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_calibration.pdf'))
+    print('Saved global calibration plot')
     plt.show()
     #histograms
     fig = bf.diagnostics.plots.calibration_histogram(
@@ -131,6 +135,7 @@ def main(cfg: EvalConfig):
         variable_names = param_names_global
     )
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_histograms.pdf'))
+    print('Saved global histograms plot')
     plt.show()
     # z_score contraction
     fig = bf.diagnostics.plots.z_score_contraction(
@@ -140,7 +145,9 @@ def main(cfg: EvalConfig):
         variable_names = param_names_global
     )
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_z_score_contraction.pdf'))
+    print('Saved global z-score contraction plot')
     plt.show()
+    
 
     ###############
     # local model # 

@@ -118,7 +118,6 @@ def sample_parameters_parallel(prior_global_dict: dict, prior_local_dict: dict, 
         output[key] = get_prior_sample(prior_global_dict[key], size=n_samples)
 
     # Vectorized sampling for j
-    js = np.random.choice(possible_j, size=(n_samples, 1))
     output['j'] = np.repeat(possible_j, n_samples).reshape(-1, len(possible_j), 1) #j has shape (n_samples, n_streams, 1) and each column is a different stream, we will use this to sample the local parameters in a vectorized way
 
 
@@ -129,6 +128,8 @@ def sample_parameters_parallel(prior_global_dict: dict, prior_local_dict: dict, 
         for n in range(n_samples):
             for j in range(len(possible_j)):
                 output[key][n, j] = get_prior_sample(prior_local_dict[stream_keys[j]][key], size=1)[0]
+        if key in ['ra', 'dec', 'r', 'mu_ra_cosdec', 'mu_dec', 'vr']:
+            output[key] = output[key].reshape(-1, 1) #flatten to use astropy
         
     # we are going to go to carthesian coordinates to simulate
     c = SkyCoord(
@@ -140,6 +141,8 @@ def sample_parameters_parallel(prior_global_dict: dict, prior_local_dict: dict, 
         radial_velocity = output['vr'] * u.km/u.s,  
         frame='icrs'
     )   
+    for key in ['ra', 'dec', 'r', 'mu_ra_cosdec', 'mu_dec', 'vr']:
+        output[key] = output[key].reshape(n_samples, len(possible_j), 1) #reshape back to (n_samples, n_streams, 1) for the rest of the code
     gc = c.transform_to(Galactocentric)
     output['x'] = gc.x.to(u.kpc).value.reshape(-1, len(possible_j), 1)
     output['y'] = gc.y.to(u.kpc).value.reshape(-1, len(possible_j), 1)

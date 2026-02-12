@@ -1,6 +1,6 @@
 from autocvd import autocvd
 autocvd(num_gpus = 1)
-# import os
+import os
 # os.environ['CUDA_VISIBLE_DEVICES'] = '0'  # Set this to the GPU you want to use
 from tqdm import tqdm
 
