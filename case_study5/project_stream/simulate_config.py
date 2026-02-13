@@ -20,6 +20,8 @@ class GalaConfig:
     df_type: str
     n_timesteps: int
     use_prog_potential: bool
+    n_workers: int
+    N_particles: int
 
 @dataclass
 class GalaxConfig:

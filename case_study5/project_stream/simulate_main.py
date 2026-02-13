@@ -1,5 +1,3 @@
-from autocvd import autocvd
-autocvd(num_gpus = 1)
 import os
 from tqdm import tqdm
 
@@ -10,8 +8,7 @@ from hydra.core.config_store import ConfigStore
 
 from astropy import units as u
 import numpy as np
-import jax
-import jax.numpy as jnp
+
 
 
 
@@ -28,15 +25,20 @@ def main(cfg: SimulatorConfig):
     print('Using simulator:', cfg.simulator)
     if cfg.simulator == "odisseo":
         print(cfg.odisseo_config)
-    elif cfg.simulator == "gala":
-        print(cfg.gala_config)
+        from autocvd import autocvd
+        autocvd(num_gpus = 1)
     elif cfg.simulator == "galax":
         print(cfg.galax_config)
-
+        from autocvd import autocvd
+        autocvd(num_gpus = 1)
+    elif cfg.simulator == "gala":
+        print(cfg.gala_config)
     prior_samples = sample_parameters(prior_global_dict=cfg.priors_global, prior_local_dict=cfg.priors_local, n_samples=cfg.n_simulations, target_streams=cfg.target_streams)
     print(' The shapes of the samples are :', {k: v.shape for k, v in prior_samples.items()})
 
     if cfg.simulator == "odisseo":
+        import jax
+        import jax.numpy as jnp
         from odisseo.option_classes import SimulationConfig
         from odisseo.units import CodeUnits
         from utils_odisseo_simulator import (convert_to_integer_externalacc, 
@@ -61,17 +63,21 @@ def main(cfg: SimulatorConfig):
                                 diffrax_solver= convert_to_integer_config(cfg.odisseo_config.diffrax_solver),
                                 glorder=cfg.odisseo_config.glorder) #default values
         
-    elif cfg.simulator == "gala":
-        config = cfg.gala_config
-        code_units = None #gala does not use code units, but we need to pass something to the function
-        pass
     
     elif cfg.simulator == "galax":
+        import jax
+        import jax.numpy as jnp
         from utils_galax_simulator import simulate_stream_galax
 
         simulate_stream = simulate_stream_galax
         config = cfg.galax_config
         code_units = None #galax does not use code units, but we need to pass something to the function
+    
+    elif cfg.simulator == "gala":
+        from joblib import Parallel, delayed
+        from utils_gala_simulator import simulate_stream_gala, _run_gala_single
+        config = cfg.gala_config
+        code_units = None #gala does not use code units, but we need to pass something to the function
         
         
     
@@ -79,9 +85,30 @@ def main(cfg: SimulatorConfig):
         batch_end = min(batch_start + cfg.batch_size, cfg.n_simulations)
         batch_indices = np.arange(batch_start, batch_end)
         # Prepare batch of parameters
-        batch_params = {k: jnp.array(v[batch_indices]) for k, v in prior_samples.items()}
         # Run vectorized simulation
-        sim_data_batch = jax.vmap(simulate_stream, in_axes=(0, None, None, 0))(batch_params, config, code_units, jnp.array(batch_indices))  # shape (batch_size, ...)
+        if (cfg.simulator == "odisseo")|(cfg.simulator == "galax"):
+            batch_params = {k: jnp.array(v[batch_indices]) for k, v in prior_samples.items()}
+            sim_data_batch = jax.vmap(simulate_stream, in_axes=(0, None, None, 0))(batch_params, config, code_units, jnp.array(batch_indices))  # shape (batch_size, ...)
+        elif cfg.simulator == "gala":
+            batch_params = {k: np.array(v[batch_indices]) for k, v in prior_samples.items()}
+    
+            # Convert to individual parameter dicts
+            individual_params = [
+                {k: v[i] for k, v in batch_params.items()}
+                for i in range(len(batch_indices))
+            ]
+            
+            # Run in parallel with joblib
+            results = Parallel(n_jobs=config.n_workers)(
+                delayed(simulate_stream_gala)(
+                    param_dict, config, code_units, int(batch_indices[i])
+                )
+                for i, param_dict in enumerate(individual_params)
+            )
+            
+            # Stack results
+            sim_data_batch = np.stack(results, axis=0)
+
         # Save each simulation in the batch
         sim_data_projected_batch = sky_projection_astropy(sim_data_batch)
         for i, idx in enumerate(batch_indices):
