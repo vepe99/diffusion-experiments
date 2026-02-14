@@ -93,6 +93,7 @@ for i in range(n_training):
     valid_indices = np.random.choice(n_trials, size=n_valid, replace=False)
     attention_mask_training[i, valid_indices, 0] = 1.0
 print('attention mask training shape', attention_mask_training.shape)
+training_data['attention_mask'] = attention_mask_training
 
 history = workflow_global.fit_offline(
         training_data,
