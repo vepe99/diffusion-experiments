@@ -1,5 +1,8 @@
 import numpy as np
 import os
+import yaml
+
+
 
 def load_simulations_to_dict(directory, N_simulations, param_names_global, sim_key='sim_data_projected', j_key='j'):
     """
@@ -55,7 +58,11 @@ def load_simulations_to_dict(directory, N_simulations, param_names_global, sim_k
 
 if __name__ == "__main__":
     # Example usage:
-    directory = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data/"
+    directory = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_galax/"
     N_simulations = 300_000
+    with open(os.path.join(directory, '.hydra', 'config.yaml'), "r") as f:
+        test_sim_config = yaml.safe_load(f)
+    param_names_global = list(test_sim_config['priors_global'].keys())
+    print("Parameter names global: ", param_names_global)
     data_dict = load_simulations_to_dict(directory, N_simulations, param_names_global)
-    np.savez("../project_stream/data/streams/data/training_data_300000.npz", **data_dict)
+    np.savez(f"/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_galax/training_data_{N_simulations}.npz", **data_dict)

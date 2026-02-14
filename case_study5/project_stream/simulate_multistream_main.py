@@ -79,14 +79,12 @@ def main(cfg: SimulatorConfig):
 
         simulate_stream = simulate_stream_galax
         config = cfg.galax_config
-        code_units = None #galax does not use code units, but we need to pass something to the function
-        
-        
+        code_units = None #galax does not use code units, but we need to pass something to the function  
     
-    save_dict = {'sim_data_carthesian': np.zeros((cfg.n_simulations * len(cfg.target_streams), cfg.odisseo_config.N_particles, 6)),
-                 'sim_data_projected': np.zeros((cfg.n_simulations * len(cfg.target_streams),cfg.odisseo_config.N_particles, 6))}
-    for batch_start in tqdm(range(0, cfg.n_simulations, cfg.batch_size)):
-        batch_end = min(batch_start + cfg.batch_size, cfg.n_simulations)
+    save_dict = {'sim_data_carthesian': np.ones((cfg.n_simulations * len(cfg.target_streams), cfg.odisseo_config.N_particles, 6)),
+                 'sim_data_projected': np.ones((cfg.n_simulations * len(cfg.target_streams),cfg.odisseo_config.N_particles, 6))}
+    for batch_start in tqdm(range(0, cfg.n_simulations * len(cfg.target_streams), cfg.batch_size)):
+        batch_end = min(batch_start + cfg.batch_size, cfg.n_simulations * len(cfg.target_streams))
         batch_indices = np.arange(batch_start, batch_end)
         # Prepare batch of parameters
         batch_params = {k: jnp.array(v[batch_indices]) for k, v in prior_samples.items()}

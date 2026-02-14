@@ -35,6 +35,7 @@ class EvalConfig:
     data_dir: str
     model_dir: str
     results_dir: str
+    multistream_n_simulation: int
 
     #evalutation hyperparameters
     n_samples: int

@@ -190,7 +190,7 @@ odisseo_config: #default values
   glorder: 50
 
 galax_config:
-  df_type: "ChenStreamDF" #FardalStreamDF, ChenStreamDF, MockStreamGenerator
+  df_type: "FardalStreamDF" #FardalStreamDF, ChenStreamDF, MockStreamGenerator
   n_timesteps: 1000
 
 gala_config:

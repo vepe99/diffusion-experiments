@@ -4,7 +4,7 @@ N_simulations: 300_000
 results_dir: "models/model_galax"
 
 #training hyperparameters
-n_epochs: 50
+n_epochs: 500
 batch_size: 256
 learning_rate: 0.01
 weight_decay: 0.0001 #not used

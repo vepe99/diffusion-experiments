@@ -1,6 +1,7 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_galax/"
 model_dir: "models/model_galax"
+multistream_n_simulation: 100
 results_dir: "plots/plots_galax"
 
 #training hyperparameters

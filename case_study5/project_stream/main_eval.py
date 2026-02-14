@@ -54,7 +54,8 @@ def main(cfg: EvalConfig):
     )
     workflow_global.approximator = keras.models.load_model(model_path)
 
-    test_data_path = os.path.join(cfg.base_dir, cfg.data_dir, 'simulation_multistream_1000.npz')
+    test_data_path = os.path.join(cfg.base_dir, cfg.data_dir, f'simulation_multistream_{cfg.multistream_n_simulation}.npz')
+    print('Loading test data from ', test_data_path)
     test_data = dict(np.load(test_data_path, allow_pickle=True))
     test_data = {k: test_data[k] for k in cfg.parameters_global + [cfg.sim_data, "j"] }
     print('Test data keys: ', test_data.keys())
@@ -98,8 +99,8 @@ def main(cfg: EvalConfig):
     fig = bf.diagnostics.recovery(
         estimates=ps,
         targets=test_data,
-        # variable_names=cfg.paramater_global_pretty
-        variable_names = param_names_global
+        variable_names=cfg.paramater_global_pretty
+        # variable_names = param_names_global
     )
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_recovery.pdf'))
     print('Saved global recovery plot')
@@ -110,8 +111,8 @@ def main(cfg: EvalConfig):
         estimates=ps,
         targets=test_data,
         dataset_id=dataset_id,
-        # variable_names=cfg.paramater_global_pretty,
-        variable_names = param_names_global,
+        variable_names=cfg.paramater_global_pretty,
+        # variable_names = param_names_global,
     )
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'global_cornerplot_datasetid_{dataset_id}.pdf'))
     print(f'Saved global corner plot for dataset id {dataset_id}')
@@ -121,28 +122,41 @@ def main(cfg: EvalConfig):
         estimates=ps,
         targets=test_data,
         difference=True,
-        # variable_names=cfg.paramater_global_pretty
-        variable_names = param_names_global
+        variable_names=cfg.paramater_global_pretty
+        # variable_names = param_names_global
     )
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_calibration.pdf'))
     print('Saved global calibration plot')
     plt.show()
     #histograms
-    fig = bf.diagnostics.plots.calibration_histogram(
-        estimates=ps, 
-        targets=test_data,
-        # variable_names=list(cfg.paramater_global_pretty)
-        variable_names = param_names_global
+    global_posterior_stream_1 = {k: ps[k] for k in list(ps.keys())[:4]}
+    test_data_stream_1 = {k: test_data[k] for k in list(global_posterior_stream_1.keys())}
+    fig_1 = bf.diagnostics.plots.calibration_histogram(
+        estimates=global_posterior_stream_1, 
+        targets=test_data_stream_1,
+        variable_names=cfg.paramater_global_pretty[:4]
+        # variable_names = param_names_global
     )
-    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_histograms.pdf'))
-    print('Saved global histograms plot')
+    fig_1.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_histograms_1.pdf'))
     plt.show()
+    global_posterior_stream_2 = {k: ps[k] for k in list(ps.keys())[4:]}
+    test_data_stream_2 = {k: test_data[k] for k in list(global_posterior_stream_2.keys())}
+    fig_2 = bf.diagnostics.plots.calibration_histogram(
+        estimates=global_posterior_stream_2, 
+        targets=test_data_stream_2,
+        variable_names=cfg.paramater_global_pretty[4:]
+        # variable_names = param_names_global
+    )
+    fig_2.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_histograms_2.pdf'))
+    plt.show()
+    print('Saved global histograms plot')
+
     # z_score contraction
     fig = bf.diagnostics.plots.z_score_contraction(
         estimates=ps, 
         targets=test_data,
-        # variable_names=cfg.paramater_global_pretty
-        variable_names = param_names_global
+        variable_names=cfg.paramater_global_pretty
+        # variable_names = param_names_global
     )
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_z_score_contraction.pdf'))
     print('Saved global z-score contraction plot')
