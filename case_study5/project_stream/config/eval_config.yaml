@@ -1,10 +1,10 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
-data_dir: "streams/data_multistream/"
-model_dir: "models"
-results_dir: "plots"
+data_dir: "streams/data_multistream_galax/"
+model_dir: "models/model_galax"
+results_dir: "plots/plots_galax"
 
 #training hyperparameters
-n_samples: 10000
+n_samples: 1000
 method: "two_step_adaptive"
 steps: "adaptive"
 max_steps: 1000

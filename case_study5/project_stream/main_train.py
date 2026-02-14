@@ -51,9 +51,12 @@ def main(cfg: TrainConfig):
         inference_network=bf.networks.CompositionalDiffusionModel(),
         standardize=["inference_variables", "summary_variables"]
     )
-    # train_data_path = os.path.join(cfg.base_dir, cfg.data_dir)
-    train_data_path = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data/"
-    training_data = dict(np.load(os.path.join(train_data_path, "training_data_300000.npz"), allow_pickle=True))
+    train_data_path = os.path.join(cfg.base_dir, cfg.data_dir, f"training_data_{cfg.N_simulations}.npz")
+    print("Train data path:", train_data_path)
+    # exit()
+    # train_data_path = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data/"
+    # training_data = dict(np.load(os.path.join(train_data_path, "training_data_300000.npz"), allow_pickle=True))
+    training_data = dict(np.load(train_data_path, allow_pickle=True))
     print("Training data keys", training_data.keys())
 
     history = workflow_global.fit_offline(

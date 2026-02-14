@@ -88,12 +88,12 @@ def main(cfg: EvalConfig):
                         steps=cfg.steps,
                         max_steps=cfg.max_steps
                         )
+    os.makedirs(name= os.path.join(cfg.base_dir, cfg.results_dir), exist_ok=True)
+    ps = global_posterior.copy()
     np.savez(os.path.join(cfg.base_dir, cfg.results_dir, 'global_posterior.npz'), **ps)
     ###############
     # PLOTS GLOBAL#
     ###############
-    os.makedirs(name= os.path.join(cfg.base_dir, cfg.results_dir), exist_ok=True)
-    ps = global_posterior.copy()
     #true vs predicted recovery plots
     fig = bf.diagnostics.recovery(
         estimates=ps,

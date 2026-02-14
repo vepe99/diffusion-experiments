@@ -1,10 +1,11 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
-data_dir: "streams/data/"
-results_dir: "models"
+data_dir: "streams/data_galax/"
+N_simulations: 300_000
+results_dir: "models/model_galax"
 
 #training hyperparameters
-n_epochs: 250
-batch_size: 128
+n_epochs: 50
+batch_size: 256
 learning_rate: 0.01
 weight_decay: 0.0001 #not used
 lr_scheduler_step_size: 10 #not used

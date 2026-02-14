@@ -34,6 +34,7 @@ class TrainConfig:
     base_dir: str
     data_dir: str
     results_dir: str
+    N_simulations: int
 
     #training hyperparameters
     n_epochs: int
