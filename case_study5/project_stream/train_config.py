@@ -33,8 +33,10 @@ class TrainConfig:
     #paths  
     base_dir: str
     data_dir: str
-    results_dir: str
     N_simulations: int
+    results_dir: str
+    test: bool
+    
 
     #training hyperparameters
     n_epochs: int
@@ -45,6 +47,11 @@ class TrainConfig:
     lr_scheduler_gamma: float
     verbose: int
 
+    #carthesian or observed space
+    sim_data: str
+    #inference condition
+    inference_conditions: list
+
     #nmes of parameters
     parameters_global: list
     parameters_local: list
@@ -52,15 +59,12 @@ class TrainConfig:
     parameter_local_pretty: list
     inference_conditions: list
 
-    #carthesian or observed space
-    sim_data: str
-
-    #add observational uncertatinty
-    # loading_function: str
-
-    #priors and scores
-    # priors_global: dict  # str for the type and a list of values for the parameters of the prior
-    # priors_local: dict   # str for the type and a list of values for the parameters of the prior
+    #Stream augmentation
+    target_streams: dict
+    observational_window: dict  
+    observed_n_stars: dict
+    augmentations: list
+    gaia_id: dict
 
     #models hyperparameters
     global_model: GlobalModelConfig

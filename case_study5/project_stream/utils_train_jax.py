@@ -4,8 +4,10 @@ import json
 from astropy.io import ascii
 import astropy.units as u
 import pandas as pd
-from scipy.stats import gaussian_kde
-from scipy.interpolate import interp1d
+# from scipy.stats import gaussian_kde
+from jax.scipy.stats import gaussian_kde
+# from scipy.interpolate import interp1d
+from interpax import Interpolator1D as interp1d
 
 
 
@@ -37,7 +39,7 @@ class AugmentationsClass:
         self.observed_streams = {}
         for j, source_id in self.j_to_source_id.items():
             tbl_subset = self.tbl_data[self.tbl_data['Stream'] == source_id]
-            self.observed_streams[j] = tbl_subset['Gmag']
+            self.observed_streams[j] = jnp.array(tbl_subset['Gmag'])
         
         #let's store also the clipping value for max and min magnitude for each stream, to use in the augmentation
         self.magnitude_clipping = {}
@@ -65,7 +67,7 @@ class AugmentationsClass:
                 mag_bins.append((float(parts[0]) + float(parts[1])) / 2.0)
             else:
                 mag_bins.append(float(colname))
-        mag_bins = np.array(mag_bins)
+        mag_bins = jnp.array(mag_bins)
         
         # print("Magnitude bins for interpolation:", mag_bins)        
         # Create interpolators for each quantity
@@ -74,14 +76,14 @@ class AugmentationsClass:
         for row in tbl:
             quantity = row['Quantity']
             # Extract error values (all columns except 'Quantity')
-            values = np.array([row[col] for col in tbl.colnames[1:]], dtype=float)
+            values = jnp.array(np.array([row[col] for col in tbl.colnames[1:]], dtype=float))
             # print('Row:', quantity, 'Values:', values)  # Debug print
             
             # Create interpolator with simplified key names
             self.error_interpolators[quantity] = interp1d(
                 mag_bins, values,
-                kind='linear',
-                fill_value='extrapolate'
+                method='linear',
+                # fill_value='extrapolate'
             )
 
     def remove_los_velocity(self, batch):
