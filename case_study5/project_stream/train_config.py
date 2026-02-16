@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 class GlobalModelConfig:
     dropout: float
     summary_dim: int
-    # embed_dims: Optional[int] = None
+    embed_dims: int
     num_heads: int
 
     # inference_mlp_depth: Optional[int] = None

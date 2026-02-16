@@ -45,9 +45,10 @@ def main(cfg: TrainConfig):
     )
     workflow_global = bf.BasicWorkflow(
         adapter=adapter,
-        summary_network=bf.networks.SetTransformer(summary_dim=64, 
-                                                #    num_heads=(4, 4),
-                                                dropout=0.1),
+        summary_network=bf.networks.SetTransformer(summary_dim=cfg.global_model.summary_dim, 
+                                                   embed_dims=(cfg.global_model.summary_dim, cfg.global_model.summary_dim), 
+                                                   num_heads=(cfg.global_model.num_heads, cfg.global_model.num_heads,),
+                                                dropout=cfg.global_model.dropout),
         inference_network=bf.networks.CompositionalDiffusionModel(),
         standardize=["inference_variables", "summary_variables"]
     )
