@@ -2,7 +2,7 @@ base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_strea
 data_dir: "streams/data_multistream_galax/"
 model_dir: "models/model_galax_observational_errors"
 multistream_n_simulation: 100
-results_dir: "plots/plots_galax_observational_errors"
+results_dir: "plots/plots_galax_gaiastreams"
 
 #training hyperparameters
 n_samples: 1000
