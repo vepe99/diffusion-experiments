@@ -1,7 +1,7 @@
 from autocvd import autocvd
-autocvd(num_gpus = 1)
+# autocvd(num_gpus = 1)
 import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = "1"  
+os.environ["CUDA_VISIBLE_DEVICES"] = "7"  
 from tqdm import tqdm
 from omegaconf import DictConfig, OmegaConf, open_dict
 import hydra
@@ -48,12 +48,17 @@ def main(cfg: TrainConfig):
                                                    embed_dims=(cfg.global_model.summary_dim, cfg.global_model.summary_dim), 
                                                    num_heads=(cfg.global_model.num_heads, cfg.global_model.num_heads,),
                                                    dropout=cfg.global_model.dropout),
-        inference_network=bf.networks.CompositionalDiffusionModel(),
+        inference_network=bf.networks.CompositionalDiffusionModel(
+                                                        subnet_kwargs={
+                                                        "widths": [cfg.global_model.inference_mlp_width] * cfg.global_model.inference_mlp_depth,
+                                                        "time_embedding_dim": cfg.global_model.inference_time_embedding_dim,
+                                                        }),
         standardize=["inference_variables", "summary_variables"]
     )
     train_data_path = os.path.join(cfg.base_dir, cfg.data_dir, f"training_data_{cfg.N_simulations}.npz")
     print("Train data path:", train_data_path)
     training_data = dict(np.load(train_data_path, allow_pickle=True))
+    # training_data = {k: v[:30_000] for k, v in training_data.items()}
     print("Training data keys", training_data.keys())
 
     augmentations_class = AugmentationsClass(cfg)

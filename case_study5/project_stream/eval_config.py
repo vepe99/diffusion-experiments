@@ -6,12 +6,11 @@ from dataclasses import dataclass, field
 class GlobalModelConfig:
     dropout: float
     summary_dim: int
-    # embed_dims: Optional[int] = None
+    embed_dims: Optional[int] 
     num_heads: int
-
-    # inference_mlp_depth: Optional[int] = None
-    # inference_mlp_width: Optional[int] = None
-    # time_embedding_dim: Optional[int] = None
+    inference_mlp_depth: Optional[int] 
+    inference_mlp_width: Optional[int] 
+    time_embedding_dim: Optional[int] 
 
 
 
@@ -42,8 +41,9 @@ class EvalConfig:
     method: str
     steps: str
     max_steps: int
-    mini_batch_size: int
-    inverse_compositional_bridge_d1: int
+    mini_batch_size: Optional[int]
+    batch_size: int
+    inverse_compositional_bridge_d1: Optional[int]
     
     verbose: int
 
@@ -56,13 +56,15 @@ class EvalConfig:
 
     #carthesian or observed space
     sim_data: str
+    
+    #Stream augmentation
+    target_streams: dict
+    observational_window: dict  
+    observed_n_stars: dict
+    augmentations: list
+    gaia_id: dict
 
-    #add observational uncertatinty
-    # loading_function: str
 
-    #priors and scores
-    # priors_global: dict  # str for the type and a list of values for the parameters of the prior
-    # priors_local: dict   # str for the type and a list of values for the parameters of the prior
 
     #models hyperparameters
     global_model: GlobalModelConfig

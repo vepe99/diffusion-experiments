@@ -1,15 +1,16 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_galax/"
-model_dir: "models/model_galax"
+model_dir: "models/model_galax_observational_errors"
 multistream_n_simulation: 100
-results_dir: "plots/plots_galax"
+results_dir: "plots/plots_galax_observational_errors"
 
 #training hyperparameters
 n_samples: 1000
 method: "two_step_adaptive"
 steps: "adaptive"
 max_steps: 1000
-mini_batch_size: 3
+mini_batch_size: null
+batch_size: 50
 inverse_compositional_bridge_d1: 3
 verbose: 2
 
@@ -53,6 +54,48 @@ parameter_local_pretty:
   - "$r$"
   - "$\\mu_{\\alpha*}$"
   - "$\\mu_{\\delta}$"
+
+#Augmentations
+target_streams:
+  Pal5: 0 #this is the j index
+  NGC3201: 1
+  M68: 2
+
+observational_window:
+  Pal5:
+    ra_min: 224.65738998670705
+    ra_max: 242.09382462115624
+    dec_min: -4.800515070822196
+    dec_max: 6.883094642923846
+  NGC3201:
+    ra_min: 42.29847920913508
+    ra_max: 178.36142433209437
+    dec_min: -47.79545565626234
+    dec_max: 20.812029301121846
+  M68:
+    ra_min: 189.73694638139526
+    ra_max: 273.48942253688114
+    dec_min: -47.32109546202406
+    dec_max: 66.52056055901161
+
+observed_n_stars:
+  Pal5: 129
+  NGC3201: 607
+  M68: 297
+
+gaia_id:
+  Pal5: "Pal-5"
+  NGC3201: "Gjoll"
+  M68: "Fjorm"
+
+augmentations:
+  - "remove_los_velocity"
+  - "convert_distance_to_parallax"
+  - "observational_window"
+  - "observed_n_stars"
+  - "sample_magnitudes"
+  - "sample_obs_error"
+  - "apply_obs_error"
 
 #global model network:
 global_model:

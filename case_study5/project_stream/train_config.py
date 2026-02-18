@@ -8,12 +8,9 @@ class GlobalModelConfig:
     summary_dim: int
     embed_dims: int
     num_heads: int
-
-    # inference_mlp_depth: Optional[int] = None
-    # inference_mlp_width: Optional[int] = None
-    # time_embedding_dim: Optional[int] = None
-
-
+    inference_mlp_depth: int
+    inference_mlp_width: int
+    inference_time_embedding_dim: int
 
 @dataclass
 class LocalModelConfig:

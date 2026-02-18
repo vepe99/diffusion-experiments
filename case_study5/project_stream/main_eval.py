@@ -21,9 +21,11 @@ import logging
 logging.getLogger('bayesflow').setLevel(logging.DEBUG)
 
 from eval_config import EvalConfig
+from utils_train import AugmentationsClass #we will need to use the augmentations on the test_set
+
 
 cs = ConfigStore.instance()
-cs.store(name="train_config", node=EvalConfig)
+cs.store(name="eval_config", node=EvalConfig)
 
 @hydra.main(version_base=None, config_path="config", config_name="eval_config",)
 def main(cfg: EvalConfig):
@@ -45,10 +47,15 @@ def main(cfg: EvalConfig):
         .rename(sim_data, "summary_variables")
         .rename(inference_conditions, "inference_conditions")
     )
+    with open(os.path.join(cfg.base_dir, cfg.model_dir, '.hydra', 'config.yaml'), "r") as f:
+        model_config = yaml.safe_load(f)
+    print(model_config)
     workflow_global = bf.BasicWorkflow(
         adapter=adapter,
-        summary_network=bf.networks.SetTransformer(summary_dim=64, 
-                                                dropout=0.1),
+        summary_network=bf.networks.SetTransformer(summary_dim=model_config['global_model']['summary_dim'], 
+                                                   num_heads=(model_config['global_model']['num_heads'],model_config['global_model']['num_heads'],),
+                                                   embed_dims = (model_config['global_model']['summary_dim'], model_config['global_model']['summary_dim'],),
+                                                   dropout=0.1),
         inference_network=bf.networks.CompositionalDiffusionModel(),
         standardize=["inference_variables", "summary_variables"]
     )
@@ -58,6 +65,31 @@ def main(cfg: EvalConfig):
     print('Loading test data from ', test_data_path)
     test_data = dict(np.load(test_data_path, allow_pickle=True))
     test_data = {k: test_data[k] for k in cfg.parameters_global + [cfg.sim_data, "j"] }
+    # Augmentation
+    augmentations_class = AugmentationsClass(cfg)
+    augmentations = []
+    if "remove_los_velocity" in cfg.augmentations:
+        augmentations.append(augmentations_class.remove_los_velocity)
+    if "convert_distance_to_parallax" in cfg.augmentations:
+        augmentations.append(augmentations_class.convert_distance_to_parallax)
+    if "sample_magnitudes" in cfg.augmentations:
+        augmentations.append(augmentations_class.sample_magnitudes)
+    if "sample_obs_error" in cfg.augmentations:
+        augmentations.append(augmentations_class.sample_obs_error)
+    if "apply_obs_error" in cfg.augmentations:  
+        augmentations.append(augmentations_class.apply_obs_error)
+    if "observational_window" in cfg.augmentations:
+        augmentations.append(augmentations_class.observational_window)
+    if "observed_n_stars" in cfg.augmentations:
+        augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
+    test_data[cfg.sim_data] = test_data[cfg.sim_data].reshape(-1, test_data[cfg.sim_data].shape[-2], test_data[cfg.sim_data].shape[-1])
+    test_data['j'] = test_data['j'].reshape(-1, 1)
+    print('Test data sim shape before augmentation: ', test_data[cfg.sim_data].shape)
+    for aug in augmentations:
+        test_data = aug(test_data)
+    test_data[cfg.sim_data] = test_data[cfg.sim_data].reshape(-1, len(cfg.target_streams.keys()), test_data[cfg.sim_data].shape[-2], test_data[cfg.sim_data].shape[-1])
+    test_data['j'] = test_data['j'].reshape(-1,len(cfg.target_streams.keys()), 1)
+    print('Test data sim shape after augmentation: ', test_data[cfg.sim_data].shape)
     print('Test data keys: ', test_data.keys())
     with open(os.path.join(cfg.base_dir, cfg.data_dir, '.hydra', 'config.yaml'), "r") as f:
         test_sim_config = yaml.safe_load(f)
@@ -82,9 +114,10 @@ def main(cfg: EvalConfig):
                         conditions={cfg.sim_data: test_data[cfg.sim_data], 
                                     "j": test_data["j"]},
                         compute_prior_score=prior_global_score,
-                        compositional_bridge_d1=1/cfg.inverse_compositional_bridge_d1,
+                        # compositional_bridge_d1=1/cfg.inverse_compositional_bridge_d1,
+                        # mini_batch_size=cfg.mini_batch_size,
                         mini_batch_size=cfg.mini_batch_size,
-                        batch_size = 10,
+                        batch_size = cfg.batch_size,
                         method=cfg.method,
                         steps=cfg.steps,
                         max_steps=cfg.max_steps

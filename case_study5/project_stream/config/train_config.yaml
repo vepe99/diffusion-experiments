@@ -1,12 +1,12 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_galax/"
 N_simulations: 300_000
-results_dir: "models/model_galax_observational_errors"
+results_dir: "models/model_galax_observational_errors/"
 test: False
 
 #training hyperparameters
-n_epochs: 500
-batch_size: 200
+n_epochs: 100
+batch_size: 512
 learning_rate: 0.01
 weight_decay: 0.0001 #not used
 lr_scheduler_step_size: 10 #not used
@@ -99,9 +99,12 @@ augmentations:
 #global model network:
 global_model:
   dropout: 0.1
-  summary_dim: 50
+  summary_dim: 30
   embed_dims: 52
-  num_heads: 6
+  num_heads: 8
+  inference_mlp_depth: 6
+  inference_mlp_width: 192
+  inference_time_embedding_dim: 18
 
 #local model network:
 local_model:
