@@ -1,7 +1,7 @@
 from autocvd import autocvd
-# autocvd(num_gpus = 1)
+autocvd(num_gpus = 1)
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "7"  
+# os.environ["CUDA_VISIBLE_DEVICES"] = "7"  
 from tqdm import tqdm
 from omegaconf import DictConfig, OmegaConf, open_dict
 import hydra
@@ -19,7 +19,7 @@ logging.getLogger('bayesflow').setLevel(logging.DEBUG)
 
 # from case_study5.project_stream.train_config import TrainConfig
 from train_config import TrainConfig
-from utils_train import AugmentationsClass
+from utils_train_jax import AugmentationsClass
 cs = ConfigStore.instance()
 cs.store(name="train_config", node=TrainConfig)
 

@@ -4,16 +4,16 @@ import json
 from astropy.io import ascii
 import astropy.units as u
 import pandas as pd
-# from scipy.stats import gaussian_kde
+import jax.numpy as jnp
+import jax
+from jax import jit
 from jax.scipy.stats import gaussian_kde
-# from scipy.interpolate import interp1d
-from interpax import Interpolator1D as interp1d
-
-
+from functools import partial
 
 
 def get_priorscore_from_simconfig(params_name, path_to_config):
     pass
+
 
 def load_npz_as_dict(file):
     with np.load(file) as data:
@@ -21,275 +21,321 @@ def load_npz_as_dict(file):
 
 
 class AugmentationsClass:
-    def __init__(self, cfg):
+    def __init__(self, cfg, random_key=None):
         self.cfg = cfg
-        self.idx_to_stream = {v: k for k, v in self.cfg.target_streams.items()} #flip between stream name and j index for easy access in the augmentations
-        self.tbl_data = ascii.read( "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/apjad382dt1_mrt.txt", format="cds")
-        self.tbl_ids = pd.read_csv("/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/gaia_stream_id.csv", sep='\t')
-        self.gaia_id = cfg.gaia_id #key are the str of stream, and values are the str used in the tbl
+        if random_key is None:
+            self.key = jax.random.PRNGKey(42)
+        else:
+            self.key = random_key
 
-        #we need to extract the corresponding source_id from the tbl_id and pair it with 'j'
+        self.idx_to_stream = {v: k for k, v in self.cfg.target_streams.items()}
+        self.tbl_data = ascii.read(
+            "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/apjad382dt1_mrt.txt",
+            format="cds",
+        )
+        self.tbl_ids = pd.read_csv(
+            "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/gaia_stream_id.csv",
+            sep="\t",
+        )
+        self.gaia_id = cfg.gaia_id
+
+        # Extract source_id mapping
         self.j_to_source_id = {}
         for name_stream, name_id in self.gaia_id.items():
-            source_id = self.tbl_ids.loc[self.tbl_ids['Name'] == name_id, 's_ID'].values[0]
+            source_id = self.tbl_ids.loc[
+                self.tbl_ids["Name"] == name_id, "s_ID"
+            ].values[0]
             j = self.cfg.target_streams[name_stream]
             self.j_to_source_id[j] = source_id
-        
-        #we take the magnitudes of the stars in each stream
+
+        # Observed stream magnitudes
         self.observed_streams = {}
         for j, source_id in self.j_to_source_id.items():
-            tbl_subset = self.tbl_data[self.tbl_data['Stream'] == source_id]
-            self.observed_streams[j] = jnp.array(tbl_subset['Gmag'])
-        
-        #let's store also the clipping value for max and min magnitude for each stream, to use in the augmentation
+            tbl_subset = self.tbl_data[self.tbl_data["Stream"] == source_id]
+            self.observed_streams[j] = jnp.array(tbl_subset["Gmag"])
+
+        # Magnitude clipping
         self.magnitude_clipping = {}
         for j, magnitudes in self.observed_streams.items():
-            self.magnitude_clipping[j] = (magnitudes.min(), magnitudes.max())
-        
-        #we construct a kde of the magnitude for each of the stream
+            self.magnitude_clipping[j] = (
+                float(magnitudes.min()),
+                float(magnitudes.max()),
+            )
+
+        # Build KDE objects for each stream (1D data -> shape (1, n))
         self.kde_streams = {}
         for j, magnitudes in self.observed_streams.items():
-            self.kde_streams[j] = gaussian_kde(magnitudes)
+            self.kde_streams[j] = gaussian_kde(magnitudes[None, :])
 
+        # ---- Precompute lookup arrays for JIT ----
+        self.n_streams = max(self.idx_to_stream.keys()) + 1
 
-        #Create the interpolation function for errros:
+        # Observational window lookup arrays: shape (n_streams,)
+        ra_min_list = []
+        ra_max_list = []
+        dec_min_list = []
+        dec_max_list = []
+        for idx in range(self.n_streams):
+            stream_name = self.idx_to_stream[idx]
+            window = self.cfg.observational_window[stream_name]
+            ra_min_list.append(window["ra_min"])
+            ra_max_list.append(window["ra_max"])
+            dec_min_list.append(window["dec_min"])
+            dec_max_list.append(window["dec_max"])
+
+        self.ra_min_lookup = jnp.array(ra_min_list)
+        self.ra_max_lookup = jnp.array(ra_max_list)
+        self.dec_min_lookup = jnp.array(dec_min_list)
+        self.dec_max_lookup = jnp.array(dec_max_list)
+
+        # Observed n_stars lookup: shape (n_streams,)
+        observed_n_stars_list = []
+        for idx in range(self.n_streams):
+            stream_name = self.idx_to_stream[idx]
+            observed_n_stars_list.append(self.cfg.observed_n_stars[stream_name])
+        self.observed_n_stars_lookup = jnp.array(observed_n_stars_list)
+
+        # Magnitude clipping lookup: shape (n_streams,) each
+        mag_min_list = []
+        mag_max_list = []
+        for idx in range(self.n_streams):
+            mag_min, mag_max = self.magnitude_clipping[idx]
+            mag_min_list.append(mag_min)
+            mag_max_list.append(mag_max)
+        self.mag_min_lookup = jnp.array(mag_min_list)
+        self.mag_max_lookup = jnp.array(mag_max_list)
+
+        # ---- Build KDE resample branch functions for jax.lax.switch ----
+        # Each branch takes (key, n_particles) and returns (1, n_particles) samples
+        # We build closures that capture the KDE object and clipping bounds
+        self._kde_branches = []
+        for idx in range(self.n_streams):
+            kde = self.kde_streams[idx]
+            mag_min = self.mag_min_lookup[idx]
+            mag_max = self.mag_max_lookup[idx]
+
+            def make_branch(kde_obj, m_min, m_max):
+                def branch_fn(key_and_n):
+                    key, n_particles = key_and_n
+                    # resample returns (d,) + shape = (1, n_particles)
+                    samples = kde_obj.resample(key, shape=(n_particles,))
+                    # squeeze the d=1 dimension -> (n_particles,)
+                    samples = samples[0]
+                    samples = jnp.clip(samples, m_min, m_max)
+                    return samples
+                return branch_fn
+
+            self._kde_branches.append(make_branch(kde, mag_min, mag_max))
+
+        # ---- Error interpolators ----
         error_file = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/gaia_DR3_erorr.txt"
-        # Read with astropy
-        tbl = ascii.read(error_file, format='tab')
-        # Remove the Unit column
-        tbl.remove_column('Unit')
-        # Extract magnitude bins from column names (skip 'Quantity')
+        tbl = ascii.read(error_file, format="tab")
+        tbl.remove_column("Unit")
+
         mag_bins = []
-        for colname in tbl.colnames[1:]:  # Skip 'Quantity' column
-            if '–' in colname or '−' in colname:
-                # Handle range like "9–12"
-                parts = colname.replace('−', '-').replace('–', '-').split('-')
+        for colname in tbl.colnames[1:]:
+            if "–" in colname or "−" in colname:
+                parts = colname.replace("−", "-").replace("–", "-").split("-")
                 mag_bins.append((float(parts[0]) + float(parts[1])) / 2.0)
             else:
                 mag_bins.append(float(colname))
-        mag_bins = jnp.array(mag_bins)
-        
-        # print("Magnitude bins for interpolation:", mag_bins)        
-        # Create interpolators for each quantity
-        self.error_interpolators = {}
-        
+        self.error_interp_mag_bins = jnp.array(mag_bins)
+
+        # Store raw values for JIT-compatible interpolation
+        error_values = {}
         for row in tbl:
-            quantity = row['Quantity']
-            # Extract error values (all columns except 'Quantity')
-            values = jnp.array(np.array([row[col] for col in tbl.colnames[1:]], dtype=float))
-            # print('Row:', quantity, 'Values:', values)  # Debug print
-            
-            # Create interpolator with simplified key names
-            self.error_interpolators[quantity] = interp1d(
-                mag_bins, values,
-                method='linear',
-                # fill_value='extrapolate'
+            quantity = row["Quantity"]
+            values = jnp.array(
+                np.array([row[col] for col in tbl.colnames[1:]], dtype=float)
             )
+            error_values[quantity] = values
+
+        # Stack error values for JIT: order = [ra, dec, parallax, mu_ra, mu_dec]
+        self.error_keys = ["ra", "dec", "parallax", "mu_ra", "mu_dec"]
+        self.error_values_stacked = jnp.stack(
+            [error_values[k] for k in self.error_keys], axis=0
+        )  # shape (5, n_mag_bins)
+
+    # ----------------------------------------------------------------
+    # Internal key management
+    # ----------------------------------------------------------------
+
+    def _split_key(self):
+        """Split the internal PRNG key, update self.key, return a subkey."""
+        self.key, subkey = jax.random.split(self.key)
+        return subkey
+
+    # ----------------------------------------------------------------
+    # Augmentation functions — all take batch, return batch
+    # ----------------------------------------------------------------
 
     def remove_los_velocity(self, batch):
-        batch[self.cfg.sim_data] = batch[self.cfg.sim_data][:, :, :5]  # Keep only ra, dec, distance, pmra, pmdec
+        batch[self.cfg.sim_data] = batch[self.cfg.sim_data][:, :, :5]
         return batch
 
     def convert_distance_to_parallax(self, batch):
-        sim_data = batch[self.cfg.sim_data]  # shape (batch_size, n_particles, 6)
-        distances = sim_data[:, :, 2] * u.kpc
-        parallax = distances.to(u.mas, equivalencies=u.parallax())
-        batch[self.cfg.sim_data][:, :, 2] = parallax.value
+        sim_data = batch[self.cfg.sim_data]
+        distances_kpc = sim_data[:, :, 2]
+        parallax_mas = 1.0 / distances_kpc
+        sim_data[:, :, 2] = parallax_mas
+        batch[self.cfg.sim_data] = sim_data
         return batch
 
-    def observational_window(self, batch,):
+    def observational_window(self, batch):
         """
-        Vectorized: Mask particles outside the observational window for each stream in the batch.
-        Returns attention_mask: (batch_size, 1, n_particles) with False where particles are outside the window.
+        Mask particles outside the observational window for each stream.
+        Sets batch['attention_mask']: (batch_size, 1, n_particles) bool.
         """
-        sim_data = batch[self.cfg.sim_data]  # shape (batch_size, n_particles, 5/6)
-        j = batch['j']                       # shape (batch_size, 1)
+        sim_data = batch[self.cfg.sim_data]
+        j = batch["j"]
+        batch["attention_mask"] = self._observational_window_jit(sim_data, j)
+        return batch
 
-        # Build arrays of window limits for each batch entry
-        ra_min = np.array([self.cfg.observational_window[self.idx_to_stream[int(jj[0])]]['ra_min'] for jj in j])
-        ra_max = np.array([self.cfg.observational_window[self.idx_to_stream[int(jj[0])]]['ra_max'] for jj in j])
-        dec_min = np.array([self.cfg.observational_window[self.idx_to_stream[int(jj[0])]]['dec_min'] for jj in j])
-        dec_max = np.array([self.cfg.observational_window[self.idx_to_stream[int(jj[0])]]['dec_max'] for jj in j])
+    @partial(jit, static_argnums=(0,))
+    def _observational_window_jit(self, sim_data, j):
+        j_flat = j[:, 0].astype(jnp.int32)
 
-        # Expand dims for broadcasting: (batch_size, 1)
-        ra_min = ra_min[:, None]
-        ra_max = ra_max[:, None]
-        dec_min = dec_min[:, None]
-        dec_max = dec_max[:, None]
+        ra_min = self.ra_min_lookup[j_flat][:, None]
+        ra_max = self.ra_max_lookup[j_flat][:, None]
+        dec_min = self.dec_min_lookup[j_flat][:, None]
+        dec_max = self.dec_max_lookup[j_flat][:, None]
 
-        # Extract ra, dec: (batch_size, n_particles)
-        ra = sim_data[..., 0]
-        dec = sim_data[..., 1]
+        ra = sim_data[:, :, 0]
+        dec = sim_data[:, :, 1]
 
-        # Vectorized mask: (batch_size, n_particles)
         mask = (
             (ra >= ra_min) & (ra <= ra_max) &
             (dec >= dec_min) & (dec <= dec_max)
         )
+        return mask[:, None, :]
 
-        # Add singleton dimension for compatibility: (batch_size, 1, n_particles)
-        batch['attention_mask'] = mask[:, None, :]
-
-        return batch
-    
     def subsampling_to_observed_n_stars(self, batch):
-        """
-        For each batch entry, subsample the True entries in attention_mask
-        to at most observed_n_stars for that stream.
-        If fewer stars are available, keep all.
-        """
-        attention_mask = batch['attention_mask']  # shape (batch_size, 1, n_particles)
-        j = batch['j']                            # shape (batch_size, 1)
-        batch_size, _, n_particles = attention_mask.shape
-
-        # Get observed_n_stars for each batch entry: (batch_size,)
-        observed_n_stars = np.array([
-            self.cfg.observed_n_stars[self.idx_to_stream[int(jj[0])]] for jj in j
-        ])
-
-        # Remove singleton: (batch_size, n_particles)
-        mask = attention_mask[:, 0, :].astype(bool).copy()
-
-        # Count how many True per batch entry: (batch_size,)
-        n_true = mask.sum(axis=1)
-
-        # How many to turn off per batch entry (0 if no subsampling needed)
-        n_excess = np.maximum(n_true - observed_n_stars, 0)  # (batch_size,)
-
-        # Assign random scores to True positions, +inf to False (so False sorts last)
-        random_scores = np.full((batch_size, n_particles), np.inf)
-        random_scores[mask] = np.random.random(mask.sum())
-
-        # Sort ascending: lowest random scores first (True entries come first)
-        sorted_indices = np.argsort(random_scores, axis=1)  # (batch_size, n_particles)
-
-        # Compute cumulative rank per row
-        rank = np.argsort(sorted_indices, axis=1)  # (batch_size, n_particles)
-
-        # For each entry, keep only the first (n_true - n_excess) = min(n_true, observed_n_stars) True entries
-        keep_count = (n_true - n_excess)[:, None]  # (batch_size, 1)
-
-        # Turn off entries whose rank >= keep_count AND were originally True
-        turn_off = mask & (rank >= keep_count)
-        mask[turn_off] = False
-
-        # Restore singleton dimension: (batch_size, 1, n_particles)
-        batch['attention_mask'] = mask[:, None, :].astype(attention_mask.dtype)
+        subkey = self._split_key()
+        attention_mask = batch["attention_mask"]
+        j = batch["j"]
+        batch["attention_mask"] = self._subsampling_jit(attention_mask, j, subkey)
         return batch
+
+    @partial(jit, static_argnums=(0,))
+    def _subsampling_jit(self, attention_mask, j, key):
+        j_flat = j[:, 0].astype(jnp.int32)
+        mask = attention_mask[:, 0, :]
+        batch_size, n_particles = mask.shape
+
+        max_keep = self.observed_n_stars_lookup[j_flat]
+
+        random_scores = jax.random.uniform(key, shape=(batch_size, n_particles))
+        random_scores = jnp.where(mask, random_scores, 2.0)
+
+        sorted_indices = jnp.argsort(random_scores, axis=1)
+        rank = jnp.argsort(sorted_indices, axis=1)
+
+        keep = mask & (rank < max_keep[:, None])
+        return keep[:, None, :]
 
     def sample_magnitudes(self, batch):
         """
-        Sample magnitudes for each of the stream, based on the kde of the observed magnitude in the stream
+        Sample magnitudes from KDE for each stream in the batch using
+        jax.lax.switch to select the correct KDE per batch entry.
+        Sets batch['magnitudes']: (batch_size, n_particles).
         """
-        batch_size, n_particles, _ = batch[self.cfg.sim_data].shape
-        j = batch['j'].reshape(-1)  # shape (batch_size,)
-        unique_j, unique_counts = np.unique(j, return_counts=True)
-        magnitudes = np.zeros((batch_size, n_particles))
-        # print("unique_j:", unique_j)
-
-        # print("unique_counts:", unique_counts)
-
-        for jj, count in zip(unique_j, unique_counts):
-            kde = self.kde_streams[int(jj)]
-            samples_size = (count * n_particles) #later most of them will be masked out
-            sampled_magnitudes = kde.resample(size=samples_size).reshape(count, n_particles)
-            # Clip magnitudes to the observed range for this stream
-            mag_min, mag_max = self.magnitude_clipping[int(jj)]
-            sampled_magnitudes = np.clip(sampled_magnitudes, mag_min, mag_max)
-            magnitudes[j == jj] = sampled_magnitudes
-        batch["magnitudes"] = magnitudes
+        subkey = self._split_key()
+        j = batch["j"]
+        n_particles = batch[self.cfg.sim_data].shape[1]
+        batch["magnitudes"] = self._sample_magnitudes_jit(j, n_particles, subkey)
         return batch
 
+    def _build_kde_branches(self, n_particles):
+        """
+        Build branch functions for jax.lax.switch with n_particles
+        baked in as a Python constant (not traced).
+        """
+        branches = []
+        for idx in range(self.n_streams):
+            kde = self.kde_streams[idx]
+            mag_min = self.mag_min_lookup[idx]
+            mag_max = self.mag_max_lookup[idx]
+
+            def make_branch(kde_obj, m_min, m_max, n):
+                def branch_fn(key):
+                    # n is a Python int captured in the closure, not traced
+                    samples = kde_obj.resample(key, shape=(n,))
+                    # squeeze the d=1 dimension -> (n,)
+                    samples = samples[0]
+                    samples = jnp.clip(samples, m_min, m_max)
+                    return samples
+                return branch_fn
+
+            branches.append(make_branch(kde, mag_min, mag_max, n_particles))
+        return branches
+
+    @partial(jit, static_argnums=(0, 2))
+    def _sample_magnitudes_jit(self, j, n_particles, key):
+        """
+        JIT-compiled magnitude sampling using jax.lax.switch to dispatch
+        to the correct stream's gaussian_kde.resample.
+
+        Args:
+            j: (batch_size, 1)
+            n_particles: int (static)
+            key: PRNGKey
+
+        Returns:
+            magnitudes: (batch_size, n_particles)
+        """
+        j_flat = j[:, 0].astype(jnp.int32)
+        batch_size = j_flat.shape[0]
+
+        # Build branches with n_particles baked in (it's static so this
+        # runs at trace time, not at runtime)
+        kde_branches = self._build_kde_branches(n_particles)
+
+        # Generate one key per batch entry
+        keys = jax.random.split(key, batch_size)
+
+        def sample_single(j_idx, subkey):
+            """Sample n_particles magnitudes for one batch entry using lax.switch."""
+            return jax.lax.switch(
+                j_idx,
+                kde_branches,
+                subkey,
+            )  # returns (n_particles,)
+
+        # vmap over the batch dimension
+        magnitudes = jax.vmap(sample_single)(j_flat, keys)  # (batch_size, n_particles)
+
+        return magnitudes
+    
     def sample_obs_error(self, batch):
-        """
-        Sample the observational error for each of the stream, based on the sampled magnitudes
-        """
-        """Load Gaia DR3 error table and create interpolation functions."""
-        magnitudes = batch["magnitudes"]  # shape (batch_size, n_particles)        
-        errors = np.zeros_like(batch[self.cfg.sim_data])  
-        
-        # Get interpolated sigmas
-        sigma_ra = self.error_interpolators['ra'](magnitudes)
-        sigma_dec = self.error_interpolators['dec'](magnitudes)
-        sigma_parallax = self.error_interpolators['parallax'](magnitudes)
-        sigma_pmra = self.error_interpolators['mu_ra'](magnitudes)
-        sigma_pmdec = self.error_interpolators['mu_dec'](magnitudes)
-        
-        # Sample errors
-        errors[..., 0] = np.random.normal(0, sigma_ra)
-        errors[..., 1] = np.random.normal(0, sigma_dec)
-        errors[..., 2] = np.random.normal(0, sigma_parallax)
-        errors[..., 3] = np.random.normal(0, sigma_pmra)
-        errors[..., 4] = np.random.normal(0, sigma_pmdec)
-        
-        batch["obs_errors"] = errors
+        subkey = self._split_key()
+        magnitudes = batch["magnitudes"]
+        batch["obs_errors"] = self._sample_obs_error_jit(magnitudes, subkey)
         return batch
+
+    @partial(jit, static_argnums=(0,))
+    def _sample_obs_error_jit(self, magnitudes, key):
+        mag_bins = self.error_interp_mag_bins
+        values = self.error_values_stacked
+
+        def interp_single_quantity(vals):
+            return jnp.interp(magnitudes, mag_bins, vals)
+
+        sigmas = jax.vmap(interp_single_quantity)(values)
+
+        batch_size, n_particles = magnitudes.shape
+        noise = jax.random.normal(key, shape=(5, batch_size, n_particles))
+
+        errors = sigmas * noise
+        errors = jnp.transpose(errors, (1, 2, 0))
+
+        return errors
 
     def apply_obs_error(self, batch):
-        """Apply the sampled observational error to the sim_data
-        """
-        # if self.cfg.test:
-        #     import matplotlib.pyplot as plt
-        #     fig_radec = plt.figure(figsize=(10, 5))
-        #     ax1 = fig_radec.add_subplot(1, 3, 1)
-        #     ax2 = fig_radec.add_subplot(1, 3, 2)
-        #     ax3 = fig_radec.add_subplot(1, 3, 3)
-        #     sim_data = batch[self.cfg.sim_data]
-        #     j = batch['j'].reshape(-1)
-        #     ax1.scatter(sim_data[j==0, :, 0], sim_data[j==0, :, 1], alpha=0.5, label='Before error', c='blue')
-        #     ax2.scatter(sim_data[j==1, :, 0], sim_data[j==1, :, 1], alpha=0.5, label='Before error', c='blue')
-        #     ax3.scatter(sim_data[j==2, :, 0], sim_data[j==2, :, 1], alpha=0.5, label='Before error', c='blue')
-        #     fig_pm = plt.figure(figsize=(10, 5))
-        #     ax_pm1 = fig_pm.add_subplot(1, 3, 1)
-        #     ax_pm2 = fig_pm.add_subplot(1, 3, 2)
-        #     ax_pm3 = fig_pm.add_subplot(1, 3, 3)
-        #     ax_pm1.scatter(sim_data[j==0, :, 3], sim_data[j==0, :, 4], alpha=0.5, label='Before error', c='blue')
-        #     ax_pm2.scatter(sim_data[j==1, :, 3], sim_data[j==1, :, 4], alpha=0.5, label='Before error', c='blue')
-        #     ax_pm3.scatter(sim_data[j==2, :, 3], sim_data[j==2, :, 4], alpha=0.5, label='Before error', c='blue')   
-        #     fig_ra_parallax = plt.figure(figsize=(10, 5))
-        #     ax_rp1 = fig_ra_parallax.add_subplot(1, 3, 1)
-        #     ax_rp2 = fig_ra_parallax.add_subplot(1, 3, 2)
-        #     ax_rp3 = fig_ra_parallax.add_subplot(1, 3, 3)
-        #     ax_rp1.scatter(sim_data[j==0, :, 0], sim_data[j==0, :, 2], alpha=0.5, label='Before error', c='blue')
-        #     ax_rp2.scatter(sim_data[j==1, :, 0], sim_data[j==1, :, 2], alpha=0.5, label='Before error', c='blue')
-        #     ax_rp3.scatter(sim_data[j==2, :, 0], sim_data[j==2, :, 2], alpha=0.5, label='Before error', c='blue')
-        batch[self.cfg.sim_data] += batch["obs_errors"]
-        # if self.cfg.test:
-        #     sim_data = batch[self.cfg.sim_data]
-        #     ax1.scatter(sim_data[j==0, :, 0], sim_data[j==0, :, 1], alpha=0.5, label='After error', c='red')
-        #     ax1.set_title(self.idx_to_stream[0])
-        #     ax2.scatter(sim_data[j==1, :, 0], sim_data[j==1, :, 1], alpha=0.5, label='After error', c='red')
-        #     ax2.set_title(self.idx_to_stream[1])
-        #     ax3.scatter(sim_data[j==2, :, 0], sim_data[j==2, :, 1], alpha=0.5, label='After error', c='red')
-        #     ax3.set_title(self.idx_to_stream[2])
-        #     ax1.legend()
-        #     ax2.legend()
-        #     ax3.legend()
-        #     plt.show()
-        #     fig_radec.savefig(os.path.join(self.cfg.base_dir, self.cfg.results_dir, 'apply_obs_error_test_radec.pdf'))
-        #     ax_pm1.scatter(sim_data[j==0, :, 3], sim_data[j==0, :, 4], alpha=0.5, label='After error', c='red')
-        #     ax_pm1.set_title(self.idx_to_stream[0])
-        #     ax_pm2.scatter(sim_data[j==1, :, 3], sim_data[j==1, :, 4], alpha=0.5, label='After error', c='red')
-        #     ax_pm2.set_title(self.idx_to_stream[1])
-        #     ax_pm3.scatter(sim_data[j==2, :, 3], sim_data[j==2, :, 4], alpha=0.5, label='After error', c='red')
-        #     ax_pm3.set_title(self.idx_to_stream[2])
-        #     ax_pm1.legend()
-        #     ax_pm2.legend()
-        #     ax_pm3.legend()
-        #     fig_pm.savefig(os.path.join(self.cfg.base_dir, self.cfg.results_dir, 'apply_obs_error_pm_test.pdf'))
-        #     ax_rp1.scatter(sim_data[j==0, :, 0], sim_data[j==0, :, 2], alpha=0.5, label='After error', c='red')
-        #     ax_rp1.set_title(self.idx_to_stream[0])
-        #     ax_rp2.scatter(sim_data[j==1, :, 0], sim_data[j==1, :, 2], alpha=0.5, label='After error', c='red')
-        #     ax_rp2.set_title(self.idx_to_stream[1])
-        #     ax_rp3.scatter(sim_data[j==2, :, 0], sim_data[j==2, :, 2], alpha=0.5, label='After error', c='red')
-        #     ax_rp3.set_title(self.idx_to_stream[2])
-        #     ax_rp1.legend()
-        #     ax_rp2.legend()
-        #     ax_rp3.legend()
-        #     fig_ra_parallax.savefig(os.path.join(self.cfg.base_dir, self.cfg.results_dir, 'apply_obs_error_ra_parallax_test.pdf'))
+        batch[self.cfg.sim_data] = self._apply_obs_error_jit(
+            batch[self.cfg.sim_data], batch["obs_errors"]
+        )
         return batch
-        
-        
-        
 
-
+    @partial(jit, static_argnums=(0,))
+    def _apply_obs_error_jit(self, sim_data, errors):
+        return sim_data.at[:, :, :5].add(errors)
