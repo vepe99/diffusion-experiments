@@ -5,7 +5,7 @@ multistream_n_simulation: 100
 results_dir: "plots/plots_galax_gaiastreams"
 
 #training hyperparameters
-n_samples: 1000
+n_samples: 50_000
 method: "two_step_adaptive"
 steps: "adaptive"
 max_steps: 1000

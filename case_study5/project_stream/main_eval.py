@@ -91,6 +91,7 @@ def main(cfg: EvalConfig):
     test_data['j'] = test_data['j'].reshape(-1,len(cfg.target_streams.keys()), 1)
     print('Test data sim shape after augmentation: ', test_data[cfg.sim_data].shape)
     print('Test data keys: ', test_data.keys())
+    print('Test data attention mask shape: ', test_data['attention_mask'].shape)
     with open(os.path.join(cfg.base_dir, cfg.data_dir, '.hydra', 'config.yaml'), "r") as f:
         test_sim_config = yaml.safe_load(f)
 
@@ -109,18 +110,20 @@ def main(cfg: EvalConfig):
         return score
 
     logging.info("Starting Partial-Pooling (global) inference...")
+    workflow_global.approximator.inference_network.integrate_kwargs.update({
+        'method': cfg.method,
+        'steps': cfg.steps,
+        'compositional_bridge_d1': 1/cfg.inverse_compositional_bridge_d1,
+        'mini_batch_size': cfg.mini_batch_size,
+        "max_steps": cfg.max_steps,
+        })
     global_posterior = workflow_global.compositional_sample(
                         num_samples=cfg.n_samples,
                         conditions={cfg.sim_data: test_data[cfg.sim_data], 
                                     "j": test_data["j"]},
                         compute_prior_score=prior_global_score,
-                        # compositional_bridge_d1=1/cfg.inverse_compositional_bridge_d1,
-                        # mini_batch_size=cfg.mini_batch_size,
-                        mini_batch_size=cfg.mini_batch_size,
                         batch_size = cfg.batch_size,
-                        method=cfg.method,
-                        steps=cfg.steps,
-                        max_steps=cfg.max_steps
+                        kwargs={'attention_mask': test_data['attention_mask']},
                         )
     os.makedirs(name= os.path.join(cfg.base_dir, cfg.results_dir), exist_ok=True)
     ps = global_posterior.copy()

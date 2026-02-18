@@ -10,7 +10,7 @@ from omegaconf import DictConfig, OmegaConf, open_dict
 import hydra
 from hydra.core.config_store import ConfigStore
 import numpy as np
-from chainconsumer import Chain, ChainConsumer, make_sample
+from chainconsumer import Chain, ChainConsumer, ChainConfig
 import pandas as pd
 
 if "KERAS_BACKEND" not in os.environ:
@@ -66,7 +66,7 @@ def main(cfg: EvalConfig):
     test_data_path = '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/gaia_observed_streams.npz'
     print('Loading test data from ', test_data_path)
     test_data = dict(np.load(test_data_path, allow_pickle=True))
-    test_data = {k: test_data[k] for k in [cfg.sim_data, "j"] }
+    test_data = {k: test_data[k] for k in [cfg.sim_data, "j", "attention_mask"] }
     # Augmentation
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
@@ -99,18 +99,20 @@ def main(cfg: EvalConfig):
         return score
 
     logging.info("Starting Partial-Pooling (global) inference...")
+    workflow_global.approximator.inference_network.integrate_kwargs.update({
+        'method': cfg.method,
+        'steps': cfg.steps,
+        'compositional_bridge_d1': 1/cfg.inverse_compositional_bridge_d1,
+        'mini_batch_size': cfg.mini_batch_size,
+        "max_steps": cfg.max_steps,
+        })
     global_posterior = workflow_global.compositional_sample(
-                        num_samples=cfg.num_samples,
+                        num_samples=cfg.n_samples,
                         conditions={cfg.sim_data: test_data[cfg.sim_data], 
                                     "j": test_data["j"]},
                         compute_prior_score=prior_global_score,
-                        # compositional_bridge_d1=1/cfg.inverse_compositional_bridge_d1,
-                        # mini_batch_size=cfg.mini_batch_size,
-                        mini_batch_size=cfg.mini_batch_size,
                         batch_size = cfg.batch_size,
-                        method=cfg.method,
-                        steps=cfg.steps,
-                        max_steps=cfg.max_steps
+                        kwargs={'attention_mask': test_data['attention_mask']},
                         )
     os.makedirs(name= os.path.join(cfg.base_dir, cfg.results_dir), exist_ok=True)
     ps = global_posterior.copy()
@@ -118,14 +120,6 @@ def main(cfg: EvalConfig):
     ###############
     # PLOTS GLOBAL#
     ###############
-    #corner plot
-    # dataset_id = 0
-    # fig = bf.diagnostics.plots.pairs_posterior(
-    #     estimates=ps,
-    #     # targets=test_data,
-    #     dataset_id=dataset_id,
-    #     variable_names=cfg.paramater_global_pretty,
-    # )
     print('shapes of posterior samples: ', {k: v.shape for k, v in ps.items()})
     for k in ps.keys():
         ps[k] = ps[k].reshape(-1,)
@@ -134,16 +128,38 @@ def main(cfg: EvalConfig):
     df.columns = list(cfg.paramater_global_pretty)
     print('Df columns after renaming: ', df.columns)
     c = ChainConsumer()
-    c.add_chain(Chain(samples=df, name="An Example Contour"))
+    c.add_chain(Chain(samples=df, name="Global"))
+    # fig = c.plotter.plot()
+    # fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'global_cornerplot.pdf'))
+    # print(f'Saved global corner plot')
+    # plt.show()
+
+    #Single stream posteriors
+    for stream_name in cfg.target_streams.keys():
+        print(f"Starting inference for stream {stream_name}...")
+        test_data_stream = {cfg.sim_data: test_data[cfg.sim_data][:, cfg.target_streams[stream_name], :, :], 
+                            "j": test_data["j"][:, cfg.target_streams[stream_name], :]}
+        posterior_stream = workflow_global.sample(
+                            num_samples=cfg.n_samples,
+                            conditions=test_data_stream,
+                            # compute_prior_score=prior_global_score,
+                            )
+        ps_stream = posterior_stream.copy()
+        np.savez(os.path.join(cfg.base_dir, cfg.results_dir, f'{stream_name}_posterior.npz'), **ps_stream)
+        print(f'Saved posterior samples for stream {stream_name}')
+        for k in ps_stream.keys():
+            ps_stream[k] = ps_stream[k].reshape(-1,)
+        df_stream = pd.DataFrame(ps_stream) 
+        df_stream.columns = list(cfg.paramater_global_pretty)
+        # c = ChainConsumer()
+        c.add_chain(Chain(samples=df_stream, name=f"{stream_name}"))
+        # fig = c.plotter.plot()
+        # fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'{stream_name}_cornerplot.pdf'))
+        # print(f'Saved corner plot for stream {stream_name}')
+    c.set_override(ChainConfig(shade=False))
     fig = c.plotter.plot()
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'global_cornerplot.pdf'))
-    print(f'Saved global corner plot')
-    plt.show()
-    
 
-    ###############
-    # local model # 
-    ###############
 
 if __name__ == "__main__":
     main()
