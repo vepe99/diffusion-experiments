@@ -8,6 +8,8 @@ class GlobalModelConfig:
     summary_dim: int
     embed_dims: int
     num_heads: int
+    mlp_depths: Optional[int]
+    mlp_widths: Optional[int]
     inference_mlp_depth: int
     inference_mlp_width: int
     inference_time_embedding_dim: int
@@ -60,7 +62,7 @@ class TrainConfig:
     target_streams: dict
     observational_window: dict  
     observed_n_stars: dict
-    augmentations: list
+    augmentations: Optional[list]
     gaia_id: dict
 
     #models hyperparameters

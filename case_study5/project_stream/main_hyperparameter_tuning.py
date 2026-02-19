@@ -121,7 +121,7 @@ def objective(trial, cfg):
         
         history = workflow_global.fit_offline(
             training_data,
-            epochs=100,
+            epochs=10,
             batch_size=128,
             verbose=2,
             augmentations=augmentations,
@@ -136,18 +136,21 @@ def objective(trial, cfg):
             test_data = aug(test_data)
         test_data[cfg.sim_data] = test_data[cfg.sim_data].reshape(-1, len(cfg.target_streams.keys()), test_data[cfg.sim_data].shape[-2], test_data[cfg.sim_data].shape[-1])
         test_data['j'] = test_data['j'].reshape(-1,len(cfg.target_streams.keys()), 1)
+        workflow_global.approximator.inference_network.integrate_kwargs.update({
+            'method': "two_step_adaptive",
+            'steps': "adaptive",
+            'compositional_bridge_d1': 1/3,
+            'mini_batch_size': None,
+            "max_steps": 1000,
+            })
 
         gloabl_posterior = workflow_global.compositional_sample(
                             num_samples=1000,
                             conditions={cfg.sim_data: test_data[cfg.sim_data], 
                                         "j": test_data["j"] },
                             compute_prior_score=prior_global_score,
-                            compositional_bridge_d1=1/3,
-                            mini_batch_size=None,
-                            batch_size=50,
-                            method="two_step_adaptive",
-                            steps="adaptive",
-                            max_steps=1000
+                            batch_size=10,
+                            kwargs={'attention_mask': test_data['attention_mask']}
                         )
         root_mean_squared_error = bf_metrics.root_mean_squared_error(
                 estimates=gloabl_posterior,
