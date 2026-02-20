@@ -1,6 +1,6 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams"
-data_dir: "data_multistream_galax"
-simulator: "galax" #odisseo, gala, galax
+data_dir: "data_multistream_gala"
+simulator: "gala" #odisseo, gala, galax
 n_simulations: 1000
 batch_size: 200
 
@@ -194,6 +194,8 @@ galax_config:
   n_timesteps: 1000
 
 gala_config:
-  df_type: "ChenStreamDF" #FardalStreamDF, ChenStreamDF, MockStreamGenerator
-  n_timesteps: 1000
+  df_type: "FardalStreamDF" #FardalStreamDF, ChenStreamDF, MockStreamGenerator
+  n_timesteps: 500
   use_prog_potential: True
+  n_workers: 32
+  N_particles: 1000
