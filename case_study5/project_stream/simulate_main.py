@@ -10,11 +10,21 @@ from astropy import units as u
 import numpy as np
 
 
-
-
 from utils_simulate import (sample_parameters, 
                              sky_projection_astropy)
 from simulate_config import SimulatorConfig
+
+# import psutil
+
+# def get_free_cores(threshold_percent=10.0):
+#     """Return the number of CPU cores that are essentially idle.
+    
+#     A core is considered 'free' if its usage is below threshold_percent.
+#     Uses a 1-second interval to measure per-CPU utilization.
+#     """
+#     per_cpu = psutil.cpu_percent(interval=1, percpu=True)
+#     free = sum(1 for usage in per_cpu if usage < threshold_percent)
+#     return max(free, 1)  # always use at least 1
 
 cs = ConfigStore.instance()
 cs.store(name="simulator_config", node=SimulatorConfig)
@@ -75,10 +85,16 @@ def main(cfg: SimulatorConfig):
     
     elif cfg.simulator == "gala":
         from joblib import Parallel, delayed
-        from utils_gala_simulator import simulate_stream_gala, _run_gala_single
+        from utils_gala_simulator import simulate_stream_gala, simulate_stream_gala_Rotated, _run_gala_single
+        if cfg.use_rotated_halo:
+            simulate_stream_gala_fn = simulate_stream_gala_Rotated
+        else:
+            simulate_stream_gala_fn = simulate_stream_gala
         config = cfg.gala_config
         code_units = None #gala does not use code units, but we need to pass something to the function
-        
+        # Override n_workers with the number of truly free cores
+        # n_free = get_free_cores(threshold_percent=10.0)
+        # print(f"Detected {n_free} idle cores (out of {os.cpu_count()}). Using them as workers.")
         
     
     for batch_start in tqdm(range(0, cfg.n_simulations, cfg.batch_size)):
@@ -100,7 +116,7 @@ def main(cfg: SimulatorConfig):
             
             # Run in parallel with joblib
             results = Parallel(n_jobs=config.n_workers)(
-                delayed(simulate_stream_gala)(
+                delayed(simulate_stream_gala_fn)(
                     param_dict, config, code_units, int(batch_indices[i])
                 )
                 for i, param_dict in enumerate(individual_params)
@@ -113,6 +129,12 @@ def main(cfg: SimulatorConfig):
         sim_data_projected_batch = sky_projection_astropy(sim_data_batch)
         for i, idx in enumerate(batch_indices):
             params = {k: v[idx] for k, v in prior_samples.items()}
+            # if (cfg.simulator == 'gala') and cfg.use_rotated_halo:
+                #we need to check weather we need to flip paramters to impose emisphere symmetry
+                # if params['dirz_Triaxial_rotated_halo'] < 0:
+                #     params['dirx_Triaxial_rotated_halo'] = -params['dirx_Triaxial_rotated_halo']
+                #     params['diry_Triaxial_rotated_halo'] = -params['diry_Triaxial_rotated_halo']
+                #     params['dirz_Triaxial_rotated_halo'] = -params['dirz_Triaxial_rotated_halo']
             sim_data = sim_data_batch[i]
             sim_data_projected = sim_data_projected_batch[i]
             # Save both Cartesian and projected data

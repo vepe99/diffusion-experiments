@@ -9,6 +9,10 @@ import gala.potential as gp
 from gala.units import galactic
 from gala.dynamics import mockstream as ms
 
+from scipy import special
+from scipy.spatial.transform import Rotation
+
+
 
 
 def simulate_stream_gala(parameters_dict, config, code_units, random_seed:int):
@@ -24,6 +28,7 @@ def simulate_stream_gala(parameters_dict, config, code_units, random_seed:int):
     :param random_seed: Description
     :type random_seed: int
     '''
+
     pot = gp.CCompositePotential()
 
     pot['halo'] = gp.NFWPotential(m     = parameters_dict['m_Triaxial_halo'][0],
@@ -70,7 +75,94 @@ def simulate_stream_gala(parameters_dict, config, code_units, random_seed:int):
                         )
     return np.array([stream.x.to(u.kpc).value, stream.y.to(u.kpc).value,stream.z.to(u.kpc).value, 
                      stream.vel._d_x.to(u.km/u.s).value, stream.vel._d_y.to(u.km/u.s).value, stream.vel._d_z.to(u.km/u.s).value]).T
+
+def simulate_stream_gala_Rotated(parameters_dict, config, code_units, random_seed:int):
+    '''
+    Docstring for simulate_stream_galax
+    code_units it is not used 
+    
+    :param parameters_dict: Description
+    :param config: Description
+    :type config: SimulationConfig
+    :param code_units: Description
+    :type code_units: CodeUnits
+    :param random_seed: Description
+    :type random_seed: int
+    '''
+    #we need first to impose emisphere symmetry 
+    q_min = 0.5
+    q_max = 1.5
+    if parameters_dict['dirz_Triaxial_rotated_halo'][0] < 0:
+        parameters_dict['dirx_Triaxial_rotated_halo'][0] = -parameters_dict['dirx_Triaxial_rotated_halo'][0]
+        parameters_dict['diry_Triaxial_rotated_halo'][0] = -parameters_dict['diry_Triaxial_rotated_halo'][0]
+        parameters_dict['dirz_Triaxial_rotated_halo'][0] = -parameters_dict['dirz_Triaxial_rotated_halo'][0]
+    r = np.sqrt(parameters_dict['dirx_Triaxial_rotated_halo'][0]**2 + parameters_dict['diry_Triaxial_rotated_halo'][0]**2 + parameters_dict['dirz_Triaxial_rotated_halo'][0]**2)
+    u_from_r = special.erf(r/np.sqrt(2)) - np.sqrt(2/np.pi)*r*np.exp(-(r**2)/2)
+    q = q_min + (q_max - q_min) * u_from_r
+    #  create the rotation matrix from the normal vector n
+    n = np.array([parameters_dict['dirx_Triaxial_rotated_halo'][0], parameters_dict['diry_Triaxial_rotated_halo'][0], parameters_dict['dirz_Triaxial_rotated_halo'][0]])
+    n = n / r
+    # Build rotation that maps z-hat -> n
+    z_hat = np.array([0., 0., 1.])
+    axis = np.cross(z_hat, n)
+    angle = np.arccos(np.clip(np.dot(z_hat, n), -1, 1))
+
+    if np.linalg.norm(axis) < 1e-10:  # already aligned
+        R = np.eye(3)
+    else:
+        axis /= np.linalg.norm(axis)
+        R = Rotation.from_rotvec(angle * axis).as_matrix()
+
+
+    pot = gp.CCompositePotential()
+
+    pot['halo'] = gp.NFWPotential(m     = parameters_dict['m_Triaxial_rotated_halo'][0],
+                                  r_s   = parameters_dict['r_Triaxial_rotated_halo'][0],
+                                  a     = 1,
+                                  b     = 1,
+                                  c     = q,
+                                  R     = R, 
+                                units =galactic)
+
+    pot['thin_disk'] = gp.MN3ExponentialDiskPotential(m = 4 * np.pi * parameters_dict['rho_thin_disk'][0]*parameters_dict['hr_thin_disk'][0]**2 * parameters_dict['hz_thin_disk'][0],
+                                                    h_R=parameters_dict['hr_thin_disk'][0],
+                                                    h_z=parameters_dict['hz_thin_disk'][0],
+                                                    units=galactic,
+                                                    positive_density=True)
+    pot['thick_disk'] = gp.MN3ExponentialDiskPotential(m = 4 * np.pi * parameters_dict['rho_thick_disk'][0] *parameters_dict['hr_thick_disk'][0]**2 * parameters_dict['hz_thick_disk'][0],
+                                                    h_R=parameters_dict['hr_thick_disk'][0],
+                                                    h_z=parameters_dict['hz_thick_disk'][0],
+                                                    units=galactic,
+                                                    positive_density=True)
+    pot['bulge'] = gp.PowerLawCutoffPotential(m=parameters_dict['m_bulge'][0],
+                                            r_c=parameters_dict['r_bulge'][0],
+                                            alpha=parameters_dict['alpha_bulge'][0],
+                                            units=galactic)
+
+    w0 = coord.Galactocentric(x=parameters_dict['x'][0]*u.kpc, y=parameters_dict['y'][0]*u.kpc, z=parameters_dict['z'][0]*u.kpc,
+                            v_x=parameters_dict['vx'][0]*u.km/u.s, v_y=parameters_dict['vy'][0]*u.km/u.s, v_z=parameters_dict['vz'][0]*u.km/u.s)
+    w0 = gd.PhaseSpacePosition(w0)
+
+    prog_mass = parameters_dict['m_progenitor'][0] * u.Msun
+    b_prog = parameters_dict['a_progenitor'][0] * u.pc
+    prog_pot = gp.PlummerPotential(m=prog_mass, b=b_prog, units=galactic)
+    if config.df_type == "ChenStreamDF":
+        df = gd.ChenStreamDF()
+    elif config.df_type == "FardalStreamDF":
+        df = gd.FardalStreamDF()
+    if config.use_prog_potential:
+        gen = gd.MockStreamGenerator(df, pot, progenitor_potential=prog_pot)
+    else:
+        gen = gd.MockStreamGenerator(df, pot)
+    stream, _ = gen.run(w0, prog_mass,
+                        # n_particles=config.N_particles/2,
+                        dt=-(parameters_dict['t_end']*u.Gyr.to(u.Myr)/config.n_timesteps), 
+                        n_steps=config.n_timesteps, 
+                        )
+    return np.array([stream.x.to(u.kpc).value, stream.y.to(u.kpc).value,stream.z.to(u.kpc).value, 
+                     stream.vel._d_x.to(u.km/u.s).value, stream.vel._d_y.to(u.km/u.s).value, stream.vel._d_z.to(u.km/u.s).value]).T
                      
+
 
 
 # Add this helper function at the top of your file

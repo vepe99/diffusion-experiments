@@ -35,6 +35,7 @@ class SimulatorConfig:
 
     n_simulations: int
     batch_size: int
+    use_rotated_halo: bool
 
     base_dir: str
     data_dir: str

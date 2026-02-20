@@ -1,8 +1,9 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams"
-data_dir: "data_gala"
+data_dir: "data_gala_rotated"
 simulator: "gala" #odisseo, gala, galax
-n_simulations: 300_000
-batch_size: 256
+n_simulations: 300000
+batch_size: 512
+use_rotated_halo: True
 
 parameters_global:
   - "a"
@@ -28,6 +29,22 @@ priors_global: #str for the type and a list of values for the parameters of the 
   q2_Triaxial_halo:
     type: uniform
     prior_parameters: [0.5, 1.5]
+  #HALO TRIAXIAL ROTATED
+  m_Triaxial_rotated_halo:
+    type: uniform
+    prior_parameters: [1.e11, 1e14]
+  r_Triaxial_rotated_halo:
+    type: uniform
+    prior_parameters: [5.0, 50.0]
+  dirx_Triaxial_rotated_halo:
+    type: normal
+    prior_parameters: [0.0, 10.0]
+  diry_Triaxial_rotated_halo:
+    type: normal
+    prior_parameters: [0.0, 10.0]
+  dirz_Triaxial_rotated_halo:
+    type: normal
+    prior_parameters: [0.0, 10.0]
   #HALO TWOPOWER TRIAXIAL
   rho_TwoPowerTriaxial_halo:
     type: uniform
@@ -195,7 +212,7 @@ galax_config:
 
 gala_config:
   df_type: "FardalStreamDF" #FardalStreamDF, ChenStreamDF, MockStreamGenerator
-  n_timesteps: 500
+  n_timesteps: 199
   use_prog_potential: True
   n_workers: 32
   N_particles: 1000
