@@ -1,8 +1,8 @@
-from autocvd import autocvd
-autocvd(num_gpus = 1)
+# from autocvd import autocvd
+# autocvd(num_gpus = 1)
 import os
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
-# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "7"
 import yaml
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -36,6 +36,26 @@ def main(cfg: EvalConfig):
     print("##############")
     model_path = os.path.join(cfg.base_dir, cfg.model_dir, 'global_model.keras' )
     print('Loading model from ', model_path)
+    # Fix ArrayImpl serialization issue in the .keras file
+    import zipfile
+    import json
+    fixed_model_path = model_path.replace('.keras', '_fixed.keras')
+    if not os.path.exists(fixed_model_path):
+        with zipfile.ZipFile(model_path, 'r') as zin:
+            with zipfile.ZipFile(fixed_model_path, 'w') as zout:
+                for item in zin.infolist():
+                    data = zin.read(item.filename)
+                    if item.filename == 'config.json':
+                        config_str = data.decode('utf-8')
+                        config_str = config_str.replace(
+                            '__bayesflow_type__ArrayImpl',
+                            '__bayesflow_type__ndarray'
+                        )
+                        data = config_str.encode('utf-8')
+                    zout.writestr(item, data)
+        print(f"Created fixed model at {fixed_model_path}")
+    model_path = fixed_model_path
+    print('Loading model from ', model_path)
     print("##############")
     param_names_global = list(cfg.parameters_global)
     sim_data = str(cfg.sim_data)
@@ -58,7 +78,12 @@ def main(cfg: EvalConfig):
                                                    num_heads=(model_config['global_model']['num_heads'],model_config['global_model']['num_heads'],),
                                                    embed_dims = (model_config['global_model']['summary_dim'], model_config['global_model']['summary_dim'],),
                                                    dropout=0.1),
-        inference_network=bf.networks.CompositionalDiffusionModel(),
+        inference_network=bf.networks.CompositionalDiffusionModel(
+                                                        subnet_kwargs={
+                                                        "widths": [model_config['global_model']['inference_mlp_width']] * model_config['global_model']['inference_mlp_depth'],
+                                                        "time_embedding_dim": model_config['global_model']['inference_time_embedding_dim'],
+                                                        }
+                                                        ),
         standardize=["inference_variables", "summary_variables"]
     )
     workflow_global.approximator = keras.models.load_model(model_path)

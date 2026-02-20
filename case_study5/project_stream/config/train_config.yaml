@@ -1,12 +1,12 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_galax/"
 N_simulations: 300_000
-results_dir: "models/model_galax_observational_errors_hyperparam_1000_epochs/"
+results_dir: "models/model_galax_observational_errors_hyperparam_8heads_2000_epochs_newbox/"
 test: False
 
 #training hyperparameters
-n_epochs: 1000
-batch_size: 200
+n_epochs: 2500
+batch_size: 128
 learning_rate: 0.01
 weight_decay: 0.0001 #not used
 lr_scheduler_step_size: 10 #not used
@@ -62,10 +62,10 @@ target_streams:
 
 observational_window:
   Pal5:
-    ra_min: 224.65738998670705
-    ra_max: 242.09382462115624
-    dec_min: -4.800515070822196
-    dec_max: 6.883094642923846
+    ra_min: 220.98008280733634
+    ra_max: 245.89465019770668
+    dec_min: -10.644267714585839
+    dec_max: 9.279576254116762
   NGC3201:
     ra_min: 42.29847920913508
     ra_max: 178.36142433209437

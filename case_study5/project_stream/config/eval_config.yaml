@@ -1,11 +1,11 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_galax/"
-model_dir: "models/model_galax_observational_errors"
+model_dir: "models/model_galax_observational_errors_1000_epochs/"
 multistream_n_simulation: 100
-results_dir: "plots/plots_galax_observational_errors"
+results_dir: "plots/plots_galax_observational_errors_1000_epochs/"
 
 #training hyperparameters
-n_samples: 10_000
+n_samples: 1_000
 method: "two_step_adaptive"
 steps: "adaptive"
 max_steps: 1000
