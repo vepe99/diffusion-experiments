@@ -1,8 +1,8 @@
-# from autocvd import autocvd
-# autocvd(num_gpus = 1)
+from autocvd import autocvd
+autocvd(num_gpus = 1)
 import os
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
-os.environ["CUDA_VISIBLE_DEVICES"] = "7"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "7"
 import yaml
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -33,16 +33,41 @@ def main(cfg: EvalConfig):
     print(cfg)
     print("##############")
     model_path = os.path.join(cfg.base_dir, cfg.model_dir, 'global_model.keras' )
+    # Fix ArrayImpl serialization issue in the .keras file
+    import zipfile
+    import json
+    fixed_model_path = model_path.replace('.keras', '_fixed.keras')
+    if not os.path.exists(fixed_model_path):
+        with zipfile.ZipFile(model_path, 'r') as zin:
+            with zipfile.ZipFile(fixed_model_path, 'w') as zout:
+                for item in zin.infolist():
+                    data = zin.read(item.filename)
+                    if item.filename == 'config.json':
+                        config_str = data.decode('utf-8')
+                        config_str = config_str.replace(
+                            '__bayesflow_type__ArrayImpl',
+                            '__bayesflow_type__ndarray'
+                        )
+                        data = config_str.encode('utf-8')
+                    zout.writestr(item, data)
+        print(f"Created fixed model at {fixed_model_path}")
+    model_path = fixed_model_path
     print('Loading model from ', model_path)
     print("##############")
     param_names_global = list(cfg.parameters_global)
     sim_data = str(cfg.sim_data)
     inference_conditions = str(cfg.inference_conditions[0])
+    test_data_path = os.path.join(cfg.base_dir, cfg.data_dir, f'simulation_multistream_{cfg.multistream_n_simulation}.npz')
+    print('Loading test data from ', test_data_path)
+    test_data = dict(np.load(test_data_path, allow_pickle=True))
+    keys_to_drop = set(test_data.keys()) - set(param_names_global) - {sim_data} - set(inference_conditions)
+
 
     adapter = (
         bf.adapters.Adapter()
         .to_array()
         .convert_dtype("float64", "float32")
+        .drop(keys_to_drop)
         .concatenate(param_names_global, into="inference_variables")
         .rename(sim_data, "summary_variables")
         .rename(inference_conditions, "inference_conditions")
@@ -62,10 +87,6 @@ def main(cfg: EvalConfig):
         standardize=["inference_variables", "summary_variables"]
     )
     workflow_global.approximator = keras.models.load_model(model_path)
-
-    test_data_path = os.path.join(cfg.base_dir, cfg.data_dir, f'simulation_multistream_{cfg.multistream_n_simulation}.npz')
-    print('Loading test data from ', test_data_path)
-    test_data = dict(np.load(test_data_path, allow_pickle=True))
     test_data = {k: test_data[k] for k in cfg.parameters_global + [cfg.sim_data, "j"] }
     # Augmentation
     augmentations_class = AugmentationsClass(cfg)
