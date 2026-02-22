@@ -1,7 +1,7 @@
 import os
 from tqdm import tqdm
 
-
+import omegaconf
 from omegaconf import DictConfig, OmegaConf, open_dict
 import hydra
 from hydra.core.config_store import ConfigStore
@@ -14,17 +14,6 @@ from utils_simulate import (sample_parameters,
                              sky_projection_astropy)
 from simulate_config import SimulatorConfig
 
-# import psutil
-
-# def get_free_cores(threshold_percent=10.0):
-#     """Return the number of CPU cores that are essentially idle.
-    
-#     A core is considered 'free' if its usage is below threshold_percent.
-#     Uses a 1-second interval to measure per-CPU utilization.
-#     """
-#     per_cpu = psutil.cpu_percent(interval=1, percpu=True)
-#     free = sum(1 for usage in per_cpu if usage < threshold_percent)
-#     return max(free, 1)  # always use at least 1
 
 cs = ConfigStore.instance()
 cs.store(name="simulator_config", node=SimulatorConfig)
@@ -41,9 +30,25 @@ def main(cfg: SimulatorConfig):
         print(cfg.galax_config)
         from autocvd import autocvd
         autocvd(num_gpus = 1)
+    elif cfg.simulator == "StreaMax":
+        print(cfg.streamax_config)
+        from autocvd import autocvd
+        autocvd(num_gpus = 1)
+        # os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # Set this to the GPU you want to use
     elif cfg.simulator == "gala":
         print(cfg.gala_config)
-    prior_samples = sample_parameters(prior_global_dict=cfg.priors_global, prior_local_dict=cfg.priors_local, n_samples=cfg.n_simulations, target_streams=cfg.target_streams)
+
+    if isinstance(cfg.n_simulations, omegaconf.listconfig.ListConfig):
+        index_sim_start = cfg.n_simulations[0]
+        index_sim_end = cfg.n_simulations[1]
+        total_n_simulations = index_sim_end - index_sim_start   # total number to sample
+    else:
+        index_sim_start = 0
+        index_sim_end = cfg.n_simulations
+        total_n_simulations = cfg.n_simulations
+        
+    rng_seed = index_sim_end
+    prior_samples = sample_parameters(prior_global_dict=cfg.priors_global, prior_local_dict=cfg.priors_local, n_samples=total_n_simulations, target_streams=cfg.target_streams, key_seed=rng_seed)
     print(' The shapes of the samples are :', {k: v.shape for k, v in prior_samples.items()})
 
     if cfg.simulator == "odisseo":
@@ -83,6 +88,15 @@ def main(cfg: SimulatorConfig):
         config = cfg.galax_config
         code_units = None #galax does not use code units, but we need to pass something to the function
     
+    elif cfg.simulator == "StreaMax":
+        import jax
+        import jax.numpy as jnp
+        from utils_StreaMax_simulator import simulate_stream_StreaMAX
+
+        simulate_stream = simulate_stream_StreaMAX
+        config = cfg.streamax_config
+        code_units = None #StreaMax does not use code units, but we need to pass something to the function
+
     elif cfg.simulator == "gala":
         from joblib import Parallel, delayed
         from utils_gala_simulator import simulate_stream_gala, simulate_stream_gala_Rotated, _run_gala_single
@@ -96,22 +110,24 @@ def main(cfg: SimulatorConfig):
         # n_free = get_free_cores(threshold_percent=10.0)
         # print(f"Detected {n_free} idle cores (out of {os.cpu_count()}). Using them as workers.")
         
-    
-    for batch_start in tqdm(range(0, cfg.n_simulations, cfg.batch_size)):
-        batch_end = min(batch_start + cfg.batch_size, cfg.n_simulations)
+
+
+    for batch_start in tqdm(range(index_sim_start, index_sim_end, cfg.batch_size)):
+        batch_end = min(batch_start + cfg.batch_size, index_sim_end)
         batch_indices = np.arange(batch_start, batch_end)
+        local_indices = batch_indices - index_sim_start 
         # Prepare batch of parameters
         # Run vectorized simulation
-        if (cfg.simulator == "odisseo")|(cfg.simulator == "galax"):
-            batch_params = {k: jnp.array(v[batch_indices]) for k, v in prior_samples.items()}
+        if (cfg.simulator == "odisseo")|(cfg.simulator == "galax")|(cfg.simulator == "StreaMax"):
+            batch_params = {k: jnp.array(v[local_indices]) for k, v in prior_samples.items()}
             sim_data_batch = jax.vmap(simulate_stream, in_axes=(0, None, None, 0))(batch_params, config, code_units, jnp.array(batch_indices))  # shape (batch_size, ...)
         elif cfg.simulator == "gala":
-            batch_params = {k: np.array(v[batch_indices]) for k, v in prior_samples.items()}
+            batch_params = {k: np.array(v[local_indices]) for k, v in prior_samples.items()}
     
             # Convert to individual parameter dicts
             individual_params = [
                 {k: v[i] for k, v in batch_params.items()}
-                for i in range(len(batch_indices))
+                for i in range(len(local_indices))
             ]
             
             # Run in parallel with joblib
@@ -128,13 +144,8 @@ def main(cfg: SimulatorConfig):
         # Save each simulation in the batch
         sim_data_projected_batch = sky_projection_astropy(sim_data_batch)
         for i, idx in enumerate(batch_indices):
-            params = {k: v[idx] for k, v in prior_samples.items()}
-            # if (cfg.simulator == 'gala') and cfg.use_rotated_halo:
-                #we need to check weather we need to flip paramters to impose emisphere symmetry
-                # if params['dirz_Triaxial_rotated_halo'] < 0:
-                #     params['dirx_Triaxial_rotated_halo'] = -params['dirx_Triaxial_rotated_halo']
-                #     params['diry_Triaxial_rotated_halo'] = -params['diry_Triaxial_rotated_halo']
-                #     params['dirz_Triaxial_rotated_halo'] = -params['dirz_Triaxial_rotated_halo']
+            local_idx = idx - index_sim_start
+            params = {k: v[local_idx] for k, v in prior_samples.items()}
             sim_data = sim_data_batch[i]
             sim_data_projected = sim_data_projected_batch[i]
             # Save both Cartesian and projected data

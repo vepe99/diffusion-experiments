@@ -15,7 +15,7 @@ def get_prior_sample(paramter_prior_dict: dict, size=None):
     elif paramter_prior_dict['type'] == 'identity':
         return np.full(shape=(size, 1), fill_value=paramter_prior_dict['prior_parameters'][0])
     
-def sample_parameters(prior_global_dict: dict, prior_local_dict: dict, n_samples: int, target_streams: dict, key_seed=0):
+def sample_parameters(prior_global_dict: dict, prior_local_dict: dict, n_samples: int, target_streams: dict, key_seed: int):
     np.random.seed(key_seed)
     global_keys = list(prior_global_dict.keys())
     possible_j = list(target_streams.values())

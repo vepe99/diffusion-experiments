@@ -1,6 +1,6 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams"
-data_dir: "data_multistream_gala"
-simulator: "gala" #odisseo, gala, galax
+data_dir: "data_multistream_streamax"
+simulator: "StreaMax" #odisseo, gala, galax
 n_simulations: 1000
 batch_size: 200
 
@@ -28,6 +28,22 @@ priors_global: #str for the type and a list of values for the parameters of the 
   q2_Triaxial_halo:
     type: uniform
     prior_parameters: [0.5, 1.5]
+  #HALO TRIAXIAL ROTATED
+  m_Triaxial_rotated_halo:
+    type: uniform
+    prior_parameters: [1.e11, 1e13]
+  r_Triaxial_rotated_halo:
+    type: uniform
+    prior_parameters: [10.0, 25.0]
+  dirx_Triaxial_rotated_halo:
+    type: normal
+    prior_parameters: [0.0, 1.0]
+  diry_Triaxial_rotated_halo:
+    type: normal
+    prior_parameters: [0.0, 1.0]
+  dirz_Triaxial_rotated_halo:
+    type: normal
+    prior_parameters: [0.0, 1.0]
   #HALO TWOPOWER TRIAXIAL
   rho_TwoPowerTriaxial_halo:
     type: uniform
@@ -66,10 +82,47 @@ priors_global: #str for the type and a list of values for the parameters of the 
   hz_thick_disk:
     type: normal
     prior_parameters: [0.9, 0.18]
-  #BULGE
+  #Disk in MilkyWay2022
+  M_MN3ExpDisk:
+    type: identity
+    # prior_parameters: [11929250000.0, 190868000000.0] #0.25*4.7717e+10, 4*4.7717e+10
+    prior_parameters: [4.7717e+10]
+  r_MN3ExpDisk:
+    type: identity
+    # prior_parameters: [0.65, 10.4] #0.25*2.6, 4*2.6
+    prior_parameters: [2.6]
+  z_MN3ExpDisk:
+    type: uniform
+    prior_parameters: [0.075, 1.2] #0.25*0.3, 4*0.3
+  #BULGE in MilkyWay2022
+  m_bulge_2022:
+    type: identity
+    prior_parameters: [5.0e9]
+  R_bulge_2022:
+    type: identity
+    prior_parameters: [1.0]
+  #NUCLEUS in MilkyWay2022
+  m_nucleus:
+    type: identity
+    prior_parameters: [1.8142e9]
+  R_nucleus:
+    type: identity
+    prior_parameters: [0.0688867]
+
+  #DISK in MW2014
+  m_disk_MW2014:
+    type: identity
+    prior_parameters: [3.25e10, 13.0e10] #[6.5e10]  #[6.5e10/2, 6.5e10*2]
+  r_disk_MW2014:
+    type: identity
+    prior_parameters: [1.5, 6.0] #[3.0]
+  z_disk_MW2014:
+    type: identity
+    prior_parameters: [0.28]
+  #BULGE in MW2014
   m_bulge:
     type: identity
-    prior_parameters: [4501365375.06545]
+    prior_parameters: [2250682687.532725, 9002730750.1309] #[4501365375.06545/2, 4501365375.06545*2] #[4501365375.06545]
   alpha_bulge:
     type: identity
     prior_parameters: [1.8]
@@ -199,3 +252,10 @@ gala_config:
   use_prog_potential: True
   n_workers: 32
   N_particles: 1000
+
+streamax_config:
+  n_timesteps: 4999
+  N_particles: 5000
+  type_host: "MW2014"
+  unroll: False
+  type_method: "Fardal2015"

@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Optional, Union
 from dataclasses import dataclass, field
 
 @dataclass
@@ -29,11 +29,19 @@ class GalaxConfig:
     n_timesteps: int
 
 @dataclass
+class StreaMaxConfig:
+    n_timesteps: int
+    N_particles: int
+    type_host: str
+    unroll: bool
+    type_method: str
+
+@dataclass
 class SimulatorConfig:
 
     simulator: str
 
-    n_simulations: int
+    n_simulations: Union[int, list[int]]
     batch_size: int
     use_rotated_halo: bool
 
@@ -60,6 +68,8 @@ class SimulatorConfig:
     gala_config: GalaConfig
 
     galax_config: GalaxConfig
+
+    streamax_config: StreaMaxConfig
 
     hydra: Optional[Any] = field(default=None)
 

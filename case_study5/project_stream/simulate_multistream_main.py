@@ -1,6 +1,7 @@
 
 import os
 # os.environ['CUDA_VISIBLE_DEVICES'] = '0'  # Set this to the GPU you want to use
+import omegaconf
 from tqdm import tqdm
 
 
@@ -24,15 +25,32 @@ def main(cfg: SimulatorConfig):
     print('Using simulator:', cfg.simulator)
     if cfg.simulator == "odisseo":
         print(cfg.odisseo_config)
-    elif cfg.simulator == "gala":
-        print(cfg.gala_config)
+        from autocvd import autocvd
+        autocvd(num_gpus = 1)
     elif cfg.simulator == "galax":
         print(cfg.galax_config)
+        from autocvd import autocvd
+        autocvd(num_gpus = 1)
+    elif cfg.simulator == "StreaMax":
+        print(cfg.streamax_config)
+        from autocvd import autocvd
+        autocvd(num_gpus = 1)
+        # os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # Set this to the GPU you want to use
+    elif cfg.simulator == "gala":
+        print(cfg.gala_config)
 
-    prior_samples = sample_parameters_parallel(prior_global_dict=cfg.priors_global, 
-                                               prior_local_dict=cfg.priors_local, 
-                                               n_samples=cfg.n_simulations, 
-                                               target_streams=cfg.target_streams)
+    if isinstance(cfg.n_simulations, omegaconf.listconfig.ListConfig):
+        index_sim_start = cfg.n_simulations[0]
+        index_sim_end = cfg.n_simulations[1]
+        total_n_simulations = index_sim_end - index_sim_start   # total number to sample
+    else:
+        index_sim_start = 0
+        index_sim_end = cfg.n_simulations
+        total_n_simulations = cfg.n_simulations
+        
+    rng_seed = index_sim_end
+    np.random.seed(rng_seed)
+    prior_samples = sample_parameters_parallel(prior_global_dict=cfg.priors_global, prior_local_dict=cfg.priors_local, n_samples=total_n_simulations, target_streams=cfg.target_streams, key_seed=rng_seed)
     print(' The shapes of the samples are :', {k: v.shape for k, v in prior_samples.items()})
     for k in cfg.priors_global.keys():
         prior_samples[k] = np.repeat(prior_samples[k][:, np.newaxis, :], len(cfg.target_streams), axis=1) # reshape global par ameters to have shape (n_samples, n_streans, 1)
@@ -42,8 +60,6 @@ def main(cfg: SimulatorConfig):
     print(' The shapes of the samples flattened are :', {k: v.shape for k, v in prior_samples.items()})
 
     if cfg.simulator == "odisseo":
-        from autocvd import autocvd
-        autocvd(num_gpus = 1)
         import jax
         import jax.numpy as jnp
         from odisseo.option_classes import SimulationConfig
@@ -72,8 +88,6 @@ def main(cfg: SimulatorConfig):
         
     
     elif cfg.simulator == "galax":
-        from autocvd import autocvd
-        autocvd(num_gpus = 1)
         import jax
         import jax.numpy as jnp
         from utils_galax_simulator import simulate_stream_galax
@@ -81,6 +95,15 @@ def main(cfg: SimulatorConfig):
         simulate_stream = simulate_stream_galax
         config = cfg.galax_config
         code_units = None #galax does not use code units, but we need to pass something to the function
+
+    elif cfg.simulator == "StreaMax":
+        import jax
+        import jax.numpy as jnp
+        from utils_StreaMax_simulator import simulate_stream_StreaMAX
+
+        simulate_stream = simulate_stream_StreaMAX
+        config = cfg.streamax_config
+        code_units = None #StreaMax does not use code units, but we need to pass something to the function
     
     elif cfg.simulator == "gala":
         from joblib import Parallel, delayed
@@ -88,16 +111,36 @@ def main(cfg: SimulatorConfig):
         config = cfg.gala_config
         code_units = None #gala does not use code units, but we need to pass something to the function
         
-        
-    save_dict = {'sim_data_carthesian': np.ones((cfg.n_simulations * len(cfg.target_streams), cfg.odisseo_config.N_particles+2, 6)),
-                 'sim_data_projected': np.ones((cfg.n_simulations * len(cfg.target_streams),cfg.odisseo_config.N_particles+2, 6))}
-    for batch_start in tqdm(range(0, cfg.n_simulations * len(cfg.target_streams), cfg.batch_size)):
-        batch_end = min(batch_start + cfg.batch_size, cfg.n_simulations * len(cfg.target_streams))
+    
+    save_dict = {'sim_data_carthesian': np.ones((total_n_simulations* len(cfg.target_streams), cfg.odisseo_config.N_particles, 6)),
+                 'sim_data_projected': np.ones((total_n_simulations* len(cfg.target_streams),cfg.odisseo_config.N_particles, 6))}
+    for batch_start in tqdm(range(0, total_n_simulations * len(cfg.target_streams), cfg.batch_size)):
+        batch_end = min(batch_start + cfg.batch_size, total_n_simulations * len(cfg.target_streams))
         batch_indices = np.arange(batch_start, batch_end)
         # Prepare batch of parameters
-        if (cfg.simulator == "odisseo")|(cfg.simulator == "galax"):
+        if (cfg.simulator == "odisseo")|(cfg.simulator == "galax")|(cfg.simulator == "StreaMax"):
             batch_params = {k: jnp.array(v[batch_indices]) for k, v in prior_samples.items()}
             sim_data_batch = jax.vmap(simulate_stream, in_axes=(0, None, None, 0))(batch_params, config, code_units, jnp.array(batch_indices))  # shape (batch_size, ...)
+            if cfg.simulator == "StreaMax":
+                n_particles_subsample = 1000
+                sim_data_clean = []
+                for sim in sim_data_batch:
+                    mask = ~np.isnan(sim).any(axis=1)
+                    sim_no_nan = sim[mask]
+                    n_timesteps_clean = sim_no_nan.shape[0]
+                    # Subsample timesteps
+                    if n_timesteps_clean >= n_particles_subsample:
+                        indices = np.random.choice(n_timesteps_clean, size=n_particles_subsample, replace=False)
+                        indices.sort()
+                        sim_subsampled = sim_no_nan[indices]
+                    else:
+                        # If not enough timesteps, pad with NaNs
+                        pad = np.full((n_particles_subsample - n_timesteps_clean, sim_no_nan.shape[1]), np.nan)
+                        sim_subsampled = np.vstack([sim_no_nan, pad])
+                    sim_data_clean.append(sim_subsampled)
+                sim_data_batch = np.stack(sim_data_clean, axis=0)
+            else:
+                pass
         elif cfg.simulator == "gala":
             batch_params = {k: np.array(v[batch_indices]) for k, v in prior_samples.items()}
     
@@ -125,8 +168,8 @@ def main(cfg: SimulatorConfig):
 
     print('sim_data_batch shape:', sim_data_batch.shape)
     
-    save_dict['sim_data_carthesian'] = save_dict['sim_data_carthesian'].reshape(cfg.n_simulations, len(cfg.target_streams), cfg.odisseo_config.N_particles+2, 6)
-    save_dict['sim_data_projected'] = save_dict['sim_data_projected'].reshape(cfg.n_simulations, len(cfg.target_streams), cfg.odisseo_config.N_particles+2, 6)
+    save_dict['sim_data_carthesian'] = save_dict['sim_data_carthesian'].reshape(total_n_simulations, len(cfg.target_streams), cfg.odisseo_config.N_particles, 6)
+    save_dict['sim_data_projected'] = save_dict['sim_data_projected'].reshape(total_n_simulations, len(cfg.target_streams), cfg.odisseo_config.N_particles, 6)
     for k in prior_samples.keys():
         if k in cfg.priors_global.keys():
             prior_samples[k] = prior_samples[k].reshape(-1, len(cfg.target_streams),  1)[:, 0, :] # reshape back to (n_samples, 1) for global parameters
@@ -134,7 +177,7 @@ def main(cfg: SimulatorConfig):
             prior_samples[k] = prior_samples[k].reshape(-1, len(cfg.target_streams),  1) 
     save_dict.update(prior_samples)
     print(' The shapes of the simulations and parameters before saving are :', {k: v.shape for k, v in save_dict.items()})
-    np.savez(os.path.join(cfg.base_dir, cfg.data_dir, f'simulation_multistream_{cfg.n_simulations}.npz'), **save_dict)
+    np.savez(os.path.join(cfg.base_dir, cfg.data_dir, f'simulation_multistream_{total_n_simulations}.npz'), **save_dict)
     
 if __name__ == "__main__":
     main()
