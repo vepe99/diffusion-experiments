@@ -61,6 +61,7 @@ def main(cfg: EvalConfig):
     print('Loading test data from ', test_data_path)
     test_data = dict(np.load(test_data_path, allow_pickle=True))
     keys_to_drop = set(test_data.keys()) - set(param_names_global) - {sim_data} - set(inference_conditions)
+    keys_to_drop = list(keys_to_drop) 
 
 
     adapter = (
@@ -117,6 +118,7 @@ def main(cfg: EvalConfig):
     print('Test data attention mask shape: ', test_data['attention_mask'].shape)
     with open(os.path.join(cfg.base_dir, cfg.data_dir, '.hydra', 'config.yaml'), "r") as f:
         test_sim_config = yaml.safe_load(f)
+    print('Test simulation config prior: ', test_sim_config['priors_global'])
 
     def prior_global_score(x, cfg=cfg, test_sim_config=test_sim_config):
         

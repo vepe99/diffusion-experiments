@@ -38,6 +38,7 @@ def main(cfg: TrainConfig):
     # training_data = {k: v[:1_000] for k, v in training_data.items()}
     print("Training data keys", training_data.keys())
     keys_to_drop = set(training_data.keys()) - set(param_names_global) - {sim_data} - set(inference_conditions)
+    keys_to_drop = list(keys_to_drop) 
     
     adapter = (
         bf.adapters.Adapter()
