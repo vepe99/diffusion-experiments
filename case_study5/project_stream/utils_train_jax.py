@@ -339,3 +339,12 @@ class AugmentationsClass:
     @partial(jit, static_argnums=(0,))
     def _apply_obs_error_jit(self, sim_data, errors):
         return sim_data.at[:, :, :5].add(errors)
+
+    @partial(jit, static_argnums=(0,))
+    def flip_dirz(self, batch):
+        dirz = batch['dirz_Triaxial_rotated_halo']
+        mask = dirz < 0
+        batch['dirz_Triaxial_rotated_halo'] = jnp.where(mask, -dirz, dirz)
+        batch['dirx_Triaxial_rotated_halo'] = jnp.where(mask, -batch['dirx_Triaxial_rotated_halo'], batch['dirx_Triaxial_rotated_halo'])
+        batch['diry_Triaxial_rotated_halo'] = jnp.where(mask, -batch['diry_Triaxial_rotated_halo'], batch['diry_Triaxial_rotated_halo'])
+        return batch

@@ -35,6 +35,7 @@ class EvalConfig:
     model_dir: str
     results_dir: str
     multistream_n_simulation: int
+    use_streamax_simulator: bool #this will generate q from dirx, diry, dirz
 
     #evalutation hyperparameters
     n_samples: int

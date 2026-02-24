@@ -1,8 +1,8 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_streamax/"
-model_dir: "models/model_streamax_simple_100_epochs/"
-multistream_n_simulation: 100
-results_dir: "plots/plots_streamax_simple_100_epochs/"
+model_dir: "models/model_streamax_100_epochs_onlyhalo/"
+multistream_n_simulation: 1000
+results_dir: "plots/plots_streamax_100_epochs_onlyhalo/"
 use_streamax_simulator: True
 
 #training hyperparameters

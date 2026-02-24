@@ -1,12 +1,12 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
-data_dir: "streams/data_streamax_new/"
+data_dir: "streams/data_streamax/"
 N_simulations: 1_000_000
-results_dir: "models/model_streamax_obserr_500_epochs/"
+results_dir: "models/model_streamax_3000_epochs/"
 test: False
 
 #training hyperparameters
-n_epochs: 500
-batch_size: 512
+n_epochs: 3000
+batch_size: 2048
 learning_rate: 0.01
 weight_decay: 0.0001 #not used
 lr_scheduler_step_size: 10 #not used
@@ -42,6 +42,7 @@ paramater_global_pretty:
   - "$\\hat{z}_{NFW}$"
   - "$M_{MN}$"
   - "$r_{MN}$"
+  - "$M_{bulge}$"
 
 parameter_local_pretty:
   - "$M_{prog}$"
@@ -92,6 +93,7 @@ augmentations:
   - "sample_magnitudes"
   - "sample_obs_error"
   - "apply_obs_error"
+  - "flip_dirz"
 
 #global model network:
 global_model:

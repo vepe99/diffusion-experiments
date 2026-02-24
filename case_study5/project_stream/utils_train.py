@@ -286,8 +286,11 @@ class AugmentationsClass:
         #     ax_rp3.legend()
         #     fig_ra_parallax.savefig(os.path.join(self.cfg.base_dir, self.cfg.results_dir, 'apply_obs_error_ra_parallax_test.pdf'))
         return batch
-        
-        
-        
-
-
+    
+    def flip_dirz(self, batch):
+        dirz = batch['dirz_Triaxial_rotated_halo']
+        mask = dirz < 0
+        batch['dirz_Triaxial_rotated_halo'][mask] *= -1
+        batch['dirx_Triaxial_rotated_halo'][mask] *= -1
+        batch['diry_Triaxial_rotated_halo'][mask] *= -1
+        return batch

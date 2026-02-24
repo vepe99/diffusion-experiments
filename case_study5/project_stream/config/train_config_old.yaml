@@ -95,6 +95,7 @@ augmentations:
   - "sample_magnitudes"
   - "sample_obs_error"
   - "apply_obs_error"
+  - "flip_dirz"
 
 #global model network:
 global_model:

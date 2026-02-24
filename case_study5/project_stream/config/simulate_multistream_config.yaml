@@ -111,17 +111,17 @@ priors_global: #str for the type and a list of values for the parameters of the 
 
   #DISK in MW2014
   m_disk_MW2014:
-    type: identity
+    type: uniform
     prior_parameters: [3.25e10, 13.0e10] #[6.5e10]  #[6.5e10/2, 6.5e10*2]
   r_disk_MW2014:
-    type: identity
+    type: uniform
     prior_parameters: [1.5, 6.0] #[3.0]
   z_disk_MW2014:
     type: identity
     prior_parameters: [0.28]
   #BULGE in MW2014
   m_bulge:
-    type: identity
+    type: uniform
     prior_parameters: [2250682687.532725, 9002730750.1309] #[4501365375.06545/2, 4501365375.06545*2] #[4501365375.06545]
   alpha_bulge:
     type: identity
