@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Optional, Union
 from dataclasses import dataclass, field
 
 
@@ -44,7 +44,7 @@ class EvalConfig:
     max_steps: int
     mini_batch_size: Optional[int]
     batch_size: int
-    inverse_compositional_bridge_d1: Optional[int]
+    inverse_compositional_bridge_d1: Optional[Union[int, float]]
     
     verbose: int
 
