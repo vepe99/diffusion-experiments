@@ -1,12 +1,12 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_streamax/"
 N_simulations: 1_000_000
-results_dir: "models/model_streamax_3000_epochs/"
+results_dir: "models/model_streamax_1000_epochs/"
 test: False
 
 #training hyperparameters
-n_epochs: 3000
-batch_size: 2048
+n_epochs: 1000
+batch_size: 1024
 learning_rate: 0.01
 weight_decay: 0.0001 #not used
 lr_scheduler_step_size: 10 #not used

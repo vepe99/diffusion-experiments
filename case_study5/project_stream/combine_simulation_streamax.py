@@ -171,6 +171,7 @@ if __name__ == "__main__":
     base_directory = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_streamax/"
     
     subfolders = ["data_streamax_1", "data_streamax_2", "data_streamax_3"]
+    # subfolders = ["data_streamax_validation"]
     # Infer N_simulations_per_folder from the number of .npz files in each subfolder
     N_simulations_per_folder = []
     cumulative = 0
@@ -200,5 +201,6 @@ if __name__ == "__main__":
     )
     
     save_path = os.path.join(base_directory, f"training_data_{N_total}.npz")
+    # save_path = os.path.join(base_directory, f"validation_data_{N_total}.npz")
     np.savez(save_path, **data_dict)
     print(f"Saved to {save_path}")

@@ -1,10 +1,10 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams"
-data_dir: "data_streamax/data_streamax_3"
+data_dir: "data_streamax/data_streamax_validation/"
 simulator: "StreaMax" #odisseo, gala, galax, StreaMax
 # n_simulations: [0, 333_333] #[333_333, 666_666] #[666_666, 1_000_000] #
 # n_simulations: [333_333, 666_666]
-n_simulations: [666_666, 1_000_000]
-# n_simulations: [0, 1024]
+# n_simulations: [666_666, 1_000_000]
+n_simulations: [0, 1000]
 batch_size: 512
 use_rotated_halo: True
 

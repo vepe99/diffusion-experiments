@@ -62,7 +62,9 @@ def main(cfg: TrainConfig):
                                                         "widths": [cfg.global_model.inference_mlp_width] * cfg.global_model.inference_mlp_depth,
                                                         "time_embedding_dim": cfg.global_model.inference_time_embedding_dim,
                                                         }),
-        standardize=["inference_variables", "summary_variables"]
+        standardize=["inference_variables", "summary_variables"],
+        checkpoint_filepath = model_path,
+        checkpoint_name = "checkpoint_global_model.keras",
     )
     
 
@@ -83,6 +85,8 @@ def main(cfg: TrainConfig):
         augmentations.append(augmentations_class.observational_window)
     if "observed_n_stars" in cfg.augmentations:
         augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
+    if "flip_dirz" in cfg.augmentations:
+        augmentations.append(augmentations_class.flip_dirz)
 
     
     if cfg.test:
