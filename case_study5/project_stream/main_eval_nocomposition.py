@@ -59,14 +59,15 @@ def main(cfg: EvalConfig):
     sim_data = str(cfg.sim_data)
     inference_conditions = str(cfg.inference_conditions[0])
     test_data_path = os.path.join(cfg.base_dir, cfg.data_dir, f'simulation_multistream_{cfg.multistream_n_simulation}.npz')
+    # test_data_path = '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_streamax/validation_data_1000.npz'
     print('Loading test data from ', test_data_path)
     test_data = dict(np.load(test_data_path, allow_pickle=True))
     keys_to_drop = set(test_data.keys()) - set(param_names_global) - {sim_data} - set(inference_conditions)
     keys_to_drop = list(keys_to_drop) 
     # we need to subsample 
-    num_index_testset = len(test_data[cfg.sim_data])
-    shuffled_index = np.random.permutation(np.arange(num_index_testset))
-    subssample_shuffled_index = shuffled_index[::len(cfg.target_streams.keys())]
+    # num_index_testset = len(test_data[cfg.sim_data])
+    # shuffled_index = np.random.permutation(np.arange(num_index_testset))
+    # subssample_shuffled_index = shuffled_index[::len(cfg.target_streams.keys())]
     # for k in test_data.keys():
     #     test_data[k] = test_data[k][subssample_shuffled_index]
     # print('We randomly subsample the test set to:', len(subssample_shuffled_index))
@@ -131,8 +132,6 @@ def main(cfg: EvalConfig):
     print('Test data sim shape before augmentation: ', test_data[cfg.sim_data].shape)
     for aug in augmentations:
         test_data = aug(test_data)
-    # test_data[cfg.sim_data] = test_data[cfg.sim_data].reshape(-1, len(cfg.target_streams.keys()), test_data[cfg.sim_data].shape[-2], test_data[cfg.sim_data].shape[-1])
-    # test_data['j'] = test_data['j'].reshape(-1,len(cfg.target_streams.keys()), 1)
     for k in cfg.parameters_global:
         test_data[k] = np.repeat(test_data[k], 3, axis=0).reshape(-1, 1)
     print('Test data sim shape after augmentation: ', test_data[cfg.sim_data].shape)
