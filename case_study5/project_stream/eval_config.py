@@ -45,6 +45,7 @@ class EvalConfig:
     mini_batch_size: Optional[int]
     batch_size: int
     inverse_compositional_bridge_d1: Optional[Union[int, float]]
+    noise_schedule: Optional[dict]
     
     verbose: int
 

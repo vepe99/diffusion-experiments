@@ -1,16 +1,23 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
-data_dir: "streams/data_galax/"
-N_simulations: 300_000
-results_dir: "models/model_galax_observational_errors_hyperparam_8heads_2000_epochs_newbox/"
-test: False
+data_dir: "streams/data_multistream_galax/"
+model_dir: "models/model_galax_concatenate_500/"
+multistream_n_simulation: 1000
+results_dir: "plots/plots_galax_concatenate_500_nocomposition/"
+use_streamax_simulator: False
 
 #training hyperparameters
-n_epochs: 2500
-batch_size: 128
-learning_rate: 0.01
-weight_decay: 0.0001 #not used
-lr_scheduler_step_size: 10 #not used
-lr_scheduler_gamma: 0.1 #not used
+n_samples: 1000
+method: "two_step_adaptive"
+steps: "adaptive"
+max_steps: 1000
+mini_batch_size: null
+batch_size: 50
+inverse_compositional_bridge_d1: 1.7
+noise_schedule: null 
+  # min_log_snr: -15
+  # max_log_snr: 15
+  # shift: 10
+  # weighting: "sigmoid"
 verbose: 2
 
 #nmes of parameters
@@ -34,7 +41,6 @@ parameters_local:
   - "r"
   - "mu_ra_cosdec"
   - "mu_dec"
-
 #names for printing
 paramater_global_pretty:
   - "$M_{NFW}$"
@@ -46,6 +52,7 @@ paramater_global_pretty:
   - "$\\rho_k$"
   - "$h_k$"
   - "$z_k$"
+
 parameter_local_pretty:
   - "$M_{prog}$"
   - "$a_{prog}$"
@@ -54,7 +61,7 @@ parameter_local_pretty:
   - "$\\mu_{\\alpha*}$"
   - "$\\mu_{\\delta}$"
 
-# Augmentations
+#Augmentations
 target_streams:
   Pal5: 0 #this is the j index
   NGC3201: 1
@@ -95,19 +102,16 @@ augmentations:
   - "sample_magnitudes"
   - "sample_obs_error"
   - "apply_obs_error"
-  - "flip_dirz"
+  # - "flip_dirz"
+  - "concatentate_sigma_error_to_sim_data"
+  - "concatenate_magnitudes_to_sim_data"
+  - "concatenate_j_to_sim_data"
 
 #global model network:
 global_model:
   dropout: 0.1
-  summary_dim: 35
-  embed_dims: 90
+  summary_dim: 64
   num_heads: 2
-  mlp_depths: 2
-  mlp_widths: 45
-  inference_mlp_depth: 7
-  inference_mlp_width: 375
-  inference_time_embedding_dim: 64
 
 #local model network:
 local_model:

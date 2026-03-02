@@ -1,18 +1,16 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
-data_dir: "streams/data_multistream_streamax/"
-model_dir: "models/model_streamax_100_epochs_onlyhalo/"
-multistream_n_simulation: 1000
-results_dir: "plots/plots_streamax_100_epochs_onlyhalo/"
-use_streamax_simulator: True
+data_dir: "streams/data_streamax/"
+N_simulations: 1_000_000
+results_dir: "models/model_streamax_conctenate_jax_500epochs/"
+test: False
 
 #training hyperparameters
-n_samples: 1_000
-method: "two_step_adaptive"
-steps: "adaptive"
-max_steps: 1000
-mini_batch_size: null
-batch_size: 10
-inverse_compositional_bridge_d1: 3
+n_epochs: 500
+batch_size: 350
+learning_rate: 0.01
+weight_decay: 0.0001 #not used
+lr_scheduler_step_size: 10 #not used
+lr_scheduler_gamma: 0.1 #not used
 verbose: 2
 
 #nmes of parameters
@@ -54,7 +52,7 @@ parameter_local_pretty:
   - "$\\mu_{\\alpha*}$"
   - "$\\mu_{\\delta}$"
 
-#Augmentations
+# Augmentations
 target_streams:
   Pal5: 0 #this is the j index
   NGC3201: 1
@@ -96,12 +94,21 @@ augmentations:
   - "sample_obs_error"
   - "apply_obs_error"
   - "flip_dirz"
+  - "concatentate_sigma_error_to_sim_data"
+  - "concatenate_magnitudes_to_sim_data"
+  - "concatenate_j_to_sim_data"
 
 #global model network:
 global_model:
   dropout: 0.1
-  summary_dim: 64
+  summary_dim: 35
+  embed_dims: 90
   num_heads: 2
+  mlp_depths: 2
+  mlp_widths: 45
+  inference_mlp_depth: 7
+  inference_mlp_width: 375
+  inference_time_embedding_dim: 64
 
 #local model network:
 local_model:

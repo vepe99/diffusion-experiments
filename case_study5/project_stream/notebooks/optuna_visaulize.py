@@ -26,6 +26,12 @@ def _():
 
     fig = plot_param_importances(study, target=lambda t: t.values[1], target_name="Calibration Error")
     fig.show()
+
+    return
+
+
+@app.cell
+def _():
     return
 
 

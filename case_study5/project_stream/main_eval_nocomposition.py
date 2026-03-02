@@ -2,7 +2,7 @@ from autocvd import autocvd
 autocvd(num_gpus = 1)
 import os
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
-# os.environ["CUDA_VISIBLE_DEVICES"] = "7"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 import yaml
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -22,53 +22,19 @@ import logging
 logging.getLogger('bayesflow').setLevel(logging.DEBUG)
 
 from eval_config import EvalConfig
-from utils_train import AugmentationsClass #we will need to use the augmentations on the test_set
+from utils_train_jax import AugmentationsClass #we will need to use the augmentations on the test_set
 
 
 cs = ConfigStore.instance()
 cs.store(name="eval_config", node=EvalConfig)
 
+@hydra.main(version_base=None, config_path="config", config_name="eval_config",)
+def main(cfg: EvalConfig):
 
-# def find_1600(model_path):
-#     import zipfile
-#     import json
-
-#     with zipfile.ZipFile(model_path, 'r') as z:
-#         config_str = z.read('config.json').decode('utf-8')
-
-#     # Find all occurrences of 1600 with context
-#     lines = config_str.replace(',', ',\n').replace('{', '{\n').replace('}', '\n}')
-#     for i, line in enumerate(lines.split('\n')):
-#         if '1600' in line:
-            # print(f"Line {i}: {line.strip()}")
-
-# def print_kerasmodel(model_path):
-#     import zipfile
-#     import json
-
-#     def print_all_keys(obj, path="root", file=None):
-#         if isinstance(obj, dict):
-#             for key, value in obj.items():
-#                 current_path = f"{path}.{key}"
-#                 line = f"{current_path} : {repr(value) if not isinstance(value, (dict, list)) else ''}\n"
-#                 file.write(line)
-#                 print_all_keys(value, current_path, file)
-#         elif isinstance(obj, list):
-#             for i, item in enumerate(obj):
-#                 print_all_keys(item, f"{path}[{i}]", file)
-
-#     with zipfile.ZipFile(model_path, 'r') as z:
-#         config_str = z.read('config.json').decode('utf-8')
-#         config = json.loads(config_str)
-
-#     output_path = model_path.replace('.keras', '_config_dump.txt')
-#     with open(output_path, 'w') as f:
-#         print_all_keys(config, file=f)
-
-#     print(f"Config dumped to {output_path}")
-
-
-def fix_keras_model(model_path, ):
+    print(cfg)
+    print("##############")
+    model_path = os.path.join(cfg.base_dir, cfg.model_dir, 'global_model.keras' )
+    # Fix ArrayImpl serialization issue in the .keras file
     import zipfile
     import json
     fixed_model_path = model_path.replace('.keras', '_fixed.keras')
@@ -86,18 +52,7 @@ def fix_keras_model(model_path, ):
                         data = config_str.encode('utf-8')
                     zout.writestr(item, data)
         print(f"Created fixed model at {fixed_model_path}")
-    return fixed_model_path
-
-
-
-@hydra.main(version_base=None, config_path="config", config_name="eval_config",)
-def main(cfg: EvalConfig):
-
-    print(cfg)
-    print("##############")
-    model_path = os.path.join(cfg.base_dir, cfg.model_dir, 'global_model.keras' )
-    # Fix ArrayImpl serialization issue in the .keras fil
-    model_path = fix_keras_model(model_path, )
+    model_path = fixed_model_path
     print('Loading model from ', model_path)
     print("##############")
     param_names_global = list(cfg.parameters_global)
@@ -108,7 +63,14 @@ def main(cfg: EvalConfig):
     test_data = dict(np.load(test_data_path, allow_pickle=True))
     keys_to_drop = set(test_data.keys()) - set(param_names_global) - {sim_data} - set(inference_conditions)
     keys_to_drop = list(keys_to_drop) 
-
+    # we need to subsample 
+    num_index_testset = len(test_data[cfg.sim_data])
+    shuffled_index = np.random.permutation(np.arange(num_index_testset))
+    subssample_shuffled_index = shuffled_index[::len(cfg.target_streams.keys())]
+    # for k in test_data.keys():
+    #     test_data[k] = test_data[k][subssample_shuffled_index]
+    # print('We randomly subsample the test set to:', len(subssample_shuffled_index))
+    # print('Sim data after subsampling: ', test_data[cfg.sim_data].shape)
 
     adapter = (
         bf.adapters.Adapter()
@@ -157,16 +119,24 @@ def main(cfg: EvalConfig):
         augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
     if "flip_dirz" in cfg.augmentations:
         augmentations.append(augmentations_class.flip_dirz)
+    if "concatentate_sigma_error_to_sim_data" in cfg.augmentations:
+        augmentations.append(augmentations_class.concatentate_sigma_error_to_sim_data)
+    if "concatenate_magnitudes_to_sim_data" in cfg.augmentations:
+        augmentations.append(augmentations_class.concatenate_magnitudes_to_sim_data)
+    if "concatenate_j_to_sim_data" in cfg.augmentations:
+        augmentations.append(augmentations_class.concatenate_j_to_sim_data)
 
     test_data[cfg.sim_data] = test_data[cfg.sim_data].reshape(-1, test_data[cfg.sim_data].shape[-2], test_data[cfg.sim_data].shape[-1])
     test_data['j'] = test_data['j'].reshape(-1, 1)
     print('Test data sim shape before augmentation: ', test_data[cfg.sim_data].shape)
     for aug in augmentations:
         test_data = aug(test_data)
-    test_data[cfg.sim_data] = test_data[cfg.sim_data].reshape(-1, len(cfg.target_streams.keys()), test_data[cfg.sim_data].shape[-2], test_data[cfg.sim_data].shape[-1])
-    test_data['j'] = test_data['j'].reshape(-1,len(cfg.target_streams.keys()), 1)
+    # test_data[cfg.sim_data] = test_data[cfg.sim_data].reshape(-1, len(cfg.target_streams.keys()), test_data[cfg.sim_data].shape[-2], test_data[cfg.sim_data].shape[-1])
+    # test_data['j'] = test_data['j'].reshape(-1,len(cfg.target_streams.keys()), 1)
+    for k in cfg.parameters_global:
+        test_data[k] = np.repeat(test_data[k], 3, axis=0).reshape(-1, 1)
     print('Test data sim shape after augmentation: ', test_data[cfg.sim_data].shape)
-    print('Test data keys: ', test_data.keys())
+    print('Test data keys shape: ', [test_data[k].shape for k in test_data.keys()])
     print('Test data attention mask shape: ', test_data['attention_mask'].shape)
     with open(os.path.join(cfg.base_dir, cfg.data_dir, '.hydra', 'config.yaml'), "r") as f:
         test_sim_config = yaml.safe_load(f)
@@ -186,19 +156,18 @@ def main(cfg: EvalConfig):
                 score[k] = -(x[k] - mean) / std**2 
         return score
 
-    logging.info("Starting Partial-Pooling (global) inference...")
+    logging.info("Starting Partial-Pooling (global) inference with no composition...")
     workflow_global.approximator.inference_network.integrate_kwargs.update({
         'method': cfg.method,
         'steps': cfg.steps,
-        'compositional_bridge_d1': 1/cfg.inverse_compositional_bridge_d1,
-        'mini_batch_size': cfg.mini_batch_size,
+        # 'compositional_bridge_d1': 1/cfg.inverse_compositional_bridge_d1,
+        # 'mini_batch_size': cfg.mini_batch_size,
         "max_steps": cfg.max_steps,
         })
-    global_posterior = workflow_global.compositional_sample(
+    global_posterior = workflow_global.sample(
                         num_samples=cfg.n_samples,
                         conditions={cfg.sim_data: test_data[cfg.sim_data], 
                                     "j": test_data["j"]},
-                        compute_prior_score=prior_global_score,
                         batch_size = cfg.batch_size,
                         kwargs={'attention_mask': test_data['attention_mask']},
                         )
@@ -223,7 +192,7 @@ def main(cfg: EvalConfig):
         ps['dirx_Triaxial_rotated_halo'][mask_posterior] *= -1
         ps['diry_Triaxial_rotated_halo'][mask_posterior] *= -1
         
-    np.savez(os.path.join(cfg.base_dir, cfg.results_dir, 'global_posterior.npz'), **ps)
+    np.savez(os.path.join(cfg.base_dir, cfg.results_dir, 'posterior.npz'), **ps)
 
     ###############
     # PLOTS GLOBAL#
@@ -235,11 +204,11 @@ def main(cfg: EvalConfig):
         variable_names=cfg.paramater_global_pretty
         # variable_names = param_names_global
     )
-    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_recovery.pdf'))
-    print('Saved global recovery plot')
+    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'recovery.pdf'))
+    print('Saved recovery plot')
     plt.show()
     #corner plot
-    dataset_id = 0
+    dataset_id = np.array([0])
     fig = bf.diagnostics.plots.pairs_posterior(
         estimates=ps,
         targets=test_data,
@@ -247,8 +216,8 @@ def main(cfg: EvalConfig):
         variable_names=cfg.paramater_global_pretty,
         # variable_names = param_names_global,
     )
-    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'global_cornerplot_datasetid_{dataset_id}.pdf'))
-    print(f'Saved global corner plot for dataset id {dataset_id}')
+    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'cornerplot_datasetid_{dataset_id}.pdf'))
+    print(f'Saved corner plot for dataset id {dataset_id}')
     plt.show()
     #calibration plot
     fig = bf.diagnostics.calibration_ecdf(
@@ -258,8 +227,8 @@ def main(cfg: EvalConfig):
         variable_names=cfg.paramater_global_pretty
         # variable_names = param_names_global
     )
-    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_calibration.pdf'))
-    print('Saved global calibration plot')
+    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'calibration.pdf'))
+    print('Saved calibration plot')
     plt.show()
     #histograms
     global_posterior_stream_1 = {k: ps[k] for k in list(ps.keys())[:4]}
@@ -270,7 +239,7 @@ def main(cfg: EvalConfig):
         variable_names=cfg.paramater_global_pretty[:4]
         # variable_names = param_names_global
     )
-    fig_1.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_histograms_1.pdf'))
+    fig_1.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'histograms_1.pdf'))
     plt.show()
     global_posterior_stream_2 = {k: ps[k] for k in list(ps.keys())[4:]}
     test_data_stream_2 = {k: test_data[k] for k in list(global_posterior_stream_2.keys())}
@@ -280,9 +249,9 @@ def main(cfg: EvalConfig):
         variable_names=cfg.paramater_global_pretty[4:]
         # variable_names = param_names_global
     )
-    fig_2.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_histograms_2.pdf'))
+    fig_2.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'histograms_2.pdf'))
     plt.show()
-    print('Saved global histograms plot')
+    print('Saved histograms plot')
 
     # z_score contraction
     fig = bf.diagnostics.plots.z_score_contraction(
@@ -291,8 +260,8 @@ def main(cfg: EvalConfig):
         variable_names=cfg.paramater_global_pretty
         # variable_names = param_names_global
     )
-    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_z_score_contraction.pdf'))
-    print('Saved global z-score contraction plot')
+    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'z_score_contraction.pdf'))
+    print('Saved z-score contraction plot')
     plt.show()
     
 

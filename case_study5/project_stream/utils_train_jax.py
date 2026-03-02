@@ -309,7 +309,7 @@ class AugmentationsClass:
     def sample_obs_error(self, batch):
         subkey = self._split_key()
         magnitudes = batch["magnitudes"]
-        batch["obs_errors"] = self._sample_obs_error_jit(magnitudes, subkey)
+        batch["obs_errors"], batch["sigma_errors"] = self._sample_obs_error_jit(magnitudes, subkey)
         return batch
 
     @partial(jit, static_argnums=(0,))
@@ -321,14 +321,15 @@ class AugmentationsClass:
             return jnp.interp(magnitudes, mag_bins, vals)
 
         sigmas = jax.vmap(interp_single_quantity)(values)
-
+        
         batch_size, n_particles = magnitudes.shape
         noise = jax.random.normal(key, shape=(5, batch_size, n_particles))
 
         errors = sigmas * noise
         errors = jnp.transpose(errors, (1, 2, 0))
+        sigmas = jnp.transpose(sigmas, (1, 2, 0))
 
-        return errors
+        return errors, sigmas
 
     def apply_obs_error(self, batch):
         batch[self.cfg.sim_data] = self._apply_obs_error_jit(
@@ -347,4 +348,29 @@ class AugmentationsClass:
         batch['dirz_Triaxial_rotated_halo'] = jnp.where(mask, -dirz, dirz)
         batch['dirx_Triaxial_rotated_halo'] = jnp.where(mask, -batch['dirx_Triaxial_rotated_halo'], batch['dirx_Triaxial_rotated_halo'])
         batch['diry_Triaxial_rotated_halo'] = jnp.where(mask, -batch['diry_Triaxial_rotated_halo'], batch['diry_Triaxial_rotated_halo'])
+        return batch
+    
+    @partial(jit, static_argnums=(0,))
+    def concatentate_sigma_error_to_sim_data(self, batch):
+        """
+        Concatenate the sigma_errors to the sim_data, so that the model can use them as input
+        """
+        batch[self.cfg.sim_data] = jnp.concatenate([batch[self.cfg.sim_data], batch["sigma_errors"]], axis=-1)
+        return batch
+    
+    @partial(jit, static_argnums=(0,))
+    def concatenate_magnitudes_to_sim_data(self, batch):
+        """
+        Concatenate the magnitudes to the sim_data, so that the model can use them as input
+        """
+        batch[self.cfg.sim_data] = jnp.concatenate([batch[self.cfg.sim_data], batch["magnitudes"][..., None]], axis=-1)
+        return batch
+    
+    @partial(jit, static_argnums=(0,))
+    def concatenate_j_to_sim_data(self, batch):
+        """
+        Concatenate the j to the sim_data, so that the model can use them as input
+        """
+        j_expanded = jnp.broadcast_to(batch['j'][:, None, :], (batch[self.cfg.sim_data].shape[0], batch[self.cfg.sim_data].shape[1], 1))
+        batch[self.cfg.sim_data] = jnp.concatenate([batch[self.cfg.sim_data], j_expanded], axis=-1)
         return batch

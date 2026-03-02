@@ -205,6 +205,7 @@ class AugmentationsClass:
         """Load Gaia DR3 error table and create interpolation functions."""
         magnitudes = batch["magnitudes"]  # shape (batch_size, n_particles)        
         errors = np.zeros_like(batch[self.cfg.sim_data])  
+        sigma_errors = np.zeros_like(batch[self.cfg.sim_data])
         
         # Get interpolated sigmas
         sigma_ra = self.error_interpolators['ra'](magnitudes)
@@ -212,6 +213,12 @@ class AugmentationsClass:
         sigma_parallax = self.error_interpolators['parallax'](magnitudes)
         sigma_pmra = self.error_interpolators['mu_ra'](magnitudes)
         sigma_pmdec = self.error_interpolators['mu_dec'](magnitudes)
+        sigma_errors[..., 0] = sigma_ra
+        sigma_errors[..., 1] = sigma_dec
+        sigma_errors[..., 2] = sigma_parallax
+        sigma_errors[..., 3] = sigma_pmra
+        sigma_errors[..., 4] = sigma_pmdec
+        batch["sigma_errors"] = sigma_errors
         
         # Sample errors
         errors[..., 0] = np.random.normal(0, sigma_ra)
@@ -219,6 +226,41 @@ class AugmentationsClass:
         errors[..., 2] = np.random.normal(0, sigma_parallax)
         errors[..., 3] = np.random.normal(0, sigma_pmra)
         errors[..., 4] = np.random.normal(0, sigma_pmdec)
+        
+        batch["obs_errors"] = errors
+        return batch
+    
+    def sample_obs_error_6D(self, batch):
+        """
+        Sample the observational error for each of the stream, based on the sampled magnitudes
+        """
+        """Load Gaia DR3 error table and create interpolation functions."""
+        magnitudes = batch["magnitudes"]  # shape (batch_size, n_particles)        
+        errors = np.zeros_like(batch[self.cfg.sim_data])  
+        sigma_errors = np.zeros_like(batch[self.cfg.sim_data])
+        
+        # Get interpolated sigmas
+        sigma_ra = self.error_interpolators['ra'](magnitudes)
+        sigma_dec = self.error_interpolators['dec'](magnitudes)
+        sigma_parallax = self.error_interpolators['parallax'](magnitudes)
+        sigma_pmra = self.error_interpolators['mu_ra'](magnitudes)
+        sigma_pmdec = self.error_interpolators['mu_dec'](magnitudes)
+        sigma_mu_vlos = self.error_interpolators['mu_vlos'](magnitudes)
+        sigma_errors[..., 0] = sigma_ra
+        sigma_errors[..., 1] = sigma_dec
+        sigma_errors[..., 2] = sigma_parallax
+        sigma_errors[..., 3] = sigma_pmra
+        sigma_errors[..., 4] = sigma_pmdec
+        sigma_errors[..., 5] = sigma_mu_vlos
+        batch["sigma_errors"] = sigma_errors
+        
+        # Sample errors
+        errors[..., 0] = np.random.normal(0, sigma_ra)
+        errors[..., 1] = np.random.normal(0, sigma_dec)
+        errors[..., 2] = np.random.normal(0, sigma_parallax)
+        errors[..., 3] = np.random.normal(0, sigma_pmra)
+        errors[..., 4] = np.random.normal(0, sigma_pmdec)
+        errors[..., 5] = np.random.normal(0, sigma_mu_vlos)
         
         batch["obs_errors"] = errors
         return batch
@@ -285,6 +327,28 @@ class AugmentationsClass:
         #     ax_rp2.legend()
         #     ax_rp3.legend()
         #     fig_ra_parallax.savefig(os.path.join(self.cfg.base_dir, self.cfg.results_dir, 'apply_obs_error_ra_parallax_test.pdf'))
+        return batch
+    
+    def concatentate_sigma_error_to_sim_data(self, batch):
+        """
+        Concatenate the sigma_errors to the sim_data, so that the model can use them as input
+        """
+        batch[self.cfg.sim_data] = np.concatenate([batch[self.cfg.sim_data], batch["sigma_errors"]], axis=-1)
+        return batch
+    
+    def concatenate_magnitudes_to_sim_data(self, batch):
+        """
+        Concatenate the magnitudes to the sim_data, so that the model can use them as input
+        """
+        batch[self.cfg.sim_data] = np.concatenate([batch[self.cfg.sim_data], batch["magnitudes"][..., None]], axis=-1)
+        return batch
+    
+    def concatenate_j_to_sim_data(self, batch):
+        """
+        Concatenate the j to the sim_data, so that the model can use them as input
+        """
+        j_expanded = np.broadcast_to(batch['j'][:, None, :], (batch[self.cfg.sim_data].shape[0], batch[self.cfg.sim_data].shape[1], 1))
+        batch[self.cfg.sim_data] = np.concatenate([batch[self.cfg.sim_data], j_expanded], axis=-1)
         return batch
     
     def flip_dirz(self, batch):

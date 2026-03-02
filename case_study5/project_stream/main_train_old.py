@@ -32,19 +32,12 @@ def main(cfg: TrainConfig):
     param_names_global = list(cfg.parameters_global)
     sim_data = str(cfg.sim_data)
     inference_conditions = str(cfg.inference_conditions[0]) #jut 1
-    train_data_path = os.path.join(cfg.base_dir, cfg.data_dir, f"training_data_{cfg.N_simulations}.npz")
-    print("Train data path:", train_data_path)
-    training_data = dict(np.load(train_data_path, allow_pickle=True))
-    # training_data = {k: v[:1_000] for k, v in training_data.items()}
-    print("Training data keys", training_data.keys())
-    keys_to_drop = set(training_data.keys()) - set(param_names_global) - {sim_data} - set(inference_conditions)
-    keys_to_drop = list(keys_to_drop) 
     
     adapter = (
         bf.adapters.Adapter()
         .to_array()
         .convert_dtype("float64", "float32")
-        .drop(keys_to_drop)
+        #.drop(keys not in param_names_global + [sim_data] + inference_conditions)
         .concatenate(param_names_global, into="inference_variables")
         .rename(sim_data, "summary_variables")
         .rename(inference_conditions, "inference_conditions")
@@ -54,19 +47,20 @@ def main(cfg: TrainConfig):
         summary_network=bf.networks.SetTransformer(summary_dim=cfg.global_model.summary_dim, 
                                                    embed_dims=(cfg.global_model.embed_dims, cfg.global_model.embed_dims), 
                                                    num_heads=(cfg.global_model.num_heads, cfg.global_model.num_heads,),
-                                                   mlp_depths=(cfg.global_model.mlp_depths, cfg.global_model.mlp_depths),
-                                                   mlp_widths=(cfg.global_model.mlp_widths, cfg.global_model.mlp_widths),
                                                    dropout=cfg.global_model.dropout),
         inference_network=bf.networks.CompositionalDiffusionModel(
                                                         subnet_kwargs={
                                                         "widths": [cfg.global_model.inference_mlp_width] * cfg.global_model.inference_mlp_depth,
                                                         "time_embedding_dim": cfg.global_model.inference_time_embedding_dim,
-                                                        }),
-        standardize=["inference_variables", "summary_variables"],
-        checkpoint_filepath = model_path,
-        checkpoint_name = "checkpoint_global_model.keras",
+                                                        }
+                                                        ),
+        standardize=["inference_variables", "summary_variables"]
     )
-    
+    train_data_path = os.path.join(cfg.base_dir, cfg.data_dir, f"training_data_{cfg.N_simulations}.npz")
+    print("Train data path:", train_data_path)
+    training_data = dict(np.load(train_data_path, allow_pickle=True))
+    # training_data = {k: v[:30_000] for k, v in training_data.items()}
+    print("Training data keys", training_data.keys())
 
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
@@ -85,8 +79,6 @@ def main(cfg: TrainConfig):
         augmentations.append(augmentations_class.observational_window)
     if "observed_n_stars" in cfg.augmentations:
         augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
-    if "flip_dirz" in cfg.augmentations:
-        augmentations.append(augmentations_class.flip_dirz)
 
     
     if cfg.test:
