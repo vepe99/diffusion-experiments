@@ -817,12 +817,12 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
-    from case_study1.helper_visualize import plot_benchmark_results_plotly
+    # from case_study1.helper_visualize import plot_benchmark_results_plotly
 
-    plotly_df = pd.read_csv(BASE / 'case_study1' / 'plots' / f'plotly_df.csv')
-    plot_benchmark_results_plotly(
-        plotly_df
-    )
+    # plotly_df = pd.read_csv(BASE / 'case_study1' / 'plots' / f'plotly_df.csv')
+    # plot_benchmark_results_plotly(
+    #     plotly_df
+    # )
     return
 
 

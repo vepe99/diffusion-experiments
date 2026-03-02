@@ -7,6 +7,7 @@ dependencies = [
     "autocvd",
     "astropy",
     "amici==0.34.2",
+    "black",
     "colorcet>=3.1.0",
     "fides==0.8.0",
     "fyeldgenerator>=0.1.7",
@@ -35,3 +36,4 @@ dependencies = [
 pypesto = { git = "https://github.com/ICB-DCM/pyPESTO.git", rev = "develop" }
 sbibm = { git = "https://github.com/arrjon/sbibm.git", rev = "dev" }
 bayesflow = { path = "../bayesflow_enviroment/bayesflow", editable = true }
+galstreams = {git = "https://github.com/cmateu/galstreams"}
