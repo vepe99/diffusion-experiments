@@ -273,10 +273,18 @@ def main(cfg: EvalConfig):
         targets=test_data,
         difference=True,
         variable_names=cfg.paramater_global_pretty
-        # variable_names = param_names_global
     )
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_calibration.pdf'))
     print('Saved global calibration plot')
+    plt.show()
+    #calibration plot without diff
+    fig = bf.diagnostics.calibration_ecdf(
+        estimates=ps,
+        targets=test_data,
+        difference=False,
+        variable_names=cfg.paramater_global_pretty
+    )
+    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'calibration_no_diff.pdf'))
     plt.show()
     #histograms
     global_posterior_stream_1 = {k: ps[k] for k in list(ps.keys())[:4]}
