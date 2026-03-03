@@ -256,7 +256,7 @@ def main(cfg: EvalConfig):
     print('Saved global recovery plot')
     plt.show()
     #corner plot
-    dataset_id = 0
+    dataset_id = np.array([0])
     fig = bf.diagnostics.plots.pairs_posterior(
         estimates=ps,
         targets=test_data,

@@ -65,13 +65,13 @@ def main(cfg: EvalConfig):
     keys_to_drop = set(test_data.keys()) - set(param_names_global) - {sim_data} - set(inference_conditions)
     keys_to_drop = list(keys_to_drop) 
     # we need to subsample 
-    # num_index_testset = len(test_data[cfg.sim_data])
-    # shuffled_index = np.random.permutation(np.arange(num_index_testset))
-    # subssample_shuffled_index = shuffled_index[::len(cfg.target_streams.keys())]
-    # for k in test_data.keys():
-    #     test_data[k] = test_data[k][subssample_shuffled_index]
-    # print('We randomly subsample the test set to:', len(subssample_shuffled_index))
-    # print('Sim data after subsampling: ', test_data[cfg.sim_data].shape)
+    num_index_testset = len(test_data[cfg.sim_data])
+    shuffled_index = np.random.permutation(np.arange(num_index_testset))
+    subssample_shuffled_index = shuffled_index[::len(cfg.target_streams.keys())]
+    for k in test_data.keys():
+        test_data[k] = test_data[k][subssample_shuffled_index]
+    print('We randomly subsample the test set to:', len(subssample_shuffled_index))
+    print('Sim data after subsampling: ', test_data[cfg.sim_data].shape)
 
     adapter = (
         bf.adapters.Adapter()

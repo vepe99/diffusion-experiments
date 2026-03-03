@@ -16,7 +16,7 @@ dependencies = [
     "jax[cuda]>=0.7.1",
     "joblib==1.5.2",
     "keras>=3.10",
-    "marimo>=0.18.4",
+    "marimo",
     "matplotlib>=3.10.7",
     "numba>=0.63.1",
     "numpy>=1.26.4",
@@ -30,6 +30,7 @@ dependencies = [
     "tqdm==4.67.1",
     "bayesflow",
     "plotly>=6.5.2",
+    "pyzmq>=27.1.0",
 ]
 
 [tool.uv.sources]

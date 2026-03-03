@@ -62,6 +62,9 @@ class TrainConfig:
     target_streams: dict
     observational_window: dict  
     observed_n_stars: dict
+    min_star_with_vlos: Optional[dict]
+    error_keys: Optional[list]
+    masked_value_vlos: Optional[dict]
     augmentations: Optional[list]
     gaia_id: dict
 
