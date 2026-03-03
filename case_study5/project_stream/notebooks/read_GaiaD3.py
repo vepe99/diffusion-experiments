@@ -48,7 +48,7 @@ def _(gaussian_kde, np, plt, tbl_data, tbl_ids):
         source_id = tbl_ids.loc[tbl_ids['Name'] == name_id, 's_ID'].values[0]
         tbl_subset = tbl_data[tbl_data['Stream'] == source_id]
         print(f'{name_plot}: {len(tbl_subset)} stars')
-        particles[name_plot] = {'Ra': np.array([a for a in tbl_subset['RAdeg']]), 'Dec': np.array([a for a in tbl_subset['DEdeg']]), 'Plx': np.array([a for a in tbl_subset['plx']]), 'PmRA': np.array([a for a in tbl_subset['pmRA']]), 'PmDE': np.array([a for a in tbl_subset['pmDE']]), 'VHel': np.array([a for a in tbl_subset['VHel']]), 'e_VHel': np.array([a for a in tbl_subset['e_VHel']]), 'Gmag': np.array([a for a in tbl_subset['Gmag']])}
+        particles[name_plot] = {'Ra': np.array([a for a in tbl_subset['RAdeg']]), 'Dec': np.array([a for a in tbl_subset['DEdeg']]), 'Plx': np.array([a for a in tbl_subset['plx']]), 'PmRA': np.array([a for a in tbl_subset['pmRA']]), 'PmDE': np.array([a for a in tbl_subset['pmDE']]), 'VHel': np.array([a for a in tbl_subset['VHel']]), 'e_VHel': np.array([a for a in tbl_subset['e_VHel']]), 'Gmag': np.array([a for a in tbl_subset['Gmag']]), 'r_VHel': np.array([a for a in tbl_subset['r_VHel']])}
     _fig = plt.figure(figsize=(15, 5))
     for _i, _name in enumerate(name_to_plot):
         _ax = _fig.add_subplot(1, 3, _i + 1)
@@ -106,33 +106,183 @@ def _(gaussian_kde, np, plt, tbl_data, tbl_ids):
         _ax.set_title(_name)
         _ax.legend()
     plt.tight_layout()  # KDE
+    plt.show()
     return name_to_plot, particles
 
 
 @app.cell
-def _(name_to_plot, np, particles, plt):
-    fig = plt.figure(figsize=(15,3))
-    for i, name in enumerate(name_to_plot):
-        p = particles[name]['VHel']
-        mask = (p==0.0)
-        ax = fig.add_subplot(2, 3, i+1)
-        ax.hist(p[~mask])
-        ax.set_xlabel('$V_r$')
-        ax.set_title(f'{name}')
+def _(name_to_plot, np, particles):
+    surveyid_to_survey = {0: 'no $v_{los}$', 1: 'APOGEE', 2: 'GALAH', 3: 'Gaia RVS', 4: 'LAMOST', 5: 'S5', 6: 'SDSS', 7: 'BOSS', 8: 'ESPaDOnS (this work)', 9: 'AAOmega (from Ibata et al. 2017a [2017ApJ...842..120I])', 10: 'FLAMES (from Ibata et al. 2017a [2017ApJ...842..120I])', 11: 'UVES (from Odenkirchen et al. 2009 [2009AJ....137.3378O])', 12: 'EFOSC (this work)', 13: 'UVES (this work)', 14: 'INT (this work)', 15: 'Yuan et al. 2022a [2022MNRAS.514.1664Y]', 16: 'Li et al. 2021 [2021ApJ...911..149L]', 17: 'Caldwell et al. 2020 [2020AJ....159..287C]', 18: 'Li et al. 2018b [2018ApJ...866...22L]', 19: 'Koposov et al. 2018 [2018MNRAS.479.5343K]', 20: 'Li et al. 2018a [2018ApJ...869..122L]', 21: 'Simon et al. 2020 [2020ApJ...892..137S]', 22: 'Walker et al. 2015 [2015ApJ...808..108W]', 23: 'VIZIER', 24: 'GES', 25: 'DESI', 47: 'not known'}
+    for _name in name_to_plot:
+        print(f'{_name} survey and counts:')
+        r_vhel = particles[_name]['r_VHel']
+        survey_id, count = np.unique(r_vhel, return_counts=True)
+        print('survey_id: ', [surveyid_to_survey[s] for s in survey_id])
+        print('survey count: ', count)
+    from collections import defaultdict
+    survey_counts = defaultdict(int)
+    for _name in name_to_plot:
+        r_vhel = particles[_name]['r_VHel']
+        survey_ids, counts = np.unique(r_vhel, return_counts=True)
+        for sid, c in zip(survey_ids, counts):
+            survey_name = surveyid_to_survey.get(int(sid), f'survey_{int(sid)}')
+            survey_counts[survey_name] = survey_counts[survey_name] + int(c)
+    survey_counts = dict(survey_counts)
+    print(survey_counts)
+    return (surveyid_to_survey,)
 
-    for i, name in enumerate(name_to_plot):
-        p = particles[name]['VHel']
-        err_p = particles[name]['e_VHel']
-        mask = (p==0.0)
-        p = p[~mask]
-        err_p = err_p[~mask]
-        sorted_index = np.argsort(p)
-        ax = fig.add_subplot(2, 3, i+4)
-        ax.errorbar(range(len(p[sorted_index])), p[sorted_index], err_p[sorted_index])
-        ax.set_xlabel('$V_r$')
-    
+
+@app.cell
+def _(name_to_plot, particles, plt):
+    # We want to know from where the Vhel are coming from 
+    _fig = plt.figure(figsize=(15, 15))
+    for _name in name_to_plot:
+        v_los = particles[_name]['VHel']
+        mask_vlos = v_los == 0.0
+        e_vhel = particles[_name]['e_VHel']
+        magnitude = particles[_name]['Gmag']
+        _ax = _fig.add_subplot(3, 3, name_to_plot.index(_name) + 1)
+        _ax.errorbar(magnitude[~mask_vlos], v_los[~mask_vlos], yerr=e_vhel[~mask_vlos], fmt='.')
+        _ax.set_xlabel('G [mag]')
+        _ax.set_ylabel('v_los [km/s]')
+        _ax.set_title(_name)
+    for _name in name_to_plot:
+        v_los = particles[_name]['VHel']
+        mask_vlos = v_los == 0.0
+        e_vhel = particles[_name]['e_VHel']
+        magnitude = particles[_name]['Gmag']
+        _ax = _fig.add_subplot(3, 3, name_to_plot.index(_name) + 4)
+        _ax.scatter(magnitude[~mask_vlos], e_vhel[~mask_vlos])
+        _ax.set_xlabel('G [mag]')
+        _ax.set_ylabel('e_vhel [km/s]')
+        _ax.set_title(_name)
+    for _name in name_to_plot:
+        v_los = particles[_name]['VHel']
+        mask_vlos = v_los == 0.0
+        e_vhel = particles[_name]['e_VHel']
+        _ax = _fig.add_subplot(3, 3, name_to_plot.index(_name) + 7)
+        _ax.hist(e_vhel[~mask_vlos])
+        _ax.set_xlabel('e_vhel [km/s]')
     plt.show()
-    
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    # Looking for $err_{v_{los}}(mag)$
+    """)
+    return
+
+
+@app.cell
+def _(tbl_data_pandas):
+    tbl_data_pandas['Gmag'].values.flatten()
+    return
+
+
+@app.cell
+def _(tbl_data):
+    tbl_data_pandas = tbl_data.to_pandas()
+
+    tbl_data_pandas = tbl_data_pandas[tbl_data_pandas['r_VHel']!=0]
+    tbl_data_pandas.head()
+
+    # ...existing code...
+    # fig = plt.figure()
+    # ax = fig.add_subplot(1, 1, 1)
+
+    # for r_vhel_id, group in tbl_data_pandas.groupby('r_VHel'):
+    #     ax.scatter(group['Gmag'], group['e_VHel'], label=str(r_vhel_id))
+
+    # ax.set_xlabel('Gmag')
+    # ax.set_ylabel('e_Vhel')
+    # ax.legend(title='r_VHel')
+    # ...existing code...
+
+    return (tbl_data_pandas,)
+
+
+@app.cell
+def _(plt, surveyid_to_survey, tbl_data_pandas):
+    unique_labels = tbl_data_pandas['r_VHel'].unique()
+    n_labels = len(unique_labels)
+
+    fig, axes = plt.subplots(nrows=5, ncols=6, figsize=(18, 12), sharex=True, sharey=True)
+    axes = axes.flatten()
+
+    for ax, r_vhel_id in zip(axes, unique_labels):
+        group = tbl_data_pandas[tbl_data_pandas['r_VHel'] == r_vhel_id]
+        ax.scatter(group['Gmag'], group['e_VHel'])
+        ax.set_title(f'{surveyid_to_survey[r_vhel_id]}')
+        ax.set_xlabel('Gmag')
+        ax.set_ylabel('e_VHel')
+
+    # Hide any unused axes if n_labels < 30
+    for ax in axes[n_labels:]:
+        ax.set_visible(False)
+
+    plt.tight_layout()
+    plt.show()
+    return
+
+
+@app.cell
+def _(np, pd, tbl_data_pandas):
+
+
+    mag_bins = np.array([9, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21])
+    tbl_data_pandas['mag_bin'] = pd.cut(tbl_data_pandas['Gmag'], bins=mag_bins, right=False)
+
+    median_e_VHel_per_bin = tbl_data_pandas.groupby('mag_bin')['e_VHel'].median()
+    std_e_VHel_per_bin = tbl_data_pandas.groupby('mag_bin')['e_VHel'].std()
+
+    print('Median e_VHel')
+    print(median_e_VHel_per_bin)
+    print('Std e_VHel')
+    print(std_e_VHel_per_bin)
+    return median_e_VHel_per_bin, std_e_VHel_per_bin
+
+
+@app.cell
+def _(median_e_VHel_per_bin, np, plt, std_e_VHel_per_bin, tbl_data_pandas):
+    # Get bin centers for plotting
+    bin_centers = [interval.left + (interval.right - interval.left)/2 for interval in median_e_VHel_per_bin.index]
+
+    fig1, ax1 = plt.subplots(figsize=(8, 6))
+
+    # Scatter plot of all data
+    ax1.scatter(tbl_data_pandas['Gmag'], tbl_data_pandas['e_VHel'], alpha=0.3, label='Stars')
+
+    # Plot median line
+    ax1.plot(bin_centers, median_e_VHel_per_bin.values, color='red', marker='o', label='Median e_VHel per bin')
+
+    # Plot filled error bars (standard deviation)
+    lower = np.maximum(median_e_VHel_per_bin.values - std_e_VHel_per_bin.values, 0)
+    upper = median_e_VHel_per_bin.values + std_e_VHel_per_bin.values
+
+    ax1.fill_between(
+        bin_centers,
+        lower,
+        upper,
+        color='red',
+        alpha=0.2,
+        label='Std Dev'
+    )
+
+    ax1.set_xlabel('Gmag')
+    ax1.set_ylabel('e_VHel')
+    # ax1.set_yscale('log')
+    ax1.legend()
+    plt.show()
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # Galstreams
+    """)
     return
 
 

@@ -1,8 +1,8 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_streamax/"
-model_dir: "models/model_streamax_conctenate_jax_500epochs/"
-multistream_n_simulation: 100
-results_dir: "plots/plots_streamax_conctenate_jax_500epochs_nocomposition/"
+model_dir: "models/model_streamax_concatenation_500_highestcalibration/"
+multistream_n_simulation: 1000
+results_dir: "plots/plots_streamax_concatenation_500_highestcalibration/"
 use_streamax_simulator: True
 
 #training hyperparameters
@@ -11,7 +11,7 @@ method: "two_step_adaptive"
 steps: "adaptive"
 max_steps: 1000
 mini_batch_size: null
-batch_size: 15
+batch_size: 30
 inverse_compositional_bridge_d1: 3
 noise_schedule: null 
   # min_log_snr: -15
@@ -86,6 +86,11 @@ observed_n_stars:
   Pal5: 129
   NGC3201: 607
   M68: 297
+
+min_star_with_vlos:
+  Pal5: 69
+  NGC3201: 40
+  M68: 29
 
 gaia_id:
   Pal5: "Pal-5"
