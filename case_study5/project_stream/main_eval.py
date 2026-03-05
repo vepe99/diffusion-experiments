@@ -29,43 +29,23 @@ cs = ConfigStore.instance()
 cs.store(name="eval_config", node=EvalConfig)
 
 
-# def find_1600(model_path):
-#     import zipfile
-#     import json
 
-#     with zipfile.ZipFile(model_path, 'r') as z:
-#         config_str = z.read('config.json').decode('utf-8')
-
-#     # Find all occurrences of 1600 with context
-#     lines = config_str.replace(',', ',\n').replace('{', '{\n').replace('}', '\n}')
-#     for i, line in enumerate(lines.split('\n')):
-#         if '1600' in line:
-            # print(f"Line {i}: {line.strip()}")
-
-# def print_kerasmodel(model_path):
-#     import zipfile
-#     import json
-
-#     def print_all_keys(obj, path="root", file=None):
-#         if isinstance(obj, dict):
-#             for key, value in obj.items():
-#                 current_path = f"{path}.{key}"
-#                 line = f"{current_path} : {repr(value) if not isinstance(value, (dict, list)) else ''}\n"
-#                 file.write(line)
-#                 print_all_keys(value, current_path, file)
-#         elif isinstance(obj, list):
-#             for i, item in enumerate(obj):
-#                 print_all_keys(item, f"{path}[{i}]", file)
-
-#     with zipfile.ZipFile(model_path, 'r') as z:
-#         config_str = z.read('config.json').decode('utf-8')
-#         config = json.loads(config_str)
-
-#     output_path = model_path.replace('.keras', '_config_dump.txt')
-#     with open(output_path, 'w') as f:
-#         print_all_keys(config, file=f)
-
-#     print(f"Config dumped to {output_path}")
+def _patch_build_config_batch_size(obj, new_batch_size=2):
+    """Recursively walk a deserialized config dict and replace the first
+    element (batch size) of any 'input_shape' list inside a 'build_config'
+    with `new_batch_size`, so that the model can be loaded on a smaller GPU."""
+    if isinstance(obj, dict):
+        if "build_config" in obj and isinstance(obj["build_config"], dict):
+            bc = obj["build_config"]
+            if "input_shape" in bc and isinstance(bc["input_shape"], list):
+                shape = bc["input_shape"]
+                if len(shape) >= 1 and isinstance(shape[0], int) and shape[0] > new_batch_size:
+                    shape[0] = new_batch_size
+        for v in obj.values():
+            _patch_build_config_batch_size(v, new_batch_size)
+    elif isinstance(obj, list):
+        for item in obj:
+            _patch_build_config_batch_size(item, new_batch_size)
 
 
 def fix_keras_model(model_path, ):
@@ -87,6 +67,26 @@ def fix_keras_model(model_path, ):
                     zout.writestr(item, data)
         print(f"Created fixed model at {fixed_model_path}")
     return fixed_model_path
+    # fixed_model_path = model_path.replace('.keras', '_fixed.keras')
+    # if not os.path.exists(fixed_model_path):
+    #     with zipfile.ZipFile(model_path, 'r') as zin:
+    #         with zipfile.ZipFile(fixed_model_path, 'w') as zout:
+    #             for item in zin.infolist():
+    #                 data = zin.read(item.filename)
+    #                 if item.filename == 'config.json':
+    #                     config_str = data.decode('utf-8')
+    #                     config_str = config_str.replace(
+    #                         '__bayesflow_type__ArrayImpl',
+    #                         '__bayesflow_type__ndarray'
+    #                     )
+    #                     # Patch build_config to use batch_size=1 to avoid OOM during model loading
+    #                     config_json = json.loads(config_str)
+    #                     _patch_build_config_batch_size(config_json, new_batch_size=2)
+    #                     config_str = json.dumps(config_json)
+    #                     data = config_str.encode('utf-8')
+    #                 zout.writestr(item, data)
+    #     print(f"Created fixed model at {fixed_model_path}")
+    # return fixed_model_path
 
 
 
@@ -166,12 +166,16 @@ def main(cfg: EvalConfig):
         augmentations.append(augmentations_class.observational_window)
     if "observed_n_stars" in cfg.augmentations:
         augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
+    if "mask_vlos" in cfg.augmentations:
+        augmentations.append(augmentations_class.mask_vlos)
     if "flip_dirz" in cfg.augmentations:
         augmentations.append(augmentations_class.flip_dirz)
     if "concatentate_sigma_error_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatentate_sigma_error_to_sim_data)
     if "concatenate_magnitudes_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatenate_magnitudes_to_sim_data)
+    if "concatenate_vlos_mask_to_sim_data" in cfg.augmentations:
+        augmentations.append(augmentations_class.concatenate_vlos_mask_to_sim_data)
     if "concatenate_j_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatenate_j_to_sim_data)
 
@@ -252,6 +256,10 @@ def main(cfg: EvalConfig):
         variable_names=cfg.paramater_global_pretty
         # variable_names = param_names_global
     )
+    for ax in fig.get_axes():
+        ax.grid(False)
+        for txt in ax.texts:
+            txt.set_bbox(dict(facecolor='white', alpha=0.7, edgecolor='black', boxstyle='round,pad=0.3'))
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_recovery.pdf'))
     print('Saved global recovery plot')
     plt.show()
@@ -274,6 +282,8 @@ def main(cfg: EvalConfig):
         difference=True,
         variable_names=cfg.paramater_global_pretty
     )
+    for ax in fig.get_axes():
+        ax.grid(False)
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_calibration.pdf'))
     print('Saved global calibration plot')
     plt.show()
@@ -284,7 +294,9 @@ def main(cfg: EvalConfig):
         difference=False,
         variable_names=cfg.paramater_global_pretty
     )
-    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'calibration_no_diff.pdf'))
+    for ax in fig.get_axes():
+        ax.grid(False)
+    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_calibration_no_diff.pdf'))
     plt.show()
     #histograms
     global_posterior_stream_1 = {k: ps[k] for k in list(ps.keys())[:4]}
@@ -295,6 +307,8 @@ def main(cfg: EvalConfig):
         variable_names=cfg.paramater_global_pretty[:4]
         # variable_names = param_names_global
     )
+    for ax in fig_1.get_axes():
+        ax.grid(False)
     fig_1.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_histograms_1.pdf'))
     plt.show()
     global_posterior_stream_2 = {k: ps[k] for k in list(ps.keys())[4:]}
@@ -305,6 +319,8 @@ def main(cfg: EvalConfig):
         variable_names=cfg.paramater_global_pretty[4:]
         # variable_names = param_names_global
     )
+    for ax in fig_2.get_axes():
+        ax.grid(False)
     fig_2.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_histograms_2.pdf'))
     plt.show()
     print('Saved global histograms plot')
@@ -316,6 +332,8 @@ def main(cfg: EvalConfig):
         variable_names=cfg.paramater_global_pretty
         # variable_names = param_names_global
     )
+    for ax in fig.get_axes():
+        ax.grid(False)
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_z_score_contraction.pdf'))
     print('Saved global z-score contraction plot')
     plt.show()

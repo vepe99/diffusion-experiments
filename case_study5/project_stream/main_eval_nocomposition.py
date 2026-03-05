@@ -65,13 +65,13 @@ def main(cfg: EvalConfig):
     keys_to_drop = set(test_data.keys()) - set(param_names_global) - {sim_data} - set(inference_conditions)
     keys_to_drop = list(keys_to_drop) 
     # we need to subsample 
-    num_index_testset = len(test_data[cfg.sim_data])
-    shuffled_index = np.random.permutation(np.arange(num_index_testset))
-    subssample_shuffled_index = shuffled_index[::len(cfg.target_streams.keys())]
-    for k in test_data.keys():
-        test_data[k] = test_data[k][subssample_shuffled_index]
-    print('We randomly subsample the test set to:', len(subssample_shuffled_index))
-    print('Sim data after subsampling: ', test_data[cfg.sim_data].shape)
+    # num_index_testset = len(test_data[cfg.sim_data])
+    # shuffled_index = np.random.permutation(np.arange(num_index_testset))
+    # subssample_shuffled_index = shuffled_index[::len(cfg.target_streams.keys())]
+    # for k in test_data.keys():
+    #     test_data[k] = test_data[k][subssample_shuffled_index]
+    # print('We randomly subsample the test set to:', len(subssample_shuffled_index))
+    # print('Sim data after subsampling: ', test_data[cfg.sim_data].shape)
 
     adapter = (
         bf.adapters.Adapter()
@@ -118,12 +118,16 @@ def main(cfg: EvalConfig):
         augmentations.append(augmentations_class.observational_window)
     if "observed_n_stars" in cfg.augmentations:
         augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
+    if "mask_vlos" in cfg.augmentations:
+        augmentations.append(augmentations_class.mask_vlos)
     if "flip_dirz" in cfg.augmentations:
         augmentations.append(augmentations_class.flip_dirz)
     if "concatentate_sigma_error_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatentate_sigma_error_to_sim_data)
     if "concatenate_magnitudes_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatenate_magnitudes_to_sim_data)
+    if "concatenate_vlos_mask_to_sim_data" in cfg.augmentations:
+        augmentations.append(augmentations_class.concatenate_vlos_mask_to_sim_data)
     if "concatenate_j_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatenate_j_to_sim_data)
 
@@ -203,6 +207,10 @@ def main(cfg: EvalConfig):
         variable_names=cfg.paramater_global_pretty
         # variable_names = param_names_global
     )
+    for ax in fig.get_axes():
+        ax.grid(False)
+        for txt in ax.texts:
+            txt.set_bbox(dict(facecolor='white', alpha=0.7, edgecolor='black', boxstyle='round,pad=0.3'))
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'recovery.pdf'))
     print('Saved recovery plot')
     plt.show()
@@ -225,6 +233,8 @@ def main(cfg: EvalConfig):
         difference=True,
         variable_names=cfg.paramater_global_pretty
     )
+    for ax in fig.get_axes():
+        ax.grid(False)
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'calibration.pdf'))
     print('Saved calibration plot')
     plt.show()
@@ -235,6 +245,8 @@ def main(cfg: EvalConfig):
         difference=False,
         variable_names=cfg.paramater_global_pretty
     )
+    for ax in fig.get_axes():
+        ax.grid(False)
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'calibration_no_diff.pdf'))
     plt.show()
     #histograms
@@ -246,6 +258,8 @@ def main(cfg: EvalConfig):
         variable_names=cfg.paramater_global_pretty[:4]
         # variable_names = param_names_global
     )
+    for ax in fig_1.get_axes():
+        ax.grid(False)
     fig_1.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'histograms_1.pdf'))
     plt.show()
     global_posterior_stream_2 = {k: ps[k] for k in list(ps.keys())[4:]}
@@ -256,6 +270,8 @@ def main(cfg: EvalConfig):
         variable_names=cfg.paramater_global_pretty[4:]
         # variable_names = param_names_global
     )
+    for ax in fig_2.get_axes():
+        ax.grid(False)
     fig_2.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'histograms_2.pdf'))
     plt.show()
     print('Saved histograms plot')
@@ -267,6 +283,8 @@ def main(cfg: EvalConfig):
         variable_names=cfg.paramater_global_pretty
         # variable_names = param_names_global
     )
+    for ax in fig.get_axes():
+        ax.grid(False)
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'z_score_contraction.pdf'))
     print('Saved z-score contraction plot')
     plt.show()
