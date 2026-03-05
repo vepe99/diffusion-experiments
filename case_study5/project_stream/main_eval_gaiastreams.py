@@ -22,8 +22,8 @@ import bayesflow as bf
 import logging
 logging.getLogger('bayesflow').setLevel(logging.DEBUG)
 
-from eval_config import EvalConfig
-from utils_train import AugmentationsClass #we will need to use the augmentations on the test_set
+from config.EvalConfig import EvalConfig
+from utils.utils_train_jax import AugmentationsClass #we will need to use the augmentations on the test_set
 
 
 cs = ConfigStore.instance()

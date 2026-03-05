@@ -21,8 +21,8 @@ import logging
 logging.getLogger("bayesflow").setLevel(logging.DEBUG)
 
 # from case_study5.project_stream.train_config import TrainConfig
-from train_config import TrainConfig
-from utils_train_jax import AugmentationsClass
+from config.TrainConfig import TrainConfig
+from utils.utils_train_jax import AugmentationsClass
 
 cs = ConfigStore.instance()
 cs.store(name="train_config", node=TrainConfig)

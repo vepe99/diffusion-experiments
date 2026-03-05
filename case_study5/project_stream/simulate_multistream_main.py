@@ -12,9 +12,9 @@ from hydra.core.config_store import ConfigStore
 from astropy import units as u
 import numpy as np
 
-from utils_simulate import (sample_parameters_parallel, 
+from utils.utils_simulate import (sample_parameters_parallel, 
                             sky_projection_astropy)
-from simulate_config import SimulatorConfig
+from config.SimulatorConfig import SimulatorConfig
 
 cs = ConfigStore.instance()
 cs.store(name="simulator_config", node=SimulatorConfig)
@@ -64,7 +64,7 @@ def main(cfg: SimulatorConfig):
         import jax.numpy as jnp
         from odisseo.option_classes import SimulationConfig
         from odisseo.units import CodeUnits
-        from utils_odisseo_simulator import (convert_to_integer_externalacc, 
+        from utils.utils_odisseo_simulator import (convert_to_integer_externalacc, 
                                                 convert_to_integer_config,
                                                 simulate_stream_odisseo)
         
@@ -90,7 +90,7 @@ def main(cfg: SimulatorConfig):
     elif cfg.simulator == "galax":
         import jax
         import jax.numpy as jnp
-        from utils_galax_simulator import simulate_stream_galax
+        from utils.utils_galax_simulator import simulate_stream_galax
 
         simulate_stream = simulate_stream_galax
         config = cfg.galax_config
@@ -99,7 +99,7 @@ def main(cfg: SimulatorConfig):
     elif cfg.simulator == "StreaMax":
         import jax
         import jax.numpy as jnp
-        from utils_StreaMax_simulator import simulate_stream_StreaMAX
+        from utils.utils_StreaMax_simulator import simulate_stream_StreaMAX
 
         simulate_stream = simulate_stream_StreaMAX
         config = cfg.streamax_config
@@ -107,7 +107,7 @@ def main(cfg: SimulatorConfig):
     
     elif cfg.simulator == "gala":
         from joblib import Parallel, delayed
-        from utils_gala_simulator import simulate_stream_gala, _run_gala_single
+        from utils.utils_gala_simulator import simulate_stream_gala, _run_gala_single
         config = cfg.gala_config
         code_units = None #gala does not use code units, but we need to pass something to the function
         

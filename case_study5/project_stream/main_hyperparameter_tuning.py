@@ -20,7 +20,7 @@ from optuna.trial import TrialState
 import logging
 logging.getLogger('bayesflow').setLevel(logging.DEBUG)
 
-from utils_train import AugmentationsClass
+from utils.utils_train import AugmentationsClass
 
 def clear_gpu_memory():
     """Helper function to aggressively clear GPU memory."""
