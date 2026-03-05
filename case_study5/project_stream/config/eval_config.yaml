@@ -1,8 +1,8 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_streamax/"
-model_dir: "models/model_streamax_concatenation_500_hyper/"
-multistream_n_simulation: 1000
-results_dir: "plots/plots_streamax_concatenation_500_hyper_nocomposition_subsample/"
+model_dir: "models/model_streamax_concat_6D_small/"
+multistream_n_simulation: 333
+results_dir: "plots/plots_streamax_concat_6D_small_nocomposition_333tests/"
 use_streamax_simulator: True
 
 #training hyperparameters
@@ -11,7 +11,7 @@ method: "two_step_adaptive"
 steps: "adaptive"
 max_steps: 1000
 mini_batch_size: null
-batch_size: 10
+batch_size: 30
 inverse_compositional_bridge_d1: 6
 noise_schedule: null
   # min_log_snr: -15
@@ -92,14 +92,14 @@ min_star_with_vlos:
   NGC3201: 40
   M68: 29
 
-error_keys: null #default is ["ra", "dec", "parallax", "mu_ra", "mu_dec"]
-# error_keys: 
-#   - "ra"
-#   - "dec"
-#   - "parallax"
-#   - "mu_ra"
-#   - "mu_dec"
-#   - "v_los" #override default error keys
+# error_keys: null #default is ["ra", "dec", "parallax", "mu_ra", "mu_dec"]
+error_keys:
+- ra
+- dec
+- parallax
+- mu_ra
+- mu_dec
+- v_los
 
 masked_value_vlos:
   Pal5:
@@ -119,17 +119,19 @@ gaia_id:
   M68: "Fjorm"
 
 augmentations:
-  - "remove_los_velocity"
-  - "convert_distance_to_parallax"
-  - "observational_window"
-  - "observed_n_stars"
-  - "sample_magnitudes"
-  - "sample_obs_error"
-  - "apply_obs_error"
-  - "flip_dirz"
-  - "concatentate_sigma_error_to_sim_data"
-  - "concatenate_magnitudes_to_sim_data"
-  - "concatenate_j_to_sim_data"
+  # - "remove_los_velocity"
+- convert_distance_to_parallax
+- observational_window
+- observed_n_stars
+- mask_vlos
+- sample_magnitudes
+- sample_obs_error
+- apply_obs_error
+- flip_dirz
+- concatentate_sigma_error_to_sim_data
+- concatenate_magnitudes_to_sim_data
+- concatenate_vlos_mask_to_sim_data
+- concatenate_j_to_sim_data
 
 #global model network:
 global_model:

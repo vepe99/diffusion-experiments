@@ -1,12 +1,12 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_streamax/"
 N_simulations: 1_000_000
-results_dir: "models/model_streamax_conctenate_jax_500epochs/"
+results_dir: "models/test/"
 test: False
 
 #training hyperparameters
-n_epochs: 500
-batch_size: 350
+n_epochs: 1000
+batch_size: 500
 learning_rate: 0.01
 weight_decay: 0.0001 #not used
 lr_scheduler_step_size: 10 #not used
@@ -33,6 +33,7 @@ parameters_local:
   - "r"
   - "mu_ra_cosdec"
   - "mu_dec"
+
 #names for printing
 paramater_global_pretty:
   - "$M_{NFW}$"
@@ -43,7 +44,6 @@ paramater_global_pretty:
   - "$M_{MN}$"
   - "$r_{MN}$"
   - "$M_{bulge}$"
-
 parameter_local_pretty:
   - "$M_{prog}$"
   - "$a_{prog}$"
@@ -80,35 +80,61 @@ observed_n_stars:
   NGC3201: 607
   M68: 297
 
+min_star_with_vlos:
+  Pal5: 69
+  NGC3201: 40
+  M68: 29
+
+error_keys: null #default is ["ra", "dec", "parallax", "mu_ra", "mu_dec"]
+# error_keys: 
+#   - "ra"
+#   - "dec"
+#   - "parallax"
+#   - "mu_ra"
+#   - "mu_dec"
+#   - "v_los" #override default error keys
+
+masked_value_vlos:
+  Pal5:
+    mean: -51.76
+    std: 137.04
+  NGC3201:
+    mean: 479.98
+    std: 71.38
+  M68:
+    mean: -95.42
+    std: 65.70
+
 gaia_id:
   Pal5: "Pal-5"
   NGC3201: "Gjoll"
   M68: "Fjorm"
 
+
 augmentations:
-  - "remove_los_velocity"
-  - "convert_distance_to_parallax"
-  - "observational_window"
-  - "observed_n_stars"
-  - "sample_magnitudes"
-  - "sample_obs_error"
-  - "apply_obs_error"
-  - "flip_dirz"
-  - "concatentate_sigma_error_to_sim_data"
-  - "concatenate_magnitudes_to_sim_data"
-  - "concatenate_j_to_sim_data"
+- remove_los_velocity
+- convert_distance_to_parallax
+- observational_window
+- observed_n_stars
+- sample_magnitudes
+- sample_obs_error
+- apply_obs_error
+- flip_dirz
+- concatentate_sigma_error_to_sim_data
+- concatenate_magnitudes_to_sim_data
+- concatenate_j_to_sim_data
 
 #global model network:
 global_model:
   dropout: 0.1
-  summary_dim: 35
-  embed_dims: 90
-  num_heads: 2
+  summary_dim: 32
+  embed_dims: 121
+  num_heads: 4
   mlp_depths: 2
-  mlp_widths: 45
+  mlp_widths: 106
   inference_mlp_depth: 7
-  inference_mlp_width: 375
-  inference_time_embedding_dim: 64
+  inference_mlp_width: 413
+  inference_time_embedding_dim: 36
 
 #local model network:
 local_model:
