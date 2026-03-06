@@ -483,6 +483,30 @@ class AugmentationsClass:
         vlos_mask = batch["vlos_mask"].transpose(0, 2, 1).astype(batch[self.cfg.sim_data].dtype)
         batch[self.cfg.sim_data] = jnp.concatenate([batch[self.cfg.sim_data], vlos_mask], axis=-1)
         return batch
+
+    #used only for real observation were the spettroscopi error (which we will pass a vlos_mask) is known
+    @partial(jit, static_argnums=(0,))
+    def override_vlos_error_with_real(self, batch):
+        """
+        Override the last dimension of sigma_errors (v_los error) with the
+        real observed vlos_error from the dataset, where vlos_mask == 1.
+        Where vlos_mask == 0 (no real v_los), keep the sampled sigma_error.
+
+        Expects:
+          batch["sigma_errors"]: (batch_size, n_particles, n_error_keys)
+          batch["vlos_error"]:   (batch_size, n_particles, 1)
+          batch["vlos_mask"]:    (batch_size, n_particles, 1)  — 1 where real v_los exists
+        """
+        sigma_errors = batch["sigma_errors"]
+        vlos_error = batch["vlos_error"][..., 0]    # (batch_size, n_particles)
+        vlos_mask = batch["vlos_mask"][..., 0]      # (batch_size, n_particles)
+
+        sigma_vlos = sigma_errors[:, :, -1]         # (batch_size, n_particles)
+        sigma_vlos = jnp.where(vlos_mask, vlos_error, sigma_vlos)
+        sigma_errors = sigma_errors.at[:, :, -1].set(sigma_vlos)
+
+        batch["sigma_errors"] = sigma_errors
+        return batch
     
     
     

@@ -1,8 +1,10 @@
 base_dir: /export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/
-data_dir: streams/data_streamax/
-N_simulations: 1000000
-results_dir: models/model_streamax_concat_6D_hyper/
+data_dir: streams/data_galax/
+N_simulations: 300000
+results_dir: models/model_galax_concatenate_500_hyper/
 test: false
+
+
 n_epochs: 500
 batch_size: 500
 learning_rate: 0.01
@@ -10,18 +12,21 @@ weight_decay: 0.0001
 lr_scheduler_step_size: 10
 lr_scheduler_gamma: 0.1
 verbose: 2
+
+
 sim_data: sim_data_projected
 inference_conditions:
 - j
 parameters_global:
-- m_Triaxial_rotated_halo
-- r_Triaxial_rotated_halo
-- dirx_Triaxial_rotated_halo
-- diry_Triaxial_rotated_halo
-- dirz_Triaxial_rotated_halo
-- m_disk_MW2014
-- r_disk_MW2014
-- m_bulge
+- m_Triaxial_halo
+- r_Triaxial_halo
+- q2_Triaxial_halo
+- rho_thin_disk
+- hr_thin_disk
+- hz_thin_disk
+- rho_thick_disk
+- hr_thick_disk
+- hz_thick_disk
 parameters_local:
 - m_progenitor
 - a_progenitor
@@ -32,12 +37,13 @@ parameters_local:
 paramater_global_pretty:
 - $M_{NFW}$
 - $r_{NFW}$
-- $\hat{x}_{NFW}$
-- $\hat{y}_{NFW}$
-- $\hat{z}_{NFW}$
-- $M_{MN}$
-- $r_{MN}$
-- $M_{bulge}$
+- $q_{NFW}$
+- $\\rho_t$
+- $h_t$
+- $z_t$
+- $\\rho_k$
+- $h_k$
+- $z_k$
 parameter_local_pretty:
 - $M_{prog}$
 - $a_{prog}$
@@ -69,17 +75,14 @@ observed_n_stars:
   Pal5: 129
   NGC3201: 607
   M68: 297
+
 min_star_with_vlos:
   Pal5: 69
   NGC3201: 40
   M68: 29
-error_keys:
-- ra
-- dec
-- parallax
-- mu_ra
-- mu_dec
-- v_los
+
+error_keys: null #default is ["ra", "dec", "parallax", "mu_ra", "mu_dec"]
+
 masked_value_vlos:
   Pal5:
     mean: -51.76
@@ -89,24 +92,25 @@ masked_value_vlos:
     std: 71.38
   M68:
     mean: -95.42
-    std: 65.7
+    std: 65.70
+
+gaia_id:
+  Pal5: "Pal-5"
+  NGC3201: "Gjoll"
+  M68: "Fjorm"
+
 augmentations:
+- remove_los_velocity
 - convert_distance_to_parallax
 - observational_window
 - observed_n_stars
-- mask_vlos
 - sample_magnitudes
 - sample_obs_error
 - apply_obs_error
-- flip_dirz
 - concatentate_sigma_error_to_sim_data
 - concatenate_magnitudes_to_sim_data
-- concatenate_vlos_mask_to_sim_data
 - concatenate_j_to_sim_data
-gaia_id:
-  Pal5: Pal-5
-  NGC3201: Gjoll
-  M68: Fjorm
+
 global_model:
   dropout: 0.1
   summary_dim: 32

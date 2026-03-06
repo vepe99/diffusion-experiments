@@ -8,6 +8,7 @@ dependencies = [
     "astropy",
     "amici==0.34.2",
     "black",
+    "chainconsumer",
     "colorcet>=3.1.0",
     "fides==0.8.0",
     "fyeldgenerator>=0.1.7",

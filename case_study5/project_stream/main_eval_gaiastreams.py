@@ -1,8 +1,8 @@
-# from autocvd import autocvd
-# autocvd(num_gpus = 1)
+from autocvd import autocvd
+autocvd(num_gpus = 1)
 import os
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
-os.environ["CUDA_VISIBLE_DEVICES"] = "7"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "7"
 import yaml
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -29,7 +29,7 @@ from utils.utils_train_jax import AugmentationsClass #we will need to use the au
 cs = ConfigStore.instance()
 cs.store(name="eval_config", node=EvalConfig)
 
-@hydra.main(version_base=None, config_path="config", config_name="eval_config",)
+@hydra.main(version_base=None, config_path="config", config_name="eval_config_gaia",)
 def main(cfg: EvalConfig):
 
     print(cfg)
@@ -60,52 +60,89 @@ def main(cfg: EvalConfig):
     param_names_global = list(cfg.parameters_global)
     sim_data = str(cfg.sim_data)
     inference_conditions = str(cfg.inference_conditions[0])
+    with open(os.path.join(cfg.base_dir, cfg.model_dir, '.hydra', 'config.yaml'), "r") as f:
+        model_config = yaml.safe_load(f)
+    print(model_config)
+
+    test_data_path = '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/gaia_observed_streams_6Dwitherrors.npz'
+    print('Loading test data from ', test_data_path)
+    test_data = dict(np.load(test_data_path, allow_pickle=True))
+    test_data = {k: test_data[k] for k in [cfg.sim_data, "j", "attention_mask", "magnitudes"] }
+    # print('Test data keys and shape: ', test_data.keys(), test_data[list(test_data.keys())[0]].shape)
+    other_things = ['attention_mask', 'magnitudes', 'vloss_mask']
+    keys_to_drop = set(test_data.keys()) - set(param_names_global) - {sim_data} - set(inference_conditions) -  set(other_things)
+    keys_to_drop = list(keys_to_drop) 
 
     adapter = (
         bf.adapters.Adapter()
         .to_array()
         .convert_dtype("float64", "float32")
+        .drop(keys_to_drop)
         .concatenate(param_names_global, into="inference_variables")
         .rename(sim_data, "summary_variables")
         .rename(inference_conditions, "inference_conditions")
     )
-    with open(os.path.join(cfg.base_dir, cfg.model_dir, '.hydra', 'config.yaml'), "r") as f:
-        model_config = yaml.safe_load(f)
-    print(model_config)
+    if cfg.noise_schedule is not None:
+        inference_network = bf.networks.CompositionalDiffusionModel(
+                                                        subnet_kwargs={
+                                                        "widths": [model_config['global_model']['inference_mlp_width']] * model_config['global_model']['inference_mlp_depth'],
+                                                        "time_embedding_dim": model_config['global_model']['inference_time_embedding_dim'],
+                                                        },
+                                                        schedule_kwargs = {**cfg.noise_schedule,},
+                                                        )
+    else:
+        #probably needs to fix it to the training noise schedule 
+        inference_network = bf.networks.CompositionalDiffusionModel(subnet_kwargs={
+                                                        "widths": [model_config['global_model']['inference_mlp_width']] * model_config['global_model']['inference_mlp_depth'],
+                                                        "time_embedding_dim": model_config['global_model']['inference_time_embedding_dim'],
+                                                        },)
     workflow_global = bf.BasicWorkflow(
         adapter=adapter,
         summary_network=bf.networks.SetTransformer(summary_dim=model_config['global_model']['summary_dim'], 
                                                    num_heads=(model_config['global_model']['num_heads'],model_config['global_model']['num_heads'],),
-                                                   embed_dims = (model_config['global_model']['summary_dim'], model_config['global_model']['summary_dim'],),
+                                                   embed_dims = (model_config['global_model']['embed_dims'], model_config['global_model']['embed_dims'],),
+                                                   mlp_depths=(model_config['global_model']['mlp_depths'], model_config['global_model']['mlp_depths']),
+                                                   mlp_widths=(model_config['global_model']['mlp_widths'], model_config['global_model']['mlp_widths']),
                                                    dropout=0.1),
-        inference_network=bf.networks.CompositionalDiffusionModel(
-                                                        subnet_kwargs={
-                                                        "widths": [model_config['global_model']['inference_mlp_width']] * model_config['global_model']['inference_mlp_depth'],
-                                                        "time_embedding_dim": model_config['global_model']['inference_time_embedding_dim'],
-                                                        }
-                                                        ),
+        inference_network=inference_network,
         standardize=["inference_variables", "summary_variables"]
     )
     workflow_global.approximator = keras.models.load_model(model_path)
-
-    test_data_path = '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/gaia_observed_streams.npz'
-    print('Loading test data from ', test_data_path)
-    test_data = dict(np.load(test_data_path, allow_pickle=True))
-    test_data = {k: test_data[k] for k in [cfg.sim_data, "j", "attention_mask"] }
     # Augmentation
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
     if "remove_los_velocity" in cfg.augmentations:
         augmentations.append(augmentations_class.remove_los_velocity)
+    if "convert_distance_to_parallax" in cfg.augmentations:
+        augmentations.append(augmentations_class.convert_distance_to_parallax)
+    if "sample_obs_error" in cfg.augmentations:
+        augmentations.append(augmentations_class.sample_obs_error)
+        # augmentations.append(augmentations_class.override_vlos_error_with_real)  # <-- add here
+    if "concatentate_sigma_error_to_sim_data" in cfg.augmentations:
+        augmentations.append(augmentations_class.concatentate_sigma_error_to_sim_data)
+    if "concatenate_magnitudes_to_sim_data" in cfg.augmentations:
+        augmentations.append(augmentations_class.concatenate_magnitudes_to_sim_data)
+    # if "concatenate_vlos_mask_to_sim_data" in cfg.augmentations:
+        # augmentations.append(augmentations_class.concatenate_vlos_mask_to_sim_data)
+    if "concatenate_j_to_sim_data" in cfg.augmentations:
+        augmentations.append(augmentations_class.concatenate_j_to_sim_data)
+    #reshape the streams dimensions
     test_data[cfg.sim_data] = test_data[cfg.sim_data].reshape(-1, test_data[cfg.sim_data].shape[-2], test_data[cfg.sim_data].shape[-1])
     test_data['j'] = test_data['j'].reshape(-1, 1)
+    #change the distance column of the padded stars:
+    padded_mask = np.all(test_data[cfg.sim_data] == 0, axis=-1)  # shape: (n, n_stars)
+    test_data[cfg.sim_data][padded_mask, 2] = 1.0
     print('Test data sim shape before augmentation: ', test_data[cfg.sim_data].shape)
     for aug in augmentations:
         test_data = aug(test_data)
+    for k in test_data.keys():
+        if isinstance(test_data[k], np.ndarray) and np.issubdtype(test_data[k].dtype, np.floating):
+            test_data[k] = np.where(np.isinf(test_data[k]), 0.0, test_data[k])
     test_data[cfg.sim_data] = test_data[cfg.sim_data].reshape(-1, len(cfg.target_streams.keys()), test_data[cfg.sim_data].shape[-2], test_data[cfg.sim_data].shape[-1])
     test_data['j'] = test_data['j'].reshape(-1,len(cfg.target_streams.keys()), 1)
     print('Test data sim shape after augmentation: ', test_data[cfg.sim_data].shape)
     print('Test data keys: ', test_data.keys())
+    print('Test set: ', test_data)
     with open(os.path.join(cfg.base_dir, cfg.data_dir, '.hydra', 'config.yaml'), "r") as f:
         test_sim_config = yaml.safe_load(f)
 
@@ -163,11 +200,14 @@ def main(cfg: EvalConfig):
     for stream_name in cfg.target_streams.keys():
         print(f"Starting inference for stream {stream_name}...")
         test_data_stream = {cfg.sim_data: test_data[cfg.sim_data][:, cfg.target_streams[stream_name], :, :], 
-                            "j": test_data["j"][:, cfg.target_streams[stream_name], :]}
+                            "j": test_data["j"][:, cfg.target_streams[stream_name], :],
+                            }
+        print('test data stream shapes: ', {k: v.shape for k, v in test_data_stream.items()})
+        print('we should see also the magnitude and sigma concatenated, and vlos_mask if used')
         posterior_stream = workflow_global.sample(
                             num_samples=cfg.n_samples,
                             conditions=test_data_stream,
-                            # compute_prior_score=prior_global_score,
+                            kwargs={'attention_mask': test_data['attention_mask'][:, cfg.target_streams[stream_name], :],}
                             )
         ps_stream = posterior_stream.copy()
         np.savez(os.path.join(cfg.base_dir, cfg.results_dir, f'{stream_name}_posterior.npz'), **ps_stream)
