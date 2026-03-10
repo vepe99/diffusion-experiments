@@ -1,12 +1,12 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_streamax/"
-model_dir: "models/model_streamax_concatenation_500_hyper/"
+model_dir: "models/model_streamax_concat_6D_hyper/"
 multistream_n_simulation: 333
-results_dir: "plots/plots_streamax_concatenation_500_hyper_gaiadata5D/"
+results_dir: "plots/plots_streamax_concat_6D_hyper_333tests/"
 use_streamax_simulator: True
 
 #training hyperparameters
-n_samples: 40_000
+n_samples: 1_000
 method: "two_step_adaptive"
 steps: "adaptive"
 max_steps: 1000
@@ -92,14 +92,14 @@ min_star_with_vlos:
   NGC3201: 40
   M68: 29
 
-error_keys: null #default is ["ra", "dec", "parallax", "mu_ra", "mu_dec"]
-# error_keys: 
-#   - "ra"
-#   - "dec"
-#   - "parallax"
-#   - "mu_ra"
-#   - "mu_dec"
-#   - "v_los" #override default error keys
+# error_keys: null #default is ["ra", "dec", "parallax", "mu_ra", "mu_dec"]
+error_keys:
+- ra
+- dec
+- parallax
+- mu_ra
+- mu_dec
+- v_los
 
 masked_value_vlos:
   Pal5:
@@ -119,16 +119,19 @@ gaia_id:
   M68: "Fjorm"
 
 augmentations:
-  - "remove_los_velocity"
-  - "convert_distance_to_parallax"
-  - "sample_magnitudes" #we need to keep it even if we do not use it
-  # - "observational_window"
-  # - "observed_n_stars"
-  - "sample_obs_error"
-  # - "flip_dirz"
-  - "concatentate_sigma_error_to_sim_data"
-  - "concatenate_magnitudes_to_sim_data"
-  - "concatenate_j_to_sim_data"
+  # - "remove_los_velocity"
+- convert_distance_to_parallax
+- observational_window
+- observed_n_stars
+- mask_vlos
+- sample_magnitudes
+- sample_obs_error
+- apply_obs_error
+- flip_dirz
+- concatentate_sigma_error_to_sim_data
+- concatenate_magnitudes_to_sim_data
+- concatenate_vlos_mask_to_sim_data
+- concatenate_j_to_sim_data
 
 #global model network:
 global_model:

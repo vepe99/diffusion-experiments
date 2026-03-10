@@ -12,6 +12,7 @@ from hydra.core.config_store import ConfigStore
 import numpy as np
 from chainconsumer import Chain, ChainConsumer, ChainConfig
 import pandas as pd
+from scipy import special
 
 if "KERAS_BACKEND" not in os.environ:
     os.environ["KERAS_BACKEND"] = "torch"
@@ -178,6 +179,13 @@ def main(cfg: EvalConfig):
                         )
     os.makedirs(name= os.path.join(cfg.base_dir, cfg.results_dir), exist_ok=True)
     ps = global_posterior.copy()
+    q_min = 0.5
+    q_max = 1.5
+    r_posterior = np.sqrt(ps['dirx_Triaxial_rotated_halo']**2 + ps['diry_Triaxial_rotated_halo']**2 + ps['dirz_Triaxial_rotated_halo']**2)
+    u_uniform_posterior = special.erf(r_posterior/np.sqrt(2)) - np.sqrt(2/np.pi)*r_posterior*np.exp(-(r_posterior**2)/2)
+    ps['$q_{NFW}$'] = q_min + (q_max-q_min)*u_uniform_posterior
+    param_names_global = cfg.parameters_global + ['$q_{NFW}$']
+    cfg.paramater_global_pretty = cfg.paramater_global_pretty + ['$q_{NFW}$']
     np.savez(os.path.join(cfg.base_dir, cfg.results_dir, 'global_posterior.npz'), **ps)
     ###############
     # PLOTS GLOBAL#
@@ -210,6 +218,9 @@ def main(cfg: EvalConfig):
                             kwargs={'attention_mask': test_data['attention_mask'][:, cfg.target_streams[stream_name], :],}
                             )
         ps_stream = posterior_stream.copy()
+        r_posterior = np.sqrt(ps_stream['dirx_Triaxial_rotated_halo']**2 + ps_stream['diry_Triaxial_rotated_halo']**2 + ps_stream['dirz_Triaxial_rotated_halo']**2)
+        u_uniform_posterior = special.erf(r_posterior/np.sqrt(2)) - np.sqrt(2/np.pi)*r_posterior*np.exp(-(r_posterior**2)/2)
+        ps_stream['$q_{NFW}$'] = q_min + (q_max-q_min)*u_uniform_posterior
         np.savez(os.path.join(cfg.base_dir, cfg.results_dir, f'{stream_name}_posterior.npz'), **ps_stream)
         print(f'Saved posterior samples for stream {stream_name}')
         for k in ps_stream.keys():
