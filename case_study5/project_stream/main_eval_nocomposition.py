@@ -141,23 +141,7 @@ def main(cfg: EvalConfig):
     print('Test data sim shape after augmentation: ', test_data[cfg.sim_data].shape)
     print('Test data keys shape: ', [test_data[k].shape for k in test_data.keys()])
     print('Test data attention mask shape: ', test_data['attention_mask'].shape)
-    with open(os.path.join(cfg.base_dir, cfg.data_dir, '.hydra', 'config.yaml'), "r") as f:
-        test_sim_config = yaml.safe_load(f)
-    print('Test simulation config prior: ', test_sim_config['priors_global'])
 
-    def prior_global_score(x, cfg=cfg, test_sim_config=test_sim_config):
-        
-        score = {}
-        
-        for k in cfg.parameters_global:
-            # print(f"Computing prior score for {k} with type {test_sim_config['priors_global'][k]['type']}")
-            if test_sim_config['priors_global'][k]['type'] == 'uniform':
-                score[k] = np.zeros_like(x[k])
-            elif test_sim_config['priors_global'][k]['type'] == 'normal':
-                mean = test_sim_config['priors_global'][k]['prior_parameters'][0]
-                std = test_sim_config['priors_global'][k]['prior_parameters'][1]
-                score[k] = -(x[k] - mean) / std**2 
-        return score
 
     logging.info("Starting Partial-Pooling (global) inference with no composition...")
     workflow_global.approximator.inference_network.integrate_kwargs.update({

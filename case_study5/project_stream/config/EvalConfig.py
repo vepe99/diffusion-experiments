@@ -18,12 +18,11 @@ class GlobalModelConfig:
 class LocalModelConfig:
     dropout: float
     summary_dim: int
-    # embed_dims: Optional[int] = None
-    # num_heads: Optional[int] = None
-
-    # inference_mlp_depth: Optional[int] = None
-    # inference_mlp_width: Optional[int] = None
-    # time_embedding_dim: Optional[int] = None
+    embed_dims: Optional[int] 
+    num_heads: int
+    inference_mlp_depth: Optional[int] 
+    inference_mlp_width: Optional[int] 
+    time_embedding_dim: Optional[int] 
 
 
 

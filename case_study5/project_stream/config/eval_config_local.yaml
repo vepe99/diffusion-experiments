@@ -1,8 +1,8 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_streamax/"
-model_dir: "models/model_streamax_concat_6D_small/"
+model_dir: "models/local_models/model_local_streamax_concatenation_100_hyper/"
 multistream_n_simulation: 333
-results_dir: "plots/plots_streamax_concat_6D_small_333tests/"
+results_dir: "plots/plots_local/plots_local_streamax_concatenation_100_hyper_333tests/"
 use_streamax_simulator: True
 
 #training hyperparameters
@@ -11,7 +11,7 @@ method: "two_step_adaptive"
 steps: "adaptive"
 max_steps: 1000
 mini_batch_size: null
-batch_size: 30
+batch_size: 20
 inverse_compositional_bridge_d1: 6
 noise_schedule: null
   # min_log_snr: -15
@@ -34,8 +34,8 @@ parameters_global:
   - "r_disk_MW2014"
   - "m_bulge"
 parameters_local:
-  - "m_progenitor"
-  - "a_progenitor"
+  # - "m_progenitor"
+  # - "a_progenitor"
   - "vr"
   - "r"
   - "mu_ra_cosdec"
@@ -52,8 +52,8 @@ paramater_global_pretty:
   - "$M_{bulge}$"
 
 parameter_local_pretty:
-  - "$M_{prog}$"
-  - "$a_{prog}$"
+  # - "$M_{prog}$"
+  # - "$a_{prog}$"
   - "$v_r$"
   - "$r$"
   - "$\\mu_{\\alpha*}$"
@@ -92,14 +92,14 @@ min_star_with_vlos:
   NGC3201: 40
   M68: 29
 
-# error_keys: null #default is ["ra", "dec", "parallax", "mu_ra", "mu_dec"]
-error_keys:
-- ra
-- dec
-- parallax
-- mu_ra
-- mu_dec
-- v_los
+error_keys: null #default is ["ra", "dec", "parallax", "mu_ra", "mu_dec"]
+# error_keys: 
+#   - "ra"
+#   - "dec"
+#   - "parallax"
+#   - "mu_ra"
+#   - "mu_dec"
+#   - "v_los" #override default error keys
 
 masked_value_vlos:
   Pal5:
@@ -119,19 +119,17 @@ gaia_id:
   M68: "Fjorm"
 
 augmentations:
-  # - "remove_los_velocity"
-- convert_distance_to_parallax
-- observational_window
-- observed_n_stars
-- mask_vlos
-- sample_magnitudes
-- sample_obs_error
-- apply_obs_error
-- flip_dirz
-- concatentate_sigma_error_to_sim_data
-- concatenate_magnitudes_to_sim_data
-- concatenate_vlos_mask_to_sim_data
-- concatenate_j_to_sim_data
+  - "remove_los_velocity"
+  - "convert_distance_to_parallax"
+  - "observational_window"
+  - "observed_n_stars"
+  - "sample_magnitudes"
+  - "sample_obs_error"
+  - "apply_obs_error"
+  - "flip_dirz"
+  - "concatentate_sigma_error_to_sim_data"
+  - "concatenate_magnitudes_to_sim_data"
+  - "concatenate_j_to_sim_data"
 
 #global model network:
 global_model:
