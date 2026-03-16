@@ -1,19 +1,19 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
-data_dir: "streams/data_multistream_streamax/"
-model_dir: "models/model_streamax_concatenation_1000_hyper/"
-multistream_n_simulation: 1000
-results_dir: "plots/plots_streamax_concatenation_1000_hyper_1000tests/"
-use_streamax_simulator: True
+data_dir: "streams/data_multistream_galax/"
+model_dir: "models/model_galax6D_1e6_concat_750_hyper/"
+multistream_n_simulation: 333
+results_dir: "plots/plots_galax6D_1e6_concat_750_hyper_333tests/"
+use_streamax_simulator: False
 
 #training hyperparameters
-n_samples: 1_000
+n_samples: 1000
 method: "two_step_adaptive"
 steps: "adaptive"
 max_steps: 1000
 mini_batch_size: null
 batch_size: 10
 inverse_compositional_bridge_d1: 6
-noise_schedule: null
+noise_schedule: null 
   # min_log_snr: -15
   # max_log_snr: 15
   # shift: 10
@@ -25,14 +25,15 @@ sim_data: "sim_data_projected"
 inference_conditions:
   - "j"
 parameters_global:
-  - "m_Triaxial_rotated_halo"
-  - "r_Triaxial_rotated_halo"
-  - "dirx_Triaxial_rotated_halo"
-  - "diry_Triaxial_rotated_halo"
-  - "dirz_Triaxial_rotated_halo"
-  - "m_disk_MW2014"
-  - "r_disk_MW2014"
-  - "m_bulge"
+  - "m_Triaxial_halo"
+  - "r_Triaxial_halo"
+  - "q2_Triaxial_halo"
+  - "rho_thin_disk"
+  - "hr_thin_disk"
+  - "hz_thin_disk"
+  - "rho_thick_disk"
+  - "hr_thick_disk"
+  - "hz_thick_disk"
 parameters_local:
   - "m_progenitor"
   - "a_progenitor"
@@ -44,12 +45,13 @@ parameters_local:
 paramater_global_pretty:
   - "$M_{NFW}$"
   - "$r_{NFW}$"
-  - "$\\hat{x}_{NFW}$"
-  - "$\\hat{y}_{NFW}$"
-  - "$\\hat{z}_{NFW}$"
-  - "$M_{MN}$"
-  - "$r_{MN}$"
-  - "$M_{bulge}$"
+  - "$q_{NFW}$"
+  - "$\\rho_t$"
+  - "$h_t$"
+  - "$z_t$"
+  - "$\\rho_k$"
+  - "$h_k$"
+  - "$z_k$"
 
 parameter_local_pretty:
   - "$M_{prog}$"
@@ -87,19 +89,15 @@ observed_n_stars:
   NGC3201: 607
   M68: 297
 
+gaia_id:
+  Pal5: "Pal-5"
+  NGC3201: "Gjoll"
+  M68: "Fjorm"
+
 min_star_with_vlos:
   Pal5: 69
   NGC3201: 40
   M68: 29
-
-error_keys: null #default is ["ra", "dec", "parallax", "mu_ra", "mu_dec"]
-# error_keys: 
-#   - "ra"
-#   - "dec"
-#   - "parallax"
-#   - "mu_ra"
-#   - "mu_dec"
-#   - "v_los" #override default error keys
 
 masked_value_vlos:
   Pal5:
@@ -112,24 +110,29 @@ masked_value_vlos:
     mean: -95.42
     std: 65.70
 
-
-gaia_id:
-  Pal5: "Pal-5"
-  NGC3201: "Gjoll"
-  M68: "Fjorm"
-
 augmentations:
-  - "remove_los_velocity"
-  - "convert_distance_to_parallax"
-  - "observational_window"
-  - "observed_n_stars"
-  - "sample_magnitudes"
-  - "sample_obs_error"
-  - "apply_obs_error"
-  - "flip_dirz"
-  - "concatentate_sigma_error_to_sim_data"
-  - "concatenate_magnitudes_to_sim_data"
-  - "concatenate_j_to_sim_data"
+  # - "remove_los_velocity"
+- convert_distance_to_parallax
+- observational_window
+- observed_n_stars
+- mask_vlos
+- sample_magnitudes
+- sample_obs_error
+- apply_obs_error
+# - flip_dirz
+- concatentate_sigma_error_to_sim_data
+- concatenate_magnitudes_to_sim_data
+- concatenate_vlos_mask_to_sim_data
+- concatenate_j_to_sim_data
+
+# error_keys: null #default is ["ra", "dec", "parallax", "mu_ra", "mu_dec"]
+error_keys:
+- ra
+- dec
+- parallax
+- mu_ra
+- mu_dec
+- v_los
 
 #global model network:
 global_model:

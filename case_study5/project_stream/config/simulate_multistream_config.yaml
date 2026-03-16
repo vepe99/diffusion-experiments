@@ -1,8 +1,8 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams"
-data_dir: "data_multistream_streamax"
-simulator: "StreaMax" #odisseo, gala, galax
+data_dir: "data_multistream_galax"
+simulator: "galax" #odisseo, gala, galax
 n_simulations: 333
-batch_size: 120
+batch_size: 180
 
 parameters_global:
   - "a"

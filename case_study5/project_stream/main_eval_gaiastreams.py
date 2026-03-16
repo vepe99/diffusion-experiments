@@ -2,7 +2,7 @@ from autocvd import autocvd
 autocvd(num_gpus = 1)
 import os
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
-# os.environ["CUDA_VISIBLE_DEVICES"] = "7"
+# os.environ["CUDA_VISIBLE_DEVICES"] = ""
 import yaml
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -114,8 +114,8 @@ def main(cfg: EvalConfig):
     augmentations = []
     if "remove_los_velocity" in cfg.augmentations:
         augmentations.append(augmentations_class.remove_los_velocity)
-    if "convert_distance_to_parallax" in cfg.augmentations:
-        augmentations.append(augmentations_class.convert_distance_to_parallax)
+    # if "convert_distance_to_parallax" in cfg.augmentations: 
+    #     augmentations.append(augmentations_class.convert_distance_to_parallax)
     if "sample_obs_error" in cfg.augmentations:
         augmentations.append(augmentations_class.sample_obs_error)
         # augmentations.append(augmentations_class.override_vlos_error_with_real)  # <-- add here
@@ -136,14 +136,16 @@ def main(cfg: EvalConfig):
     print('Test data sim shape before augmentation: ', test_data[cfg.sim_data].shape)
     for aug in augmentations:
         test_data = aug(test_data)
-    for k in test_data.keys():
-        if isinstance(test_data[k], np.ndarray) and np.issubdtype(test_data[k].dtype, np.floating):
-            test_data[k] = np.where(np.isinf(test_data[k]), 0.0, test_data[k])
+    # for k in test_data.keys():
+    #     if isinstance(test_data[k], np.ndarray) and np.issubdtype(test_data[k].dtype, np.floating):
+    #         test_data[k] = np.where(np.isinf(test_data[k]), 0.0, test_data[k])
     test_data[cfg.sim_data] = test_data[cfg.sim_data].reshape(-1, len(cfg.target_streams.keys()), test_data[cfg.sim_data].shape[-2], test_data[cfg.sim_data].shape[-1])
     test_data['j'] = test_data['j'].reshape(-1,len(cfg.target_streams.keys()), 1)
     print('Test data sim shape after augmentation: ', test_data[cfg.sim_data].shape)
     print('Test data keys: ', test_data.keys())
-    print('Test set: ', test_data)
+    for k in test_data.keys():
+        print('##########')
+        print(f"{k} shape: {test_data[k].shape}")
     with open(os.path.join(cfg.base_dir, cfg.data_dir, '.hydra', 'config.yaml'), "r") as f:
         test_sim_config = yaml.safe_load(f)
 
@@ -212,10 +214,12 @@ def main(cfg: EvalConfig):
                             }
         print('test data stream shapes: ', {k: v.shape for k, v in test_data_stream.items()})
         print('we should see also the magnitude and sigma concatenated, and vlos_mask if used')
+        attention_mask_stream = test_data['attention_mask'][cfg.target_streams[stream_name], :, :].reshape(1, -1)
+        print('attention mask stream shape: ', attention_mask_stream.shape)
         posterior_stream = workflow_global.sample(
                             num_samples=cfg.n_samples,
                             conditions=test_data_stream,
-                            kwargs={'attention_mask': test_data['attention_mask'][:, cfg.target_streams[stream_name], :],}
+                            kwargs={'attention_mask': attention_mask_stream}
                             )
         ps_stream = posterior_stream.copy()
         r_posterior = np.sqrt(ps_stream['dirx_Triaxial_rotated_halo']**2 + ps_stream['diry_Triaxial_rotated_halo']**2 + ps_stream['dirz_Triaxial_rotated_halo']**2)

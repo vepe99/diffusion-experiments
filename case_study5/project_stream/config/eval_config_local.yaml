@@ -1,8 +1,8 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_streamax/"
-model_dir: "models/local_models/model_local_streamax_concatenation_100_hyper/"
+model_dir: "models/local_models/model_local_new_streamax_concatenation_500_hyper/"
 multistream_n_simulation: 333
-results_dir: "plots/plots_local/plots_local_streamax_concatenation_100_hyper_333tests/"
+results_dir: "plots/plots_local/plots_local_new_streamax_concatenation_500_hyper_333tests/"
 use_streamax_simulator: True
 
 #training hyperparameters
@@ -11,7 +11,7 @@ method: "two_step_adaptive"
 steps: "adaptive"
 max_steps: 1000
 mini_batch_size: null
-batch_size: 20
+batch_size: 10
 inverse_compositional_bridge_d1: 6
 noise_schedule: null
   # min_log_snr: -15

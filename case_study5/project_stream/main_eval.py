@@ -2,7 +2,7 @@ from autocvd import autocvd
 autocvd(num_gpus = 1)
 import os
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
-# os.environ["CUDA_VISIBLE_DEVICES"] = "7"
+# os.environ["CUDA_VISIBLE_DEVICES"] = ""
 import yaml
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -189,6 +189,9 @@ def main(cfg: EvalConfig):
     print('Test data sim shape after augmentation: ', test_data[cfg.sim_data].shape)
     print('Test data keys: ', test_data.keys())
     print('Test data attention mask shape: ', test_data['attention_mask'].shape)
+    # for k in test_data.keys():
+    #     print(f"Test data {k} shape: {test_data[k].shape}")
+    # exit()
     with open(os.path.join(cfg.base_dir, cfg.data_dir, '.hydra', 'config.yaml'), "r") as f:
         test_sim_config = yaml.safe_load(f)
     print('Test simulation config prior: ', test_sim_config['priors_global'])

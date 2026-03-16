@@ -6,7 +6,7 @@ results_dir: "plots/plots_streamax_concatenation_500_hyper_gaiadata5D/"
 use_streamax_simulator: True
 
 #training hyperparameters
-n_samples: 40_000
+n_samples: 30_000
 method: "two_step_adaptive"
 steps: "adaptive"
 max_steps: 1000
@@ -120,7 +120,7 @@ gaia_id:
 
 augmentations:
   - "remove_los_velocity"
-  - "convert_distance_to_parallax"
+  - "convert_distance_to_parallax" #we already have parallax in data
   - "sample_magnitudes" #we need to keep it even if we do not use it
   # - "observational_window"
   # - "observed_n_stars"

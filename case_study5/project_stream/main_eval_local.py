@@ -207,31 +207,7 @@ def main(cfg: EvalConfig):
     
 
     logging.info("Starting Partial-Pooling (local) inference...")
-    # local_posterior_flat = workflow_local.sample(
-    #                     num_samples=cfg.n_samples,
-    #                     conditions=conditions,
-    #                     batch_size = cfg.batch_size,
-    #                     kwargs={'attention_mask': test_data['attention_mask']},
-    #                     )
 
-    # def sample_in_batches(data, workflow, num_samples, batch_size, sampler_settings=None) -> dict:
-    #     posterior_samples = None
-    #     for i in tqdm(range(0, len(data[cfg.sim_data]), batch_size)):
-    #         batch_data = {k: v[i:i + batch_size] for k, v in data.items()}
-    #         if sampler_settings is None:
-    #             batch_samples = workflow.sample(conditions=batch_data, 
-    #                                             num_samples=num_samples, 
-    #                                             kwargs={'attention_mask': test_data['attention_mask']})
-    #         else:
-    #             batch_samples = workflow.sample(conditions=batch_data, num_samples=num_samples,
-    #                                              kwargs={'attention_mask': test_data['attention_mask']}, 
-    #                                              **sampler_settings)
-    #         if i == 0:
-    #             posterior_samples = batch_samples
-    #         else:
-    #             for key in posterior_samples.keys():
-    #                 posterior_samples[key] = np.vstack([posterior_samples[key], batch_samples[key]])
-    #     return posterior_samples
     def sample_in_batches(data, workflow, num_samples, batch_size, sampler_settings=None) -> dict:
         """
         Batch over expanded conditions (N_TEST * N_SUBJECTS * N_SAMPLES).
