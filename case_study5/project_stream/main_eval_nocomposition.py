@@ -144,13 +144,13 @@ def main(cfg: EvalConfig):
 
 
     logging.info("Starting Partial-Pooling (global) inference with no composition...")
-    workflow_global.approximator.inference_network.integrate_kwargs.update({
-        'method': cfg.method,
-        'steps': cfg.steps,
-        # 'compositional_bridge_d1': 1/cfg.inverse_compositional_bridge_d1,
-        # 'mini_batch_size': cfg.mini_batch_size,
-        "max_steps": cfg.max_steps,
-        })
+    # workflow_global.approximator.inference_network.integrate_kwargs.update({
+    #     'method': cfg.method,
+    #     'steps': cfg.steps,
+    #     # 'compositional_bridge_d1': 1/cfg.inverse_compositional_bridge_d1,
+    #     # 'mini_batch_size': cfg.mini_batch_size,
+    #     "max_steps": cfg.max_steps,
+    #     })
     global_posterior = workflow_global.sample(
                         num_samples=cfg.n_samples,
                         conditions={cfg.sim_data: test_data[cfg.sim_data], 

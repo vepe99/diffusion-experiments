@@ -14,7 +14,7 @@ def main():
     from optuna.storages import JournalStorage, JournalFileStorage
 
     from optuna.visualization import plot_pareto_front, plot_param_importances
-    storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/optuna_diffusionmodel.log"))
+    storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/optuna_diffusionmodel_galax.log"))
     study = optuna.load_study(
         # study_name="study_CompositionalDiffusionModel",
         study_name='study_DiffusionModel',

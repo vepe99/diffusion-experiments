@@ -1,8 +1,8 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_galax/"
-model_dir: "models/model_galax6D_1e6_concat_750_hyper/"
-multistream_n_simulation: 333
-results_dir: "plots/plots_galax6D_1e6_concat_750_hyper_333tests/"
+model_dir: "models/model_galax6D_1e6_concat_500_big/"
+multistream_n_simulation: 100
+results_dir: "plots/plots_galax6D_1e6_concat_500_big_nocomposition_100ests/"
 use_streamax_simulator: False
 
 #training hyperparameters
@@ -75,7 +75,8 @@ observational_window:
     dec_max: 9.279576254116762
   NGC3201:
     ra_min: 42.29847920913508
-    ra_max: 178.36142433209437
+    # ra_max: 178.36142433209437
+    ra_max: 140.0
     dec_min: -47.79545565626234
     dec_max: 20.812029301121846
   M68:
@@ -111,7 +112,7 @@ masked_value_vlos:
     std: 65.70
 
 augmentations:
-  # - "remove_los_velocity"
+# - remove_los_velocity
 - convert_distance_to_parallax
 - observational_window
 - observed_n_stars

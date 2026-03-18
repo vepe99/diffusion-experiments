@@ -65,7 +65,7 @@ def main(cfg: EvalConfig):
         model_config = yaml.safe_load(f)
     print(model_config)
 
-    test_data_path = '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/gaia_observed_streams_6Dwitherrors.npz'
+    test_data_path = '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/gaia_observed_streams_6Dwitherrors_cutNGC3201.npz'
     print('Loading test data from ', test_data_path)
     test_data = dict(np.load(test_data_path, allow_pickle=True))
     test_data = {k: test_data[k] for k in [cfg.sim_data, "j", "attention_mask", "magnitudes"] }
@@ -119,6 +119,8 @@ def main(cfg: EvalConfig):
     if "sample_obs_error" in cfg.augmentations:
         augmentations.append(augmentations_class.sample_obs_error)
         # augmentations.append(augmentations_class.override_vlos_error_with_real)  # <-- add here
+    if "observational_window" in cfg.augmentations:
+        augmentations.append(augmentations_class.observational_window)
     if "concatentate_sigma_error_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatentate_sigma_error_to_sim_data)
     if "concatenate_magnitudes_to_sim_data" in cfg.augmentations:
@@ -131,8 +133,8 @@ def main(cfg: EvalConfig):
     test_data[cfg.sim_data] = test_data[cfg.sim_data].reshape(-1, test_data[cfg.sim_data].shape[-2], test_data[cfg.sim_data].shape[-1])
     test_data['j'] = test_data['j'].reshape(-1, 1)
     #change the distance column of the padded stars:
-    padded_mask = np.all(test_data[cfg.sim_data] == 0, axis=-1)  # shape: (n, n_stars)
-    test_data[cfg.sim_data][padded_mask, 2] = 1.0
+    # padded_mask = np.all(test_data[cfg.sim_data] == 0, axis=-1)  # shape: (n, n_stars)
+    # test_data[cfg.sim_data][padded_mask, 2] = 1.0
     print('Test data sim shape before augmentation: ', test_data[cfg.sim_data].shape)
     for aug in augmentations:
         test_data = aug(test_data)

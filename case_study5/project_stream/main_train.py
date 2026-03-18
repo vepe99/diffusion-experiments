@@ -44,11 +44,12 @@ def main(cfg: TrainConfig):
     sim_data = str(cfg.sim_data)
     inference_conditions = str(cfg.inference_conditions[0])  # jut 1
     train_data_path = os.path.join(
-        cfg.base_dir, cfg.data_dir, f"training_data_{cfg.N_simulations}.npz"
+        cfg.base_dir, cfg.data_dir, f"training_data_local_{cfg.N_simulations}.npz"
     )
     print("Train data path:", train_data_path)
     training_data = dict(np.load(train_data_path, allow_pickle=True))
-    # training_data = {k: v[:1_000] for k, v in training_data.items()}
+    
+    training_data = {k: v[:100_000] for k, v in training_data.items()}
     print("Training data keys", training_data.keys())
     keys_to_drop = (
         set(training_data.keys())

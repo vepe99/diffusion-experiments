@@ -19,7 +19,7 @@ from optuna.trial import TrialState
 import logging
 logging.getLogger('bayesflow').setLevel(logging.DEBUG)
 
-from utils.utils_train import AugmentationsClass
+from utils.utils_train_jax import AugmentationsClass
 import jax
 
 def clear_gpu_memory():
@@ -38,17 +38,25 @@ def objective(trial, cfg):
         mlp_depths = trial.suggest_int("SetTransformer_mlp_depths", 2, 6) 
         mlp_widths = trial.suggest_int("SetTransformer_mlp_widths", 32, 256)
 
-        inference_mlp_depth = trial.suggest_int("inference_mlp_depth", 5, 8)
-        inference_mlp_width = trial.suggest_int("inference_mlp_width", 64, 512)
+        inference_mlp_depth = trial.suggest_int("inference_mlp_depth", 2, 8)
+        inference_mlp_width = trial.suggest_int("inference_mlp_width", 32, 512)
         time_embedding_dim = trial.suggest_int("inference_time_embedding_dim", 16, 64, step=2)
 
         param_names_global = list(cfg.parameters_global)
         sim_data = 'sim_data_projected'
         inference_conditions = 'j' #just 1
+        keys_to_drop = (
+            set(training_data.keys())
+            - set(param_names_global)
+            - {sim_data}
+            - set(inference_conditions)
+        )
+        keys_to_drop = list(keys_to_drop)
         
         adapter = (
             bf.adapters.Adapter()
             .to_array()
+            .drop(keys_to_drop)
             .convert_dtype("float64", "float32")
             .concatenate(param_names_global, into="inference_variables")
             .rename(sim_data, "summary_variables")
@@ -71,7 +79,7 @@ def objective(trial, cfg):
             )
        
         
-        batch_size_training = 512
+        batch_size_training = 100
         try:
             history = workflow_global.fit_offline(
                 training_data,
@@ -178,7 +186,7 @@ def objective(trial, cfg):
 
 from hydra import compose, initialize_config_dir
 from hydra.core.config_store import ConfigStore
-from train_config import TrainConfig
+from config.TrainConfig import TrainConfig
 from optuna.storages import JournalStorage, JournalFileStorage
 
 
@@ -195,18 +203,34 @@ if __name__ == "__main__":
         cfg = compose(config_name="train_config")
     
     base_dir =  '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/'
-    data_dir = 'streams/data_streamax/'
+    data_dir = 'streams/data_galax_1e6/'
     N_simulations = 1_000_000
 
 
-    train_data_path = os.path.join(base_dir, data_dir, f"training_data_{N_simulations}.npz")
+    train_data_path = os.path.join(base_dir, data_dir, f"training_data_local_{N_simulations}.npz")
     training_data = dict(np.load(train_data_path, allow_pickle=True))
-    training_data = {k: training_data[k][:100_000] for k in training_data.keys()}
+    training_data = {k: training_data[k][:30_000] for k in training_data.keys()}
 
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
 
-    if "remove_los_velocity" in cfg.augmentations:
+    # if "remove_los_velocity" in cfg.augmentations:
+    #     augmentations.append(augmentations_class.remove_los_velocity)
+    # if "convert_distance_to_parallax" in cfg.augmentations:
+    #     augmentations.append(augmentations_class.convert_distance_to_parallax)
+    # if "sample_magnitudes" in cfg.augmentations:
+    #     augmentations.append(augmentations_class.sample_magnitudes)
+    # if "sample_obs_error" in cfg.augmentations:
+    #     augmentations.append(augmentations_class.sample_obs_error)
+    # if "apply_obs_error" in cfg.augmentations:  
+    #     augmentations.append(augmentations_class.apply_obs_error)
+    # if "observational_window" in cfg.augmentations:
+    #     augmentations.append(augmentations_class.observational_window)
+    # if "observed_n_stars" in cfg.augmentations:
+    #     augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
+    # if "flip_dirz" in cfg.augmentations:
+    #     augmentations.append(augmentations_class.flip_dirz)
+    if "remove_los_velocity" in cfg.augmentations: #remove this if you want to train with vlos and errors
         augmentations.append(augmentations_class.remove_los_velocity)
     if "convert_distance_to_parallax" in cfg.augmentations:
         augmentations.append(augmentations_class.convert_distance_to_parallax)
@@ -214,33 +238,47 @@ if __name__ == "__main__":
         augmentations.append(augmentations_class.sample_magnitudes)
     if "sample_obs_error" in cfg.augmentations:
         augmentations.append(augmentations_class.sample_obs_error)
-    if "apply_obs_error" in cfg.augmentations:  
+    if "apply_obs_error" in cfg.augmentations:
         augmentations.append(augmentations_class.apply_obs_error)
     if "observational_window" in cfg.augmentations:
         augmentations.append(augmentations_class.observational_window)
     if "observed_n_stars" in cfg.augmentations:
         augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
+    if "mask_vlos" in cfg.augmentations:
+        augmentations.append(augmentations_class.mask_vlos)
     if "flip_dirz" in cfg.augmentations:
         augmentations.append(augmentations_class.flip_dirz)
+    if "concatentate_sigma_error_to_sim_data" in cfg.augmentations:
+        augmentations.append(augmentations_class.concatentate_sigma_error_to_sim_data)
+    if "concatenate_magnitudes_to_sim_data" in cfg.augmentations:
+        augmentations.append(augmentations_class.concatenate_magnitudes_to_sim_data)
+    if "concatenate_vlos_mask_to_sim_data" in cfg.augmentations:
+        augmentations.append(augmentations_class.concatenate_vlos_mask_to_sim_data)
+    if "concatenate_j_to_sim_data" in cfg.augmentations:
+        augmentations.append(augmentations_class.concatenate_j_to_sim_data)
 
     
 
     for aug in augmentations:
         training_data = aug(training_data)
     
+    
     print('Training data shapes after augmentations:')
     for k, v in training_data.items():
+        training_data[k] = np.array(training_data[k])
         print(f'  {k}: {v.shape}')
     
 
-    test_data_path = os.path.join(base_dir, 'streams/data_streamax/', f"validation_data_1000.npz")
-    test_data = dict(np.load(test_data_path, allow_pickle=True))
+    test_data = dict(np.load(train_data_path, allow_pickle=True))
+    test_data = {k: test_data[k][-1_000:] for k in test_data.keys()}
     for aug in augmentations:
         test_data = aug(test_data)
+    for k in test_data.keys():
+        test_data[k] = np.array(test_data[k])
         
     print("Loaded config:", cfg)
     study_name = 'study_DiffusionModel'  # Unique identifier of the study.
-    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/optuna_diffusionmodel.log"))
+    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/optuna_diffusionmodel_galax.log"))
     study = optuna.create_study(study_name=study_name, storage=storage_name, directions=['minimize', 'minimize'], load_if_exists=True)
     study.optimize(
         lambda trial: objective(trial, cfg),
