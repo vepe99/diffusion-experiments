@@ -19,7 +19,7 @@ from optuna.trial import TrialState
 import logging
 logging.getLogger('bayesflow').setLevel(logging.DEBUG)
 
-from utils.utils_train import AugmentationsClass
+from utils.utils_train_jax import AugmentationsClass
 import jax
 
 def clear_gpu_memory():
@@ -33,13 +33,13 @@ def objective(trial, cfg):
 
     try:
         summary_dim = trial.suggest_int("SetTransformer_summary_dim", 20, 64)
-        embed_dims = trial.suggest_int("SetTransformer_embed_dims", 48, 64)
-        num_heads = trial.suggest_int("SetTransformer_num_heads", 1, 4)
+        embed_dims = trial.suggest_int("SetTransformer_embed_dims", 48, 128)
+        num_heads = trial.suggest_int("SetTransformer_num_heads", 1, 3)
         mlp_depths = trial.suggest_int("SetTransformer_mlp_depths", 2, 6) 
-        mlp_widths = trial.suggest_int("SetTransformer_mlp_widths", 32, 128)
+        mlp_widths = trial.suggest_int("SetTransformer_mlp_widths", 32, 256)
 
-        inference_mlp_depth = trial.suggest_int("inference_mlp_depth", 5, 8)
-        inference_mlp_width = trial.suggest_int("inference_mlp_width", 64, 512)
+        inference_mlp_depth = trial.suggest_int("inference_mlp_depth", 2, 8)
+        inference_mlp_width = trial.suggest_int("inference_mlp_width", 32, 512)
         time_embedding_dim = trial.suggest_int("inference_time_embedding_dim", 16, 64, step=2)
 
         param_names_global = list(cfg.parameters_global)
@@ -82,11 +82,11 @@ def objective(trial, cfg):
             )
        
         
-        batch_size_training = 256
+        batch_size_training = 500
         try:
             history = workflow_global.fit_offline(
                 training_data,
-                epochs=100,
+                epochs=500,
                 batch_size=batch_size_training,
                 verbose=2,
             )
@@ -209,13 +209,13 @@ if __name__ == "__main__":
         cfg = compose(config_name="train_config_local")
     
     base_dir =  '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/'
-    data_dir = 'streams/data_streamax/'
+    data_dir = 'streams/data_galax_1e6/'
     N_simulations = 1_000_000
 
 
     train_data_path = os.path.join(base_dir, data_dir, f"training_data_local_{N_simulations}.npz")
     training_data = dict(np.load(train_data_path, allow_pickle=True))
-    training_data = {k: training_data[k][:100_000] for k in training_data.keys()}
+    training_data = {k: training_data[k][:60_000] for k in training_data.keys()}
 
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
@@ -254,6 +254,7 @@ if __name__ == "__main__":
     
     print('Training data shapes after augmentations:')
     for k, v in training_data.items():
+        training_data[k] = np.array(training_data[k])
         print(f'  {k}: {v.shape}')
     
 
@@ -264,7 +265,7 @@ if __name__ == "__main__":
         
     print("Loaded config:", cfg)
     study_name = 'study_DiffusionMode_local'  # Unique identifier of the study.
-    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/optuna_diffusionmodel_local.log"))
+    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/optuna_diffusionmodel_galax_local_cutNGC3201.log"))
     study = optuna.create_study(study_name=study_name, storage=storage_name, directions=['minimize', 'minimize'], load_if_exists=True)
     study.optimize(
         lambda trial: objective(trial, cfg),

@@ -1,8 +1,8 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_galax/"
-model_dir: "models/model_galax6D_1e6_concat_500_big/"
-multistream_n_simulation: 100
-results_dir: "plots/plots_galax6D_1e6_concat_500_big_nocomposition_100ests/"
+model_dir: "models/model_galax6D_1e6_concat_fulldataset_500_hyper51_cutNGC3201/"
+multistream_n_simulation: 333
+results_dir: "plots/plots_galax6D_1e6_concat_fulldataset_500_hyper51_cutNGC3201_nocomposition_333tests/"
 use_streamax_simulator: False
 
 #training hyperparameters
@@ -11,13 +11,15 @@ method: "two_step_adaptive"
 steps: "adaptive"
 max_steps: 1000
 mini_batch_size: null
-batch_size: 10
-inverse_compositional_bridge_d1: 6
-noise_schedule: null 
-  # min_log_snr: -15
-  # max_log_snr: 15
-  # shift: 10
-  # weighting: "sigmoid"
+batch_size: 30
+# inverse_compositional_bridge_d1: 5.3
+inverse_compositional_bridge_d1: 4.5
+noise_schedule: null
+# noise_schedule: 
+#   min_log_snr: -15
+#   max_log_snr: 15
+#   shift: 3
+#   weighting: "sigmoid"
 verbose: 2
 
 #nmes of parameters
@@ -87,7 +89,8 @@ observational_window:
 
 observed_n_stars:
   Pal5: 129
-  NGC3201: 607
+  # NGC3201: 607
+  NGC3201: 195
   M68: 297
 
 gaia_id:
@@ -97,7 +100,8 @@ gaia_id:
 
 min_star_with_vlos:
   Pal5: 69
-  NGC3201: 40
+  # NGC3201: 40
+  NGC3201: 37
   M68: 29
 
 masked_value_vlos:

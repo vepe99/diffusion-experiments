@@ -1,8 +1,8 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_streamax/"
-model_dir: "models/model_streamax_concat_6D_hyper/"
+model_dir: "models/model_streamax_concat_6D_1000_hyper_smalldataset_cutNGC3201/"
 multistream_n_simulation: 333
-results_dir: "plots/plots_streamax_concat_6D_hyper_333tests/"
+results_dir: "plots/plots_streamax_concat_6D_1000_hyper_smalldataset_cutNGC3201_nocomposition_333tests/"
 use_streamax_simulator: True
 
 #training hyperparameters
@@ -11,7 +11,7 @@ method: "two_step_adaptive"
 steps: "adaptive"
 max_steps: 1000
 mini_batch_size: null
-batch_size: 10
+batch_size: 30
 inverse_compositional_bridge_d1: 6
 noise_schedule: null
   # min_log_snr: -15
@@ -73,7 +73,8 @@ observational_window:
     dec_max: 9.279576254116762
   NGC3201:
     ra_min: 42.29847920913508
-    ra_max: 178.36142433209437
+    # ra_max: 178.36142433209437
+    ra_max: 140.0
     dec_min: -47.79545565626234
     dec_max: 20.812029301121846
   M68:
@@ -84,12 +85,14 @@ observational_window:
 
 observed_n_stars:
   Pal5: 129
-  NGC3201: 607
+  # NGC3201: 607
+  NGC3201: 195
   M68: 297
 
 min_star_with_vlos:
   Pal5: 69
-  NGC3201: 40
+  # NGC3201: 40
+  NGC3201: 37
   M68: 29
 
 # error_keys: null #default is ["ra", "dec", "parallax", "mu_ra", "mu_dec"]

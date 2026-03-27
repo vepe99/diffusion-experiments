@@ -155,7 +155,7 @@ def main(cfg: EvalConfig):
     # print('Test data attention mask shape after repeating: ', test_data['attention_mask'].shape)
 
     #WE NEED TO GET ALSO THE SAMPLES FROM THE GLOBAL PRIOR
-    global_posterior = dict(np.load('/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/plots/plots_streamax_concatenation_500_hyper_333tests/global_posterior.npz', allow_pickle=True))
+    global_posterior = dict(np.load('/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/plots/plots_galax6D_1e6_concat_500_hyper40_cutNGC3201_100tests/global_posterior.npz', allow_pickle=True))
     print('keys global posterior: ', global_posterior.keys())
     def expand_global_posterior(arr):
         """

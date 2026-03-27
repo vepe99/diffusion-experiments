@@ -134,12 +134,17 @@ def main(cfg: EvalConfig):
         print('##########')
         print(f"{k} shape: {test_data[k].shape}")
 
-    observed_data_path = '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/gaia_observed_streams_6Dwitherrors.npz'
+    observed_data_path = '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/gaia_observed_streams_6Dwitherrors_cutNGC3201.npz'
     print('Loading observed data from ', observed_data_path)
     obs_data = dict(np.load(observed_data_path, allow_pickle=True))
-    obs_data = {k: obs_data[k] for k in [cfg.sim_data, "j", "attention_mask", "magnitudes"] }
+    print('observed data')
+    for k in obs_data.keys():
+        print('##########')
+        print(f"{k} shape: {obs_data[k].shape}")
+    # obs_data = {k: obs_data[k] for k in [cfg.sim_data, "j", "attention_mask", "magnitudes", "vlos_mask"] }
     # print('Test data keys and shape: ', test_data.keys(), test_data[list(test_data.keys())[0]].shape)
-    other_things = ['attention_mask', 'magnitudes', 'vloss_mask']
+    # other_things = ['attention_mask', 'magnitudes', 'vlos_mask']
+    other_things = ['attention_mask', 'magnitudes']
     keys_to_drop = set(obs_data.keys()) - set(param_names_global) - {sim_data} - set(inference_conditions) -  set(other_things)
     keys_to_drop = list(keys_to_drop) 
     augmentations_class = AugmentationsClass(cfg)
@@ -151,17 +156,23 @@ def main(cfg: EvalConfig):
     if "sample_obs_error" in cfg.augmentations:
         augmentations.append(augmentations_class.sample_obs_error)
         # augmentations.append(augmentations_class.override_vlos_error_with_real)  # <-- add here
+    # if "mask_vlos" in cfg.augmentations:
+    #     augmentations.append(augmentations_class.mask_vlos)
+    if "observational_window" in cfg.augmentations:
+        augmentations.append(augmentations_class.observational_window)
     if "concatentate_sigma_error_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatentate_sigma_error_to_sim_data)
     if "concatenate_magnitudes_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatenate_magnitudes_to_sim_data)
-    # if "concatenate_vlos_mask_to_sim_data" in cfg.augmentations:
-        # augmentations.append(augmentations_class.concatenate_vlos_mask_to_sim_data)
+    if "concatenate_vlos_mask_to_sim_data" in cfg.augmentations:
+        augmentations.append(augmentations_class.concatenate_vlos_mask_to_sim_data)
     if "concatenate_j_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatenate_j_to_sim_data)
     #reshape the streams dimensions
     obs_data[cfg.sim_data] = obs_data[cfg.sim_data].reshape(-1, obs_data[cfg.sim_data].shape[-2], obs_data[cfg.sim_data].shape[-1])
     obs_data['j'] = obs_data['j'].reshape(-1, 1)
+    if 'vlos_mask' in obs_data:
+        obs_data['vlos_mask'] = obs_data['vlos_mask'].reshape(-1, 1, obs_data[cfg.sim_data].shape[-2])
     print('Observed data sim shape before augmentation: ', obs_data[cfg.sim_data].shape)
     for aug in augmentations:
         obs_data = aug(obs_data)

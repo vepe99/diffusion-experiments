@@ -98,6 +98,24 @@ def main(cfg: EvalConfig):
     model_path = os.path.join(cfg.base_dir, cfg.model_dir, 'global_model.keras' )
     # Fix ArrayImpl serialization issue in the .keras fil
     model_path = fix_keras_model(model_path, )
+    import zipfile
+    import json
+    fixed_model_path = model_path.replace('.keras', '_fixed.keras')
+    if not os.path.exists(fixed_model_path):
+        with zipfile.ZipFile(model_path, 'r') as zin:
+            with zipfile.ZipFile(fixed_model_path, 'w') as zout:
+                for item in zin.infolist():
+                    data = zin.read(item.filename)
+                    if item.filename == 'config.json':
+                        config_str = data.decode('utf-8')
+                        config_str = config_str.replace(
+                            '__bayesflow_type__ArrayImpl',
+                            '__bayesflow_type__ndarray'
+                        )
+                        data = config_str.encode('utf-8')
+                    zout.writestr(item, data)
+        print(f"Created fixed model at {fixed_model_path}")
+    model_path = fixed_model_path
     print('Loading model from ', model_path)
     print("##############")
     param_names_global = list(cfg.parameters_global)
@@ -122,20 +140,20 @@ def main(cfg: EvalConfig):
     with open(os.path.join(cfg.base_dir, cfg.model_dir, '.hydra', 'config.yaml'), "r") as f:
         model_config = yaml.safe_load(f)
     print(model_config)
-    if cfg.noise_schedule is not None:
-        inference_network = bf.networks.CompositionalDiffusionModel(
-                                                        subnet_kwargs={
-                                                        "widths": [model_config['global_model']['inference_mlp_width']] * model_config['global_model']['inference_mlp_depth'],
-                                                        "time_embedding_dim": model_config['global_model']['inference_time_embedding_dim'],
-                                                        },
-                                                        schedule_kwargs = {**cfg.noise_schedule,},
-                                                        )
-    else:
-        #probably needs to fix it to the training noise schedule 
-        inference_network = bf.networks.CompositionalDiffusionModel(subnet_kwargs={
-                                                        "widths": [model_config['global_model']['inference_mlp_width']] * model_config['global_model']['inference_mlp_depth'],
-                                                        "time_embedding_dim": model_config['global_model']['inference_time_embedding_dim'],
-                                                        },)
+    # if cfg.noise_schedule is not None:
+    #     inference_network = bf.networks.CompositionalDiffusionModel(
+    #                                                     subnet_kwargs={
+    #                                                     "widths": [model_config['global_model']['inference_mlp_width']] * model_config['global_model']['inference_mlp_depth'],
+    #                                                     "time_embedding_dim": model_config['global_model']['inference_time_embedding_dim'],
+    #                                                     },
+    #                                                     schedule_kwargs = {**cfg.noise_schedule,},
+    #                                                     )
+    # else:
+    #     #probably needs to fix it to the training noise schedule 
+    #     inference_network = bf.networks.CompositionalDiffusionModel(subnet_kwargs={
+    #                                                     "widths": [model_config['global_model']['inference_mlp_width']] * model_config['global_model']['inference_mlp_depth'],
+    #                                                     "time_embedding_dim": model_config['global_model']['inference_time_embedding_dim'],
+    #                                                     },)
     workflow_global = bf.BasicWorkflow(
         adapter=adapter,
         summary_network=bf.networks.SetTransformer(summary_dim=model_config['global_model']['summary_dim'], 
@@ -144,7 +162,10 @@ def main(cfg: EvalConfig):
                                                    mlp_depths=(model_config['global_model']['mlp_depths'], model_config['global_model']['mlp_depths']),
                                                    mlp_widths=(model_config['global_model']['mlp_widths'], model_config['global_model']['mlp_widths']),
                                                    dropout=0.1),
-        inference_network=inference_network,
+        inference_network = bf.networks.CompositionalDiffusionModel(subnet_kwargs={
+                                                        "widths": [model_config['global_model']['inference_mlp_width']] * model_config['global_model']['inference_mlp_depth'],
+                                                        "time_embedding_dim": model_config['global_model']['inference_time_embedding_dim'],
+                                                        },),
         standardize=["inference_variables", "summary_variables"]
     )
     workflow_global.approximator = keras.models.load_model(model_path)

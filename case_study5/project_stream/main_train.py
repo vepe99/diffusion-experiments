@@ -49,7 +49,7 @@ def main(cfg: TrainConfig):
     print("Train data path:", train_data_path)
     training_data = dict(np.load(train_data_path, allow_pickle=True))
     
-    training_data = {k: v[:100_000] for k, v in training_data.items()}
+    # training_data = {k: v[:60_000] for k, v in training_data.items()}
     print("Training data keys", training_data.keys())
     keys_to_drop = (
         set(training_data.keys())
