@@ -14,6 +14,7 @@ dependencies = [
     "fyeldgenerator>=0.1.7",
     "hydra-core==1.3",
     "gpustat",
+    "ipython",
     "jax[cuda]>=0.7.1",
     "joblib==1.5.2",
     "keras>=3.10",
@@ -22,9 +23,6 @@ dependencies = [
     "numba>=0.63.1",
     "numpy>=1.26.4",
     "optuna",
-    "playwright>=1.57.0",
-    "pyabc>=0.12.16",
-    "pypesto",
     "scipy>=1.12.0",
     "tensorflow==2.20.0",
     "torch==2.9.1",
@@ -35,7 +33,6 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-pypesto = { git = "https://github.com/ICB-DCM/pyPESTO.git", rev = "develop" }
 sbibm = { git = "https://github.com/arrjon/sbibm.git", rev = "dev" }
 bayesflow = { path = "../bayesflow_enviroment_most_recent/bayesflow", editable = true }
 galstreams = {git = "https://github.com/cmateu/galstreams"}

@@ -113,6 +113,7 @@ gaia_id:
 
 
 augmentations:
+- "cut_to_300_particles"
 # - remove_los_velocity
 - convert_distance_to_parallax
 - observational_window

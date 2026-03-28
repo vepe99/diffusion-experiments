@@ -191,6 +191,31 @@ class AugmentationsClass:
     # Augmentation functions — all take batch, return batch
     # ----------------------------------------------------------------
 
+    # @partial(jit, static_argnums=(0,))
+    def cut_to_300_particles(self, batch):
+        """
+        Randomly sample N particles for each batch entry.
+        """
+        subkey = self._split_key()
+        sim_data = batch[self.cfg.sim_data]
+        batch_size, n_particles, *rest = sim_data.shape
+
+        # Sample indices for each batch entry
+        # keys = jax.random.split(subkey, batch_size)
+        # idx = jax.vmap(
+        #     lambda k: jax.random.choice(k, n_particles, shape=(200,), replace=False)
+        # )(keys)
+        keys = jax.random.split(subkey, batch_size)
+        idx = jax.vmap(lambda k: jax.random.permutation(k, n_particles)[:300])(keys)
+
+        # Gather the selected particles for each batch entry
+        batch[self.cfg.sim_data] = np.take_along_axis(
+            sim_data, idx[..., None], axis=1
+        )
+
+        return batch
+
+    @partial(jit, static_argnums=(0,))
     def remove_los_velocity(self, batch):
         batch[self.cfg.sim_data] = batch[self.cfg.sim_data][:, :, :5]
         return batch
@@ -202,6 +227,15 @@ class AugmentationsClass:
         sim_data[:, :, 2] = parallax_mas
         batch[self.cfg.sim_data] = sim_data
         return batch
+    
+    # @partial(jit, static_argnums=(0,))
+    # def convert_distance_to_parallax(self, batch):
+    #     sim_data = batch[self.cfg.sim_data]
+    #     distances_kpc = sim_data[:, :, 2]
+    #     parallax_mas = 1.0 / distances_kpc
+    #     sim_data = sim_data.at[:, :, 2].set(parallax_mas)
+    #     batch[self.cfg.sim_data] = sim_data
+    #     return batch
 
     def observational_window(self, batch):
         """

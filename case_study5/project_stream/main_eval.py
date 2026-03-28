@@ -173,6 +173,8 @@ def main(cfg: EvalConfig):
     # Augmentation
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
+    if "cut_to_300_particles" in cfg.augmentations:
+        augmentations.append(augmentations_class.cut_to_200_particles)
     if "remove_los_velocity" in cfg.augmentations:
         augmentations.append(augmentations_class.remove_los_velocity)
     if "convert_distance_to_parallax" in cfg.augmentations:
@@ -217,18 +219,18 @@ def main(cfg: EvalConfig):
         test_sim_config = yaml.safe_load(f)
     print('Test simulation config prior: ', test_sim_config['priors_global'])
 
-    def prior_global_score(x, cfg=cfg, test_sim_config=test_sim_config):
+    def prior_global_score(x, time, cfg=cfg, test_sim_config=test_sim_config):
         
         score = {}
         
         for k in cfg.parameters_global:
             # print(f"Computing prior score for {k} with type {test_sim_config['priors_global'][k]['type']}")
             if test_sim_config['priors_global'][k]['type'] == 'uniform':
-                score[k] = np.zeros_like(x[k])
+                score[k] = (1-time)*np.zeros_like(x[k])
             elif test_sim_config['priors_global'][k]['type'] == 'normal':
                 mean = test_sim_config['priors_global'][k]['prior_parameters'][0]
                 std = test_sim_config['priors_global'][k]['prior_parameters'][1]
-                score[k] = -(x[k] - mean) / std**2 
+                score[k] = -(1-time)*(x[k] - mean) / std**2 
         return score
 
     logging.info("Starting Partial-Pooling (global) inference...")

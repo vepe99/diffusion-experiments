@@ -22,7 +22,7 @@ logging.getLogger("bayesflow").setLevel(logging.DEBUG)
 
 # from case_study5.project_stream.train_config import TrainConfig
 from config.TrainConfig import TrainConfig
-from utils.utils_train_jax import AugmentationsClass
+from utils.utils_train import AugmentationsClass
 
 cs = ConfigStore.instance()
 cs.store(name="train_config", node=TrainConfig)
@@ -49,7 +49,7 @@ def main(cfg: TrainConfig):
     print("Train data path:", train_data_path)
     training_data = dict(np.load(train_data_path, allow_pickle=True))
     
-    # training_data = {k: v[:60_000] for k, v in training_data.items()}
+    training_data = {k: v[:300_000] for k, v in training_data.items()}
     print("Training data keys", training_data.keys())
     keys_to_drop = (
         set(training_data.keys())
@@ -96,6 +96,8 @@ def main(cfg: TrainConfig):
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
 
+    if "cut_to_300_particles" in cfg.augmentations:
+        augmentations.append(augmentations_class.cut_to_300_particles)
     if "remove_los_velocity" in cfg.augmentations: #remove this if you want to train with vlos and errors
         augmentations.append(augmentations_class.remove_los_velocity)
     if "convert_distance_to_parallax" in cfg.augmentations:
