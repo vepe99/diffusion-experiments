@@ -61,6 +61,15 @@ class AugmentationsClass:
         self.kde_streams = {}
         for j, magnitudes in self.observed_streams.items():
             self.kde_streams[j] = gaussian_kde(magnitudes)
+        self._kde_cache_size = 5_000_000  # tune to available RAM
+        self._kde_cache = {}
+        for j, kde in self.kde_streams.items():
+            mag_min, mag_max = self.magnitude_clipping[j]
+            seed_for_kde = int(self.rng.integers(0, 2**31))
+            kde.random_state = np.random.RandomState(seed_for_kde)
+            samples = kde.resample(size=self._kde_cache_size).ravel()
+            self._kde_cache[j] = np.clip(samples, mag_min, mag_max)
+        self._kde_cache_pos = {j: 0 for j in self.kde_streams}
 
         # ---- Precompute lookup arrays ----
         self.n_streams = max(self.idx_to_stream.keys()) + 1
@@ -161,23 +170,12 @@ class AugmentationsClass:
     # ----------------------------------------------------------------
 
     def cut_to_300_particles(self, batch):
-        """
-        Randomly subsample to 300 particles per batch entry (without replacement).
-        """
-        sim_data = batch[self.cfg.sim_data]          # (batch_size, n_particles, d)
-        batch_size, n_particles, *rest = sim_data.shape
-
-        # Build index array: for each batch entry, a random permutation of
-        # particle indices, keeping the first 300.
-        idx = np.stack(
-            [self.rng.permutation(n_particles)[:300] for _ in range(batch_size)],
-            axis=0,
-        )  # (batch_size, 300)
-
-        # Gather selected particles
-        batch[self.cfg.sim_data] = np.take_along_axis(
-            sim_data, idx[..., None], axis=1
-        )
+        sim_data = batch[self.cfg.sim_data]
+        batch_size, n_particles, _ = sim_data.shape
+        # One RNG call for all entries; argpartition avoids full sort
+        scores = self.rng.random((batch_size, n_particles))
+        idx = np.argpartition(scores, 300, axis=1)[:, :300]   # (batch_size, 300)
+        batch[self.cfg.sim_data] = np.take_along_axis(sim_data, idx[..., None], axis=1)
         return batch
 
     def remove_los_velocity(self, batch):
@@ -307,59 +305,71 @@ class AugmentationsClass:
         batch["vlos_mask"] = vlos_mask[:, None, :]
         return batch
 
+    # def sample_magnitudes(self, batch):
+    #     """
+    #     Sample magnitudes from the per-stream KDE.
+    #     Sets batch['magnitudes']: (batch_size, n_particles).
+    #     """
+    #     batch_size, n_particles, _ = batch[self.cfg.sim_data].shape
+    #     j = batch["j"].reshape(-1).astype(int)  # (batch_size,)
+
+    #     magnitudes = np.zeros((batch_size, n_particles))
+
+    #     unique_j, inverse = np.unique(j, return_inverse=True)
+    #     for jj in unique_j:
+    #         idx_in_batch = np.where(j == jj)[0]   # which batch entries have this stream
+    #         count = len(idx_in_batch)
+
+    #         kde = self.kde_streams[int(jj)]
+    #         mag_min, mag_max = self.magnitude_clipping[int(jj)]
+
+    #         # scipy gaussian_kde.resample uses its own internal state; we seed it
+    #         # via a fresh integer derived from our Generator so sampling remains
+    #         # reproducible relative to self.rng's state.
+    #         seed_for_kde = int(self.rng.integers(0, 2**31))
+    #         kde.random_state = np.random.RandomState(seed_for_kde)
+
+    #         sampled = kde.resample(size=count * n_particles)   # (1, count*n_particles)
+    #         sampled = sampled.reshape(count, n_particles)
+    #         sampled = np.clip(sampled, mag_min, mag_max)
+
+    #         magnitudes[idx_in_batch] = sampled
+
+    #     batch["magnitudes"] = magnitudes
+    #     return batch
     def sample_magnitudes(self, batch):
-        """
-        Sample magnitudes from the per-stream KDE.
-        Sets batch['magnitudes']: (batch_size, n_particles).
-        """
         batch_size, n_particles, _ = batch[self.cfg.sim_data].shape
-        j = batch["j"].reshape(-1).astype(int)  # (batch_size,)
-
-        magnitudes = np.zeros((batch_size, n_particles))
-
-        unique_j, inverse = np.unique(j, return_inverse=True)
-        for jj in unique_j:
-            idx_in_batch = np.where(j == jj)[0]   # which batch entries have this stream
-            count = len(idx_in_batch)
-
-            kde = self.kde_streams[int(jj)]
-            mag_min, mag_max = self.magnitude_clipping[int(jj)]
-
-            # scipy gaussian_kde.resample uses its own internal state; we seed it
-            # via a fresh integer derived from our Generator so sampling remains
-            # reproducible relative to self.rng's state.
-            seed_for_kde = int(self.rng.integers(0, 2**31))
-            kde.random_state = np.random.RandomState(seed_for_kde)
-
-            sampled = kde.resample(size=count * n_particles)   # (1, count*n_particles)
-            sampled = sampled.reshape(count, n_particles)
-            sampled = np.clip(sampled, mag_min, mag_max)
-
-            magnitudes[idx_in_batch] = sampled
-
+        j = batch["j"].reshape(-1).astype(int)
+        magnitudes = np.empty((batch_size, n_particles))
+        for jj in np.unique(j):
+            idx_in_batch = np.where(j == jj)[0]
+            n_needed = len(idx_in_batch) * n_particles
+            pos = self._kde_cache_pos[jj]
+            cache = self._kde_cache[jj]
+            # Wrap around if needed
+            if pos + n_needed > len(cache):
+                self._kde_cache_pos[jj] = 0
+                pos = 0
+            magnitudes[idx_in_batch] = cache[pos:pos + n_needed].reshape(len(idx_in_batch), n_particles)
+            self._kde_cache_pos[jj] += n_needed
         batch["magnitudes"] = magnitudes
         return batch
 
     def sample_obs_error(self, batch):
-        """
-        Sample observational errors for all dimensions listed in self.error_keys,
-        based on interpolated Gaia DR3 sigmas at the sampled magnitudes.
-        Sets batch['obs_errors'] and batch['sigma_errors']:
-        both (batch_size, n_particles, n_error_keys).
-        """
-        magnitudes = batch["magnitudes"]  # (batch_size, n_particles)
+        magnitudes = batch["magnitudes"]   # (batch_size, n_particles)
+        flat_mags = magnitudes.ravel()     # (batch_size * n_particles,)
 
-        # Interpolate sigma for each error key: result shape (n_keys, batch_size, n_particles)
-        sigmas = np.stack(
-            [self.error_interpolators[k](magnitudes) for k in self.error_keys],
-            axis=0,
-        )  # (n_keys, batch_size, n_particles)
+        # Vectorized interpolation over all keys at once
+        sigmas_flat = np.stack([
+            np.interp(flat_mags, self.error_interp_mag_bins, self.error_values_stacked[i])
+            for i in range(len(self.error_keys))
+        ], axis=0)  # (n_keys, batch_size * n_particles)
 
-        noise = self.rng.standard_normal(size=sigmas.shape)  # same shape
+        sigmas = sigmas_flat.reshape(len(self.error_keys), *magnitudes.shape)  # (n_keys, B, N)
+        noise = self.rng.standard_normal(size=sigmas.shape)
         errors = sigmas * noise
 
-        # Transpose to (batch_size, n_particles, n_keys)
-        batch["sigma_errors"] = np.transpose(sigmas, (1, 2, 0))
+        batch["sigma_errors"] = np.transpose(sigmas, (1, 2, 0))   # (B, N, n_keys)
         batch["obs_errors"]   = np.transpose(errors, (1, 2, 0))
         return batch
 

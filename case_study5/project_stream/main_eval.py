@@ -12,11 +12,11 @@ from hydra.core.config_store import ConfigStore
 import numpy as np
 
 if "KERAS_BACKEND" not in os.environ:
-    os.environ["KERAS_BACKEND"] = "torch"
+    os.environ["KERAS_BACKEND"] = "jax"
 import keras
 import bayesflow as bf
 from scipy import  special 
-
+import jax.numpy as jnp 
 
 import logging
 logging.getLogger('bayesflow').setLevel(logging.DEBUG)
@@ -226,7 +226,7 @@ def main(cfg: EvalConfig):
         for k in cfg.parameters_global:
             # print(f"Computing prior score for {k} with type {test_sim_config['priors_global'][k]['type']}")
             if test_sim_config['priors_global'][k]['type'] == 'uniform':
-                score[k] = (1-time)*np.zeros_like(x[k])
+                score[k] = (1-time)*jnp.zeros_like(x[k])
             elif test_sim_config['priors_global'][k]['type'] == 'normal':
                 mean = test_sim_config['priors_global'][k]['prior_parameters'][0]
                 std = test_sim_config['priors_global'][k]['prior_parameters'][1]
@@ -363,6 +363,8 @@ def main(cfg: EvalConfig):
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_z_score_contraction.pdf'))
     print('Saved global z-score contraction plot')
     plt.show()
+    print('Finished evaluation with composition')
+    print('Results calibration saved in ', os.path.join(cfg.base_dir, cfg.results_dir, 'global_calibration.pdf'))
     
 
     ###############

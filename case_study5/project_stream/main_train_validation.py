@@ -30,7 +30,7 @@ cs.store(name="train_config", node=TrainConfig)
 @hydra.main(
     version_base=None,
     config_path="config",
-    config_name="train_config",
+    config_name="train_config_val",
 )
 def main(cfg: TrainConfig):
     print(cfg)
@@ -47,8 +47,8 @@ def main(cfg: TrainConfig):
     )
     print("Train data path:", train_data_path)
     training_data = dict(np.load(train_data_path, allow_pickle=True))
-    
-    training_data = {k: v[:300_000] for k, v in training_data.items()}
+    validation_data = {k: v[-10_000:,] for k, v in training_data.items()}
+    training_data = {k: v[:1_000_000-10_000] for k, v in training_data.items()}
     print("Training data keys", training_data.keys())
     keys_to_drop = (
         set(training_data.keys())
@@ -387,8 +387,12 @@ def main(cfg: TrainConfig):
                     fig_sigma.savefig(os.path.join(model_path, "augmentation_sigma_vlos_mask.pdf"))
                     plt.show()
 
+    for aug in augmentations:
+        validation_data = aug(validation_data)
+    validation_data = {k: np.array(v) for k, v in validation_data.items()}
     history = workflow_global.fit_offline(
         training_data,
+        validation_data=validation_data,
         epochs=cfg.n_epochs,
         batch_size=cfg.batch_size,
         verbose=cfg.verbose,

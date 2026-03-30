@@ -1,12 +1,12 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_streamax/"
-model_dir: "models/model_galax6D_1e6_concat_fulldataset_500_hyper51_cutNGC3201/"
+model_dir: "models/models/new_bf_cut300/model_galax6D_1e6_concat_thirdataset_750_hyper40_cutNGC3201/"
 multistream_n_simulation: 333
-results_dir: "plots/plots_galax6D_1e6_concat_fulldataset_500_hyper51_gaia_cutNGC3201/"
+results_dir: "plots/new_bf_cut300/plots_galax6D_1e6_concat_fulldataset_750_hyper40_gaia_cutNGC3201/"
 use_streamax_simulator: True
 
 #training hyperparameters
-n_samples: 50_000
+n_samples: 10_000
 method: "two_step_adaptive"
 steps: "adaptive"
 max_steps: 1000

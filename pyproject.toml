@@ -30,6 +30,7 @@ dependencies = [
     "bayesflow",
     "plotly>=6.5.2",
     "pyzmq>=27.1.0",
+    "scikit-learn",
 ]
 
 [tool.uv.sources]

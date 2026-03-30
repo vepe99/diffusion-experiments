@@ -1,7 +1,7 @@
 from autocvd import autocvd
 autocvd(num_gpus = 1)
 import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = "1"  
+# os.environ["CUDA_VISIBLE_DEVICES"] = "5"  
 from tqdm import tqdm
 
 import numpy as np
@@ -79,13 +79,14 @@ def objective(trial, cfg):
             )
        
         
-        batch_size_training = 350
+        batch_size_training = 500
         try:
             history = workflow_global.fit_offline(
                 training_data,
                 epochs=500,
                 batch_size=batch_size_training,
                 verbose=2,
+                augmentations=augmentations,
             )
         except Exception as e:
             logging.error(f"Training failed with error: {e}")
@@ -93,9 +94,10 @@ def objective(trial, cfg):
             batch_size_training = int(batch_size_training/2)
             history = workflow_global.fit_offline(
                 training_data,
-                epochs=100,
+                epochs=500,
                 batch_size=batch_size_training,
                 verbose=2,
+                augmentations=augmentations,
             )
 
         # workflow_global.approximator.inference_network.integrate_kwargs.update({
@@ -209,27 +211,13 @@ if __name__ == "__main__":
 
     train_data_path = os.path.join(base_dir, data_dir, f"training_data_local_{N_simulations}.npz")
     training_data = dict(np.load(train_data_path, allow_pickle=True))
-    training_data = {k: training_data[k][:60_000] for k in training_data.keys()}
+    training_data = {k: training_data[k][:300_000] for k in training_data.keys()}
 
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
 
-    # if "remove_los_velocity" in cfg.augmentations:
-    #     augmentations.append(augmentations_class.remove_los_velocity)
-    # if "convert_distance_to_parallax" in cfg.augmentations:
-    #     augmentations.append(augmentations_class.convert_distance_to_parallax)
-    # if "sample_magnitudes" in cfg.augmentations:
-    #     augmentations.append(augmentations_class.sample_magnitudes)
-    # if "sample_obs_error" in cfg.augmentations:
-    #     augmentations.append(augmentations_class.sample_obs_error)
-    # if "apply_obs_error" in cfg.augmentations:  
-    #     augmentations.append(augmentations_class.apply_obs_error)
-    # if "observational_window" in cfg.augmentations:
-    #     augmentations.append(augmentations_class.observational_window)
-    # if "observed_n_stars" in cfg.augmentations:
-    #     augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
-    # if "flip_dirz" in cfg.augmentations:
-    #     augmentations.append(augmentations_class.flip_dirz)
+    if "cut_to_300_particles" in cfg.augmentations:
+        augmentations.append(augmentations_class.cut_to_300_particles)
     if "remove_los_velocity" in cfg.augmentations: #remove this if you want to train with vlos and errors
         augmentations.append(augmentations_class.remove_los_velocity)
     if "convert_distance_to_parallax" in cfg.augmentations:
@@ -259,8 +247,8 @@ if __name__ == "__main__":
 
     
 
-    for aug in augmentations:
-        training_data = aug(training_data)
+    # for aug in augmentations:
+    #     training_data = aug(training_data)
     
     
     print('Training data shapes after augmentations:')
@@ -277,10 +265,10 @@ if __name__ == "__main__":
         test_data[k] = np.array(test_data[k])
         
     print("Loaded config:", cfg)
-    study_name = 'study_DiffusionModel'  # Unique identifier of the study.
-    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/optuna_diffusionmodel_galax_cutNGC3201.log"))
+    study_name = 'study_DiffusionModel_small'  # Unique identifier of the study.
+    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/new_bf/optuna_diffusionmodel_galax_cutNGC3201.log"))
     study = optuna.create_study(study_name=study_name, storage=storage_name, directions=['minimize', 'minimize'], load_if_exists=True)
     study.optimize(
         lambda trial: objective(trial, cfg),
-        callbacks=[MaxTrialsCallback(100, states=(TrialState.COMPLETE, TrialState.FAIL))],
+        callbacks=[MaxTrialsCallback(200, states=(TrialState.COMPLETE, TrialState.FAIL))],
     )

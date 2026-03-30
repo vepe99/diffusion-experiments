@@ -1,8 +1,8 @@
 from autocvd import autocvd
-# autocvd(num_gpus = 1)
+autocvd(num_gpus = 1)
 import os
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
-os.environ["CUDA_VISIBLE_DEVICES"] = "7"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "7"
 import yaml
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -12,7 +12,7 @@ from hydra.core.config_store import ConfigStore
 import numpy as np
 
 if "KERAS_BACKEND" not in os.environ:
-    os.environ["KERAS_BACKEND"] = "torch"
+    os.environ["KERAS_BACKEND"] = "jax"
 import keras
 import bayesflow as bf
 from scipy import  special 
@@ -104,6 +104,8 @@ def main(cfg: EvalConfig):
     # Augmentation
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
+    if "cut_to_300_particles" in cfg.augmentations:
+        augmentations.append(augmentations_class.cut_to_300_particles)
     if "remove_los_velocity" in cfg.augmentations:
         augmentations.append(augmentations_class.remove_los_velocity)
     if "convert_distance_to_parallax" in cfg.augmentations:
@@ -272,6 +274,8 @@ def main(cfg: EvalConfig):
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'z_score_contraction.pdf'))
     print('Saved z-score contraction plot')
     plt.show()
+    print('Finished evaluation with no composition')
+    print('Results for calibration saved in ', os.path.join(cfg.base_dir, cfg.results_dir, 'calibration.pdf'))
     
 
     ###############

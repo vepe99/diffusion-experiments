@@ -192,50 +192,76 @@ class AugmentationsClass:
     # ----------------------------------------------------------------
 
     # @partial(jit, static_argnums=(0,))
+    # def cut_to_300_particles(self, batch):
+    #     """
+    #     Randomly sample N particles for each batch entry.
+    #     """
+    #     subkey = self._split_key()
+    #     sim_data = batch[self.cfg.sim_data]
+    #     batch_size, n_particles, *rest = sim_data.shape
+
+    #     # Sample indices for each batch entry
+    #     # keys = jax.random.split(subkey, batch_size)
+    #     # idx = jax.vmap(
+    #     #     lambda k: jax.random.choice(k, n_particles, shape=(200,), replace=False)
+    #     # )(keys)
+    #     keys = jax.random.split(subkey, batch_size)
+    #     idx = jax.vmap(lambda k: jax.random.permutation(k, n_particles)[:300])(keys)
+
+    #     # Gather the selected particles for each batch entry
+    #     batch[self.cfg.sim_data] = np.take_along_axis(
+    #         sim_data, idx[..., None], axis=1
+    #     )
+
+    #     return batch
+
+    # def cut_to_300_particles(self, batch):
+    #     subkey = self._split_key()
+    #     sim_data = batch[self.cfg.sim_data]
+    #     batch_size, n_particles, _ = sim_data.shape
+    #     keys = jax.random.split(subkey, batch_size)
+
+    #     idx = jax.vmap(
+    #         lambda k: jax.random.choice(k, n_particles, shape=(300,), replace=False)
+    #     )(keys)  # (batch_size, 300)
+
+    #     batch[self.cfg.sim_data] = jnp.take_along_axis(sim_data, idx[..., None], axis=1)
+    #     return batch
+
+    # @partial(jit, static_argnums=(0,))
     def cut_to_300_particles(self, batch):
-        """
-        Randomly sample N particles for each batch entry.
-        """
         subkey = self._split_key()
         sim_data = batch[self.cfg.sim_data]
-        batch_size, n_particles, *rest = sim_data.shape
+        batch_size, n_particles, _ = sim_data.shape
 
-        # Sample indices for each batch entry
-        # keys = jax.random.split(subkey, batch_size)
-        # idx = jax.vmap(
-        #     lambda k: jax.random.choice(k, n_particles, shape=(200,), replace=False)
-        # )(keys)
-        keys = jax.random.split(subkey, batch_size)
-        idx = jax.vmap(lambda k: jax.random.permutation(k, n_particles)[:300])(keys)
+        # Single (batch_size, n_particles) random matrix -> one batched sort kernel
+        random_scores = jax.random.uniform(subkey, shape=(batch_size, n_particles))
+        idx = jnp.argsort(random_scores, axis=1)[:, :300]  # (batch_size, 300)
 
-        # Gather the selected particles for each batch entry
-        batch[self.cfg.sim_data] = np.take_along_axis(
-            sim_data, idx[..., None], axis=1
-        )
-
+        batch[self.cfg.sim_data] = jnp.take_along_axis(sim_data, idx[..., None], axis=1)
         return batch
-
+    
     @partial(jit, static_argnums=(0,))
     def remove_los_velocity(self, batch):
         batch[self.cfg.sim_data] = batch[self.cfg.sim_data][:, :, :5]
         return batch
 
-    def convert_distance_to_parallax(self, batch):
-        sim_data = batch[self.cfg.sim_data]
-        distances_kpc = sim_data[:, :, 2]
-        parallax_mas = 1.0 / distances_kpc
-        sim_data[:, :, 2] = parallax_mas
-        batch[self.cfg.sim_data] = sim_data
-        return batch
-    
-    # @partial(jit, static_argnums=(0,))
     # def convert_distance_to_parallax(self, batch):
     #     sim_data = batch[self.cfg.sim_data]
     #     distances_kpc = sim_data[:, :, 2]
     #     parallax_mas = 1.0 / distances_kpc
-    #     sim_data = sim_data.at[:, :, 2].set(parallax_mas)
+    #     sim_data[:, :, 2] = parallax_mas
     #     batch[self.cfg.sim_data] = sim_data
     #     return batch
+    
+    @partial(jit, static_argnums=(0,))
+    def convert_distance_to_parallax(self, batch):
+        sim_data = batch[self.cfg.sim_data]
+        distances_kpc = sim_data[:, :, 2]
+        parallax_mas = 1.0 / distances_kpc
+        sim_data = sim_data.at[:, :, 2].set(parallax_mas)
+        batch[self.cfg.sim_data] = sim_data
+        return batch
 
     def observational_window(self, batch):
         """
@@ -283,10 +309,16 @@ class AugmentationsClass:
         random_scores = jax.random.uniform(key, shape=(batch_size, n_particles))
         random_scores = jnp.where(mask, random_scores, 2.0)
 
-        sorted_indices = jnp.argsort(random_scores, axis=1)
-        rank = jnp.argsort(sorted_indices, axis=1)
+        #old
+        # sorted_indices = jnp.argsort(random_scores, axis=1)
+        # rank = jnp.argsort(sorted_indices, axis=1)
+        # keep = mask & (rank < max_keep[:, None])
 
-        keep = mask & (rank < max_keep[:, None])
+        # One sort to find the threshold score at position max_keep
+        sorted_scores = jnp.sort(random_scores, axis=1)  # (batch_size, n_particles)
+        # Index the max_keep-th score per row (variable per row, so use advanced indexing)
+        threshold = sorted_scores[jnp.arange(batch_size), max_keep - 1]  # (batch_size,)
+        keep = mask & (random_scores <= threshold[:, None])
         return keep[:, None, :]
     
     def mask_vlos(self, batch):
@@ -328,11 +360,17 @@ class AugmentationsClass:
         # Stars outside the attention_mask get a high score so they're never selected
         random_scores = jnp.where(mask, random_scores, 2.0)
 
-        sorted_indices = jnp.argsort(random_scores, axis=1)
-        rank = jnp.argsort(sorted_indices, axis=1)
-
+    
+        #old
+        # sorted_indices = jnp.argsort(random_scores, axis=1)
+        # rank = jnp.argsort(sorted_indices, axis=1)
         # vlos_mask: True for stars that keep their v_los
-        vlos_mask = mask & (rank < n_keep_vlos[:, None])  # (batch_size, n_particles)
+        # vlos_mask = mask & (rank < n_keep_vlos[:, None])  # (batch_size, n_particles)
+        
+        sorted_scores = jnp.sort(random_scores, axis=1)
+        threshold = sorted_scores[jnp.arange(batch_size), n_keep_vlos - 1]
+        # vlos_mask: True for stars that keep their v_los
+        vlos_mask = mask & (random_scores <= threshold[:, None])
 
         # Look up per-stream masked values
         vlos_mean = self.vlos_mean_lookup[j_flat]  # (batch_size,)
