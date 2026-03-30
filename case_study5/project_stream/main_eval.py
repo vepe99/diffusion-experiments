@@ -313,6 +313,33 @@ def main(cfg: EvalConfig):
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_calibration.pdf'))
     print('Saved global calibration plot')
     plt.show()
+    #calibration plot stacked
+    from utils.utils_plot import calibration_ecdf
+    fig = calibration_ecdf(
+        estimates=ps,
+        targets=test_data,
+        difference=True,
+        variable_names=cfg.paramater_global_pretty,
+        stacked = True,
+        rank_ecdf_color=plt.cm.tab10(np.linspace(0, 1, len(cfg.paramater_global_pretty))),
+
+    )
+    for ax in fig.get_axes():
+        ax.grid(False)
+    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'calibration_stacked.pdf'))
+    plt.show()
+    fig = calibration_ecdf(
+        estimates=ps,
+        targets=test_data,
+        difference=False,
+        variable_names=cfg.paramater_global_pretty,
+        stacked = True,
+        rank_ecdf_color=plt.cm.tab10(np.linspace(0, 1, len(cfg.paramater_global_pretty))),
+
+    )
+    for ax in fig.get_axes():
+        ax.grid(False)
+    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'calibration_stacked_no_diff.pdf'))
     #calibration plot without diff
     fig = bf.diagnostics.calibration_ecdf(
         estimates=ps,
