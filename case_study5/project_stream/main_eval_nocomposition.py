@@ -59,7 +59,7 @@ def main(cfg: EvalConfig):
     sim_data = str(cfg.sim_data)
     inference_conditions = str(cfg.inference_conditions[0])
     test_data_path = os.path.join(cfg.base_dir, cfg.data_dir, f'simulation_multistream_{cfg.multistream_n_simulation}.npz')
-    # test_data_path = '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_streamax/validation_data_1000.npz'
+
     print('Loading test data from ', test_data_path)
     test_data = dict(np.load(test_data_path, allow_pickle=True))
     keys_to_drop = set(test_data.keys()) - set(param_names_global) - {sim_data} - set(inference_conditions)
@@ -137,6 +137,7 @@ def main(cfg: EvalConfig):
     test_data['j'] = test_data['j'].reshape(-1, 1)
     print('Test data sim shape before augmentation: ', test_data[cfg.sim_data].shape)
     for aug in augmentations:
+        print(f"Applying augmentation: {aug.__name__}")
         test_data = aug(test_data)
     for k in cfg.parameters_global:
         test_data[k] = np.repeat(test_data[k], 3, axis=0).reshape(-1, 1)
@@ -146,6 +147,7 @@ def main(cfg: EvalConfig):
 
 
     logging.info("Starting Partial-Pooling (global) inference with no composition...")
+    print(workflow_global.approximator.inference_network.integrate_kwargs.keys())
     # workflow_global.approximator.inference_network.integrate_kwargs.update({
     #     'method': cfg.method,
     #     'steps': cfg.steps,
@@ -232,12 +234,12 @@ def main(cfg: EvalConfig):
         difference=True,
         variable_names=cfg.paramater_global_pretty,
         stacked = True,
-        rank_ecdf_color=plt.cm.tab10(np.linspace(0, 1, len(cfg.paramater_global_pretty))),
+        rank_ecdf_color=plt.cm.magma(np.linspace(0, 1, len(cfg.paramater_global_pretty))),
 
     )
     for ax in fig.get_axes():
         ax.grid(False)
-    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_calibration_stacked.pdf'))
+    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'calibration_stacked.pdf'))
     plt.show()
     fig = calibration_ecdf(
         estimates=ps,
@@ -245,12 +247,11 @@ def main(cfg: EvalConfig):
         difference=False,
         variable_names=cfg.paramater_global_pretty,
         stacked = True,
-        rank_ecdf_color=plt.cm.tab10(np.linspace(0, 1, len(cfg.paramater_global_pretty))),
-
+        rank_ecdf_color=plt.cm.magma(np.linspace(0, 1, len(cfg.paramater_global_pretty))),
     )
     for ax in fig.get_axes():
         ax.grid(False)
-    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_calibration_stacked_no_diff.pdf'))
+    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'calibration_stacked_no_diff.pdf'))
     print('Saved stacked calibration plot')
     #calibration plot without diff
     fig = bf.diagnostics.calibration_ecdf(

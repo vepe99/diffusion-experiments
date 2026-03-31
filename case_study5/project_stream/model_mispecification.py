@@ -1,8 +1,8 @@
-# from autocvd import autocvd
-# autocvd(num_gpus = 1)
+from autocvd import autocvd
+autocvd(num_gpus = 1)
 import os
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
+# os.environ["CUDA_VISIBLE_DEVICES"] = ""
 import yaml
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -13,7 +13,7 @@ from hydra.core.config_store import ConfigStore
 import numpy as np
 
 if "KERAS_BACKEND" not in os.environ:
-    os.environ["KERAS_BACKEND"] = "torch"
+    os.environ["KERAS_BACKEND"] = "jax"
 import keras
 import bayesflow as bf
 from scipy import  special 
@@ -96,6 +96,8 @@ def main(cfg: EvalConfig):
     # Augmentation
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
+    if "cut_to_300_particles" in cfg.augmentations:
+        augmentations.append(augmentations_class.cut_to_300_particles)
     if "remove_los_velocity" in cfg.augmentations:
         augmentations.append(augmentations_class.remove_los_velocity)
     if "convert_distance_to_parallax" in cfg.augmentations:
@@ -151,13 +153,8 @@ def main(cfg: EvalConfig):
     augmentations = []
     if "remove_los_velocity" in cfg.augmentations:
         augmentations.append(augmentations_class.remove_los_velocity)
-    # if "convert_distance_to_parallax" in cfg.augmentations: 
-    #     augmentations.append(augmentations_class.convert_distance_to_parallax)
     if "sample_obs_error" in cfg.augmentations:
         augmentations.append(augmentations_class.sample_obs_error)
-        # augmentations.append(augmentations_class.override_vlos_error_with_real)  # <-- add here
-    # if "mask_vlos" in cfg.augmentations:
-    #     augmentations.append(augmentations_class.mask_vlos)
     if "observational_window" in cfg.augmentations:
         augmentations.append(augmentations_class.observational_window)
     if "concatentate_sigma_error_to_sim_data" in cfg.augmentations:
@@ -173,6 +170,15 @@ def main(cfg: EvalConfig):
     obs_data['j'] = obs_data['j'].reshape(-1, 1)
     if 'vlos_mask' in obs_data:
         obs_data['vlos_mask'] = obs_data['vlos_mask'].reshape(-1, 1, obs_data[cfg.sim_data].shape[-2])
+    for k in [cfg.sim_data, "attention_mask", "magnitudes", "vlos_mask"]:
+        print(f"{k} shape before truncation: {obs_data[k].shape}")
+        if len(obs_data[k].shape) == 2:
+            obs_data[k] = obs_data[k][:, :300]
+        elif (k == cfg.sim_data):
+            obs_data[k] = obs_data[k][:, :300, :]
+        elif (k == "attention_mask")|(k == "vlos_mask"):
+            obs_data[k] = obs_data[k][:, :, :300]
+        print(f"{k} shape after truncation: {obs_data[k].shape}")
     print('Observed data sim shape before augmentation: ', obs_data[cfg.sim_data].shape)
     for aug in augmentations:
         obs_data = aug(obs_data)
@@ -262,6 +268,7 @@ def main(cfg: EvalConfig):
     # fig = bf.diagnostics.mmd_hypothesis_test(mmd_null=distance_null, mmd_observed=distance_observed,)
     fig = mmd_hypothesis_test_numpy(mmd_null=distance_null, mmd_observed=distance_observed,)
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'distance_observed_vs_null.pdf'), bbox_inches='tight')
+    print('Plot saved to ', os.path.join(cfg.base_dir, cfg.results_dir, 'distance_observed_vs_null.pdf'))
 
 
 

@@ -1,8 +1,8 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_galax/"
-model_dir: "models/new_bf_cut300/model_galax6D_1e6_concat_fulldataset_1000_hyper40_cutNGC3201"
-multistream_n_simulation: 1000
-results_dir: "plots/new_bf_cut300/plots_galax6D_1e6_concat_thirddataset_1000_hyper40_cutNGC3201_nocomposition_1000tests/"
+model_dir: "models/new_bf_cut300/use_validation/model_galax6D_1e6_concat_thirdataset_1000_hyper13_cutNGC3201"
+multistream_n_simulation: 333
+results_dir: "plots/new_bf_cut300/use_validation/plots_galax6D_1e6_concat_thirdataset_1000_hyper13_nocomposition_cutNGC3201/"
 use_streamax_simulator: False
 
 #training hyperparameters
@@ -117,6 +117,7 @@ masked_value_vlos:
 
 augmentations:
 # - remove_los_velocity
+- cut_to_300_particles
 - convert_distance_to_parallax
 - observational_window
 - observed_n_stars

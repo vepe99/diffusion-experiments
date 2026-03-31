@@ -1,14 +1,15 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams"
-data_dir: "data_galax_1e6/data_galax_2/"
+data_dir: "data_galax_1e6/data_galax_newlocalprior/"
 simulator: "galax" #odisseo, gala, galax, StreaMax
+n_simulations: [0, 100_000]
 # n_simulations: [0, 333_333] #[333_333, 666_666] #[666_666, 1_000_000] #
 # n_simulations: [333_333, 666_666]
 # n_simulations: [666_666, 1_000_000]
 # n_simulations: [0, 1000]
 # n_simulations: [0, 500_000]
-n_simulations: [500_000, 1_000_000]
+# n_simulations: [500_000, 1_000_000]
 batch_size: 512
-use_rotated_halo: True
+use_rotated_halo: True #only for gala
 
 parameters_global:
   - "a"
@@ -161,10 +162,10 @@ priors_local: #str for the type and a list of values for the parameters of the p
       prior_parameters: [20.6, 0.2]
     mu_ra_cosdec:
       type: normal
-      prior_parameters: [-2.736, 0.064]
+      prior_parameters: [-2.736, 0.564]
     mu_dec:
       type: normal
-      prior_parameters: [-2.646, 0.064]
+      prior_parameters: [-2.646, 0.564]
   NGC3201:
     m_progenitor:
       type: identity
@@ -189,10 +190,10 @@ priors_local: #str for the type and a list of values for the parameters of the p
       prior_parameters: [4.9, 0.11]
     mu_ra_cosdec:
       type: normal
-      prior_parameters: [8.324, 0.044]
+      prior_parameters: [8.324, 0.544]
     mu_dec:
       type: normal
-      prior_parameters: [-1.991, 0.044]
+      prior_parameters: [-1.991, 0.544]
   M68:
     m_progenitor:
       type: identity
@@ -217,10 +218,10 @@ priors_local: #str for the type and a list of values for the parameters of the p
       prior_parameters: [10.3, 0.52]
     mu_ra_cosdec:
       type: normal
-      prior_parameters: [-2.752, 0.054]
+      prior_parameters: [-2.752, 0.554]
     mu_dec:
       type: normal
-      prior_parameters: [1.762, 0.053]
+      prior_parameters: [1.762, 0.553]
 
 target_streams:
   Pal5: 0 #this is the j index

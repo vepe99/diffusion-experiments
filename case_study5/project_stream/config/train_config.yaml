@@ -1,11 +1,11 @@
 base_dir: /export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/
 data_dir: streams/data_galax_1e6/
 N_simulations: 1_000_000
-results_dir: models/new_bf_cut300/model_galax6D_1e6_concat_thirdataset_1000_hyper13_cutNGC3201/
+results_dir: models/new_bf_cut300/model_galax6D_1e6_concat_thirdataset_500_hyper24_cutNGC3201/
 test: false
 
 
-n_epochs: 1000
+n_epochs: 500
 batch_size: 1024
 learning_rate: 0.01
 weight_decay: 0.0001
@@ -125,14 +125,14 @@ augmentations:
 
 global_model:
   dropout: 0.1
-  summary_dim: 60
-  embed_dims: 122
-  num_heads: 3
-  mlp_depths: 2
-  mlp_widths: 59
-  inference_mlp_depth: 2
-  inference_mlp_width: 346
-  inference_time_embedding_dim: 64
+  summary_dim: 25
+  embed_dims: 125
+  num_heads: 5
+  mlp_depths: 5
+  mlp_widths: 82
+  inference_mlp_depth: 7
+  inference_mlp_width: 155
+  inference_time_embedding_dim: 30
   
 local_model:
   dropout: 0.1

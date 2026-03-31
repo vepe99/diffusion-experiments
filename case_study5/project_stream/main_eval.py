@@ -140,20 +140,7 @@ def main(cfg: EvalConfig):
     with open(os.path.join(cfg.base_dir, cfg.model_dir, '.hydra', 'config.yaml'), "r") as f:
         model_config = yaml.safe_load(f)
     print(model_config)
-    # if cfg.noise_schedule is not None:
-    #     inference_network = bf.networks.CompositionalDiffusionModel(
-    #                                                     subnet_kwargs={
-    #                                                     "widths": [model_config['global_model']['inference_mlp_width']] * model_config['global_model']['inference_mlp_depth'],
-    #                                                     "time_embedding_dim": model_config['global_model']['inference_time_embedding_dim'],
-    #                                                     },
-    #                                                     schedule_kwargs = {**cfg.noise_schedule,},
-    #                                                     )
-    # else:
-    #     #probably needs to fix it to the training noise schedule 
-    #     inference_network = bf.networks.CompositionalDiffusionModel(subnet_kwargs={
-    #                                                     "widths": [model_config['global_model']['inference_mlp_width']] * model_config['global_model']['inference_mlp_depth'],
-    #                                                     "time_embedding_dim": model_config['global_model']['inference_time_embedding_dim'],
-    #                                                     },)
+
     workflow_global = bf.BasicWorkflow(
         adapter=adapter,
         summary_network=bf.networks.SetTransformer(summary_dim=model_config['global_model']['summary_dim'], 
@@ -174,7 +161,7 @@ def main(cfg: EvalConfig):
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
     if "cut_to_300_particles" in cfg.augmentations:
-        augmentations.append(augmentations_class.cut_to_200_particles)
+        augmentations.append(augmentations_class.cut_to_300_particles)
     if "remove_los_velocity" in cfg.augmentations:
         augmentations.append(augmentations_class.remove_los_velocity)
     if "convert_distance_to_parallax" in cfg.augmentations:
@@ -206,15 +193,13 @@ def main(cfg: EvalConfig):
     test_data['j'] = test_data['j'].reshape(-1, 1)
     print('Test data sim shape before augmentation: ', test_data[cfg.sim_data].shape)
     for aug in augmentations:
+        print(f"Applying augmentation: {aug.__name__}")
         test_data = aug(test_data)
     test_data[cfg.sim_data] = test_data[cfg.sim_data].reshape(-1, len(cfg.target_streams.keys()), test_data[cfg.sim_data].shape[-2], test_data[cfg.sim_data].shape[-1])
     test_data['j'] = test_data['j'].reshape(-1,len(cfg.target_streams.keys()), 1)
     print('Test data sim shape after augmentation: ', test_data[cfg.sim_data].shape)
     print('Test data keys: ', test_data.keys())
     print('Test data attention mask shape: ', test_data['attention_mask'].shape)
-    # for k in test_data.keys():
-    #     print(f"Test data {k} shape: {test_data[k].shape}")
-    # exit()
     with open(os.path.join(cfg.base_dir, cfg.data_dir, '.hydra', 'config.yaml'), "r") as f:
         test_sim_config = yaml.safe_load(f)
     print('Test simulation config prior: ', test_sim_config['priors_global'])
@@ -321,12 +306,12 @@ def main(cfg: EvalConfig):
         difference=True,
         variable_names=cfg.paramater_global_pretty,
         stacked = True,
-        rank_ecdf_color=plt.cm.tab10(np.linspace(0, 1, len(cfg.paramater_global_pretty))),
+        rank_ecdf_color=plt.cm.magma(np.linspace(0, 1, len(cfg.paramater_global_pretty))),
 
     )
     for ax in fig.get_axes():
         ax.grid(False)
-    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'calibration_stacked.pdf'))
+    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_calibration_stacked.pdf'))
     plt.show()
     fig = calibration_ecdf(
         estimates=ps,
@@ -334,12 +319,12 @@ def main(cfg: EvalConfig):
         difference=False,
         variable_names=cfg.paramater_global_pretty,
         stacked = True,
-        rank_ecdf_color=plt.cm.tab10(np.linspace(0, 1, len(cfg.paramater_global_pretty))),
+        rank_ecdf_color=plt.cm.magma(np.linspace(0, 1, len(cfg.paramater_global_pretty))),
 
     )
     for ax in fig.get_axes():
         ax.grid(False)
-    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'calibration_stacked_no_diff.pdf'))
+    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_calibration_stacked_no_diff.pdf'))
     #calibration plot without diff
     fig = bf.diagnostics.calibration_ecdf(
         estimates=ps,

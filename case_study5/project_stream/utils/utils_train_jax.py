@@ -239,6 +239,7 @@ class AugmentationsClass:
         idx = jnp.argsort(random_scores, axis=1)[:, :300]  # (batch_size, 300)
 
         batch[self.cfg.sim_data] = jnp.take_along_axis(sim_data, idx[..., None], axis=1)
+        # print(f"cut_to_300_particles: reduced from {n_particles} to 300 particles")
         return batch
     
     @partial(jit, static_argnums=(0,))

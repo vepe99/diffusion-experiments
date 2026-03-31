@@ -1,8 +1,8 @@
-# from autocvd import autocvd
-# autocvd(num_gpus = 1)
+from autocvd import autocvd
+autocvd(num_gpus = 1)
 import os
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
-os.environ["CUDA_VISIBLE_DEVICES"] = "7"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "7"
 import yaml
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -13,9 +13,10 @@ import numpy as np
 from chainconsumer import Chain, ChainConsumer, ChainConfig
 import pandas as pd
 from scipy import special
+import jax.numpy as jnp 
 
 if "KERAS_BACKEND" not in os.environ:
-    os.environ["KERAS_BACKEND"] = "torch"
+    os.environ["KERAS_BACKEND"] = "jax"
 import keras
 import bayesflow as bf
 
@@ -69,6 +70,16 @@ def main(cfg: EvalConfig):
     print('Loading test data from ', test_data_path)
     test_data = dict(np.load(test_data_path, allow_pickle=True))
     test_data = {k: test_data[k] for k in [cfg.sim_data, "j", "attention_mask", "magnitudes"] }
+    for k in [cfg.sim_data, "attention_mask", "magnitudes"]:
+        print(f"{k} shape before truncation: {test_data[k].shape}")
+        if len(test_data[k].shape) == 2:
+            test_data[k] = test_data[k][:, :300]
+        elif len(test_data[k].shape) == 3:
+            test_data[k] = test_data[k][:, :, :300]
+        elif len(test_data[k].shape) == 4:
+            test_data[k] = test_data[k][:, :, :300]
+        print(f"{k} shape after truncation: {test_data[k].shape}")
+
     # print('Test data keys and shape: ', test_data.keys(), test_data[list(test_data.keys())[0]].shape)
     other_things = ['attention_mask', 'magnitudes', 'vloss_mask']
     keys_to_drop = set(test_data.keys()) - set(param_names_global) - {sim_data} - set(inference_conditions) -  set(other_things)
@@ -114,11 +125,8 @@ def main(cfg: EvalConfig):
     augmentations = []
     if "remove_los_velocity" in cfg.augmentations:
         augmentations.append(augmentations_class.remove_los_velocity)
-    # if "convert_distance_to_parallax" in cfg.augmentations: 
-    #     augmentations.append(augmentations_class.convert_distance_to_parallax)
     if "sample_obs_error" in cfg.augmentations:
         augmentations.append(augmentations_class.sample_obs_error)
-        # augmentations.append(augmentations_class.override_vlos_error_with_real)  # <-- add here
     if "observational_window" in cfg.augmentations:
         augmentations.append(augmentations_class.observational_window)
     if "mask_vlos" in cfg.augmentations:
@@ -131,18 +139,15 @@ def main(cfg: EvalConfig):
         augmentations.append(augmentations_class.concatenate_vlos_mask_to_sim_data)
     if "concatenate_j_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatenate_j_to_sim_data)
+
     #reshape the streams dimensions
     test_data[cfg.sim_data] = test_data[cfg.sim_data].reshape(-1, test_data[cfg.sim_data].shape[-2], test_data[cfg.sim_data].shape[-1])
     test_data['j'] = test_data['j'].reshape(-1, 1)
-    #change the distance column of the padded stars:
-    # padded_mask = np.all(test_data[cfg.sim_data] == 0, axis=-1)  # shape: (n, n_stars)
-    # test_data[cfg.sim_data][padded_mask, 2] = 1.0
     print('Test data sim shape before augmentation: ', test_data[cfg.sim_data].shape)
     for aug in augmentations:
+        print(f"Applying augmentation: {aug.__name__}")
         test_data = aug(test_data)
-    # for k in test_data.keys():
-    #     if isinstance(test_data[k], np.ndarray) and np.issubdtype(test_data[k].dtype, np.floating):
-    #         test_data[k] = np.where(np.isinf(test_data[k]), 0.0, test_data[k])
+
     test_data[cfg.sim_data] = test_data[cfg.sim_data].reshape(-1, len(cfg.target_streams.keys()), test_data[cfg.sim_data].shape[-2], test_data[cfg.sim_data].shape[-1])
     test_data['j'] = test_data['j'].reshape(-1,len(cfg.target_streams.keys()), 1)
     print('Test data sim shape after augmentation: ', test_data[cfg.sim_data].shape)
@@ -153,18 +158,18 @@ def main(cfg: EvalConfig):
     with open(os.path.join(cfg.base_dir, cfg.data_dir, '.hydra', 'config.yaml'), "r") as f:
         test_sim_config = yaml.safe_load(f)
 
-    def prior_global_score(x, cfg=cfg, test_sim_config=test_sim_config):
+    def prior_global_score(x, time, cfg=cfg, test_sim_config=test_sim_config):
         
         score = {}
         
         for k in cfg.parameters_global:
             # print(f"Computing prior score for {k} with type {test_sim_config['priors_global'][k]['type']}")
             if test_sim_config['priors_global'][k]['type'] == 'uniform':
-                score[k] = np.zeros_like(x[k])
+                score[k] = (1-time)*jnp.zeros_like(x[k])
             elif test_sim_config['priors_global'][k]['type'] == 'normal':
                 mean = test_sim_config['priors_global'][k]['prior_parameters'][0]
                 std = test_sim_config['priors_global'][k]['prior_parameters'][1]
-                score[k] = -(x[k] - mean) / std**2 
+                score[k] = -(1-time)*(x[k] - mean) / std**2 
         return score
 
     logging.info("Starting Partial-Pooling (global) inference...")
@@ -235,14 +240,11 @@ def main(cfg: EvalConfig):
             ps_stream[k] = ps_stream[k].reshape(-1,)
         df_stream = pd.DataFrame(ps_stream) 
         df_stream.columns = list(cfg.paramater_global_pretty)
-        # c = ChainConsumer()
         c.add_chain(Chain(samples=df_stream, name=f"{stream_name}"))
-        # fig = c.plotter.plot()
-        # fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'{stream_name}_cornerplot.pdf'))
-        # print(f'Saved corner plot for stream {stream_name}')
     c.set_override(ChainConfig(shade=False))
     fig = c.plotter.plot()
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'global_cornerplot.pdf'))
+    print(f'Saved global corner plot with all streams in pathc: {os.path.join(cfg.base_dir, cfg.results_dir, "global_cornerplot.pdf")}')
 
 
 if __name__ == "__main__":

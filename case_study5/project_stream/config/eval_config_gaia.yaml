@@ -1,8 +1,8 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_streamax/"
-model_dir: "models/models/new_bf_cut300/model_galax6D_1e6_concat_thirdataset_750_hyper40_cutNGC3201/"
+model_dir: "models/new_bf_cut300/use_validation/model_galax6D_1e6_concat_2smalldataset_1000_hyper13_cutNGC3201/"
 multistream_n_simulation: 333
-results_dir: "plots/new_bf_cut300/plots_galax6D_1e6_concat_fulldataset_750_hyper40_gaia_cutNGC3201/"
+results_dir: "plots/new_bf_cut300/use_validation/plots_galax6D_1e6_concat_2smalldataset_1000_hyper13_gaia_cutNGC3201/"
 use_streamax_simulator: True
 
 #training hyperparameters
@@ -12,7 +12,7 @@ steps: "adaptive"
 max_steps: 1000
 mini_batch_size: null
 batch_size: 10
-inverse_compositional_bridge_d1: 4.5
+inverse_compositional_bridge_d1: 5.5
 noise_schedule: null
   # min_log_snr: -15
   # max_log_snr: 15
@@ -125,7 +125,7 @@ gaia_id:
 
 augmentations:
   # - "remove_los_velocity"
-  - "convert_distance_to_parallax" #we already have parallax in data
+  - "convert_distance_to_parallax" #we already have parallax in data, but we have to keep it even if we do not use it
   - "sample_magnitudes" #we need to keep it even if we do not use it
   - "observational_window"
   # - "observed_n_stars"
