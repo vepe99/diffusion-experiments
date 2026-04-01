@@ -1,12 +1,12 @@
 base_dir: /export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/
-data_dir: streams/data_galax_1e6/
-N_simulations: 1_000_000
-results_dir: models/new_bf_cut300/use_validation/model_galax6D_1e6_concat_2smalldataset_2000_hyper13_cutNGC3201_new/
+data_dir: streams/data_gala/
+N_simulations: 300_000
+results_dir: models/gala6D/validation/model28_60k_1000epochs
 
 test: false
 
 
-n_epochs: 2000
+n_epochs: 1000
 batch_size: 1024
 learning_rate: 0.01
 weight_decay: 0.0001
@@ -59,9 +59,12 @@ target_streams:
 observational_window:
   Pal5:
     ra_min: 220.98008280733634
-    ra_max: 245.89465019770668
-    dec_min: -10.644267714585839
-    dec_max: 9.279576254116762
+    # ra_max: 245.89465019770668
+    ra_max: 250.0
+    # dec_min: -10.644267714585839
+    dec_min: -13.0
+    # dec_max: 9.279576254116762
+    dec_max: 10.0
   NGC3201:
     ra_min: 42.29847920913508
     # ra_max: 178.36142433209437
@@ -70,9 +73,11 @@ observational_window:
     dec_max: 20.812029301121846
   M68:
     ra_min: 189.73694638139526
-    ra_max: 273.48942253688114
+    # ra_max: 273.48942253688114
+    ra_max: 280.0
     dec_min: -47.32109546202406
-    dec_max: 66.52056055901161
+    # dec_max: 66.52056055901161
+    dec_max: 70.0
 observed_n_stars:
   Pal5: 129
   NGC3201: 195

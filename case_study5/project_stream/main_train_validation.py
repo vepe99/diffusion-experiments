@@ -2,7 +2,7 @@ from autocvd import autocvd
 autocvd(num_gpus=1, interval=1)
 import os
 
-# os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+# os.environ["CUDA_VISIBLE_DEVICES"] = ""
 from tqdm import tqdm
 from omegaconf import DictConfig, OmegaConf, open_dict
 import hydra
@@ -43,7 +43,7 @@ def main(cfg: TrainConfig):
     sim_data = str(cfg.sim_data)
     inference_conditions = str(cfg.inference_conditions[0])  # jut 1
     train_data_path = os.path.join(
-        cfg.base_dir, cfg.data_dir, f"training_data_local_{cfg.N_simulations}.npz"
+        cfg.base_dir, cfg.data_dir, f"training_data_{cfg.N_simulations}.npz"
     )
     print("Train data path:", train_data_path)
     training_data = dict(np.load(train_data_path, allow_pickle=True))

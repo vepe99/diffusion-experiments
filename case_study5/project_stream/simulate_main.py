@@ -30,6 +30,7 @@ def main(cfg: SimulatorConfig):
         print(cfg.galax_config)
         from autocvd import autocvd
         autocvd(num_gpus = 1)
+        # os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # Set this to the GPU you want to use
     elif cfg.simulator == "StreaMax":
         print(cfg.streamax_config)
         from autocvd import autocvd
@@ -82,7 +83,10 @@ def main(cfg: SimulatorConfig):
     elif cfg.simulator == "galax":
         import jax
         import jax.numpy as jnp
-        from utils.utils_galax_simulator import simulate_stream_galax
+        if cfg.use_flattened_halo:
+            from utils.utils_galax_simulator_generalized import simulate_stream_galax
+        else:
+            from utils.utils_galax_simulator import simulate_stream_galax
 
         simulate_stream = simulate_stream_galax
         config = cfg.galax_config

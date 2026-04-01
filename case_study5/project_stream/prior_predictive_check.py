@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from autocvd import autocvd
-autocvd(num_gpus = 1)
+# autocvd(num_gpus = 1)
 import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = ""    
+os.environ["CUDA_VISIBLE_DEVICES"] = ""    
 from typing import Optional
 import numpy as np
 import matplotlib
@@ -307,7 +307,7 @@ def prior_predictive_check(
             plot_datapoints=False,
             plot_density=True,
             fill_contours=False,
-            levels=(0.68, 0.99),
+            levels=(0.90, 1.0),
             contourf_kwargs={"alpha": 0.35},
             contour_kwargs={"linewidths": 1.2},
             hist_kwargs={"linewidth": 1.4, },
@@ -378,17 +378,16 @@ def prior_predictive_check(
 @hydra.main(version_base=None, config_path="config", config_name="eval_config",)
 def main(cfg: EvalConfig):
     base_dir               = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
-    training_data_data_dir = "streams/data_galax_1e6/"
+    training_data_data_dir = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_gala/"
     observed_data_path     = os.path.join(base_dir, "gaia_observed_streams_6Dwitherrors_cutNGC3201.npz")
-    path_to_save           = os.path.join(base_dir, "plots/prior_predictive_check/2smalldataset/")
+    path_to_save           = os.path.join(base_dir, "plots/prior_predictive_check/new_local_prior/")
 
     # ── Training set ─────────────────────────────────────────────────────────
-    training_set_loaded = dict(np.load(os.path.join(base_dir, training_data_data_dir,
-                                               "training_data_local_60000.npz")))
+    training_set_loaded = dict(np.load(os.path.join(base_dir, training_data_data_dir, "training_data_300000.npz")))
     training_set = {}
     # for k in ["sim_data_projected", "j"]:
     for k in training_set_loaded.keys():
-        training_set[k] = training_set_loaded[k][:1_000]   # ← keep as dict, never overwrite
+        training_set[k] = training_set_loaded[k][0:1_000]   # ← keep as dict, never overwrite
         print(f"Training set {k} shape: {training_set[k].shape}")
     # ── Observations ─────────────────────────────────────────────────────────
     observations_loaded = np.load(observed_data_path, allow_pickle=True)
@@ -401,8 +400,8 @@ def main(cfg: EvalConfig):
     #augumentation function for training 
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
-    if "cut_to_300_particles" in cfg.augmentations:
-        augmentations.append(augmentations_class.cut_to_300_particles)
+    # if "cut_to_300_particles" in cfg.augmentations:
+        # augmentations.append(augmentations_class.cut_to_300_particles)
     if "remove_los_velocity" in cfg.augmentations:
         augmentations.append(augmentations_class.remove_los_velocity)
     if "convert_distance_to_parallax" in cfg.augmentations:
@@ -411,8 +410,8 @@ def main(cfg: EvalConfig):
         augmentations.append(augmentations_class.sample_magnitudes)
     if "sample_obs_error" in cfg.augmentations:
         augmentations.append(augmentations_class.sample_obs_error)
-    # if "apply_obs_error" in cfg.augmentations:  
-    #     augmentations.append(augmentations_class.apply_obs_error)
+    if "apply_obs_error" in cfg.augmentations:  
+        augmentations.append(augmentations_class.apply_obs_error)
     if "observational_window" in cfg.augmentations:
         augmentations.append(augmentations_class.observational_window)
     if "observed_n_stars" in cfg.augmentations:
@@ -443,6 +442,7 @@ def main(cfg: EvalConfig):
 
     #reshape the streams dimensions
     obs_data[cfg.sim_data] = obs_data[cfg.sim_data].reshape(-1, obs_data[cfg.sim_data].shape[-2], obs_data[cfg.sim_data].shape[-1])
+    # obs_data[cfg.sim_data][:, :, 3], obs_data[cfg.sim_data][:, :, 4] = obs_data[cfg.sim_data][:, :, 4], obs_data[cfg.sim_data][:, :, 3] #swap the two proper motions to match the training data format
     obs_data['j'] = obs_data['j'].reshape(-1, 1)
     if 'vlos_mask' in obs_data:
         obs_data['vlos_mask'] = obs_data['vlos_mask'].reshape(-1, 1, obs_data[cfg.sim_data].shape[-2])

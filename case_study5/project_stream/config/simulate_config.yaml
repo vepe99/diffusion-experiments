@@ -1,15 +1,13 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams"
-data_dir: "data_galax_1e6/data_galax_newlocalprior/"
+data_dir: "data_galax_1e6/data_galax_newprior/data_3"
 simulator: "galax" #odisseo, gala, galax, StreaMax
-n_simulations: [0, 100_000]
-# n_simulations: [0, 333_333] #[333_333, 666_666] #[666_666, 1_000_000] #
-# n_simulations: [333_333, 666_666]
-# n_simulations: [666_666, 1_000_000]
-# n_simulations: [0, 1000]
-# n_simulations: [0, 500_000]
-# n_simulations: [500_000, 1_000_000]
+# n_simulations: [0, 33_000] #1
+n_simulations: [66_000, 100_000] #3
+# n_simulations: [50_000, 100_000] #2
+# n_simulations: [0, 100_000] #3
 batch_size: 512
 use_rotated_halo: True #only for gala
+use_flattened_halo: False #only for galax
 
 parameters_global:
   - "a"
@@ -25,16 +23,20 @@ priors_global: #str for the type and a list of values for the parameters of the 
   #HALO TRIXIAL
   m_Triaxial_halo:
     type: uniform
-    prior_parameters: [5.e10, 2.5e12]
+    prior_parameters: [5.e10, 1e13]
   r_Triaxial_halo:
     type: uniform
-    prior_parameters: [5.0, 50.0]
+    prior_parameters: [5.0, 100.0]
   q1_Triaxial_halo:
     type: identity
     prior_parameters: [1.0]
   q2_Triaxial_halo:
     type: uniform
     prior_parameters: [0.5, 1.5]
+  gamma_NFW_halo: #used only if use_flattened_halo is True
+    type: uniform
+    prior_parameters: [0.0, 1.80]
+
   #HALO TRIAXIAL ROTATED
   m_Triaxial_rotated_halo:
     type: uniform
@@ -162,10 +164,12 @@ priors_local: #str for the type and a list of values for the parameters of the p
       prior_parameters: [20.6, 0.2]
     mu_ra_cosdec:
       type: normal
-      prior_parameters: [-2.736, 0.564]
+      # prior_parameters: [-2.736, 0.128]
+      prior_parameters: [-2.736, 0.064]
     mu_dec:
       type: normal
-      prior_parameters: [-2.646, 0.564]
+      # prior_parameters: [-2.646, 0.128]
+      prior_parameters: [-2.646, 0.064]
   NGC3201:
     m_progenitor:
       type: identity
@@ -190,10 +194,12 @@ priors_local: #str for the type and a list of values for the parameters of the p
       prior_parameters: [4.9, 0.11]
     mu_ra_cosdec:
       type: normal
-      prior_parameters: [8.324, 0.544]
+      # prior_parameters: [8.324, 0.088]
+      prior_parameters: [8.324, 0.044]
     mu_dec:
       type: normal
-      prior_parameters: [-1.991, 0.544]
+      # prior_parameters: [-1.991, 0.088]
+      prior_parameters: [-1.991, 0.044]
   M68:
     m_progenitor:
       type: identity
@@ -218,10 +224,12 @@ priors_local: #str for the type and a list of values for the parameters of the p
       prior_parameters: [10.3, 0.52]
     mu_ra_cosdec:
       type: normal
-      prior_parameters: [-2.752, 0.554]
+      # prior_parameters: [-2.752, 0.108]
+      prior_parameters: [-2.752, 0.054]
     mu_dec:
       type: normal
-      prior_parameters: [1.762, 0.553]
+      # prior_parameters: [1.762, 0.106]
+      prior_parameters: [1.762, 0.053]
 
 target_streams:
   Pal5: 0 #this is the j index

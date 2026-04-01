@@ -170,8 +170,8 @@ def load_simulations_to_dict(base_directory, subfolders, N_simulations_per_folde
 if __name__ == "__main__":
     # base_directory = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_streamax/"    
     # subfolders = ["data_streamax_1", "data_streamax_2", "data_streamax_3"]
-    base_directory = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_galax_1e6/"
-    subfolders = ["data_galax_1", "data_galax_2",]
+    base_directory = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_galax_1e6/data_galax_newlocalprior/"
+    subfolders = ["./",]
     # subfolders = ["data_streamax_validation"]
     # Infer N_simulations_per_folder from the number of .npz files in each subfolder
     N_simulations_per_folder = []
