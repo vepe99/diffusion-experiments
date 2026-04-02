@@ -1,7 +1,7 @@
 base_dir: /export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/
 data_dir: streams/data_gala/
 N_simulations: 300_000
-results_dir: models/gala6D/validation/model28_60k_1000epochs
+results_dir: models/gala6D/validation/full/model40_300k_1000epochs
 
 test: false
 
@@ -28,6 +28,7 @@ parameters_global:
 - rho_thick_disk
 - hr_thick_disk
 - hz_thick_disk
+- m_bulge
 parameters_local:
 - m_progenitor
 - a_progenitor
@@ -131,14 +132,14 @@ augmentations:
 
 global_model:
   dropout: 0.1
-  summary_dim: 60
-  embed_dims: 122
-  num_heads: 3
+  summary_dim: 43
+  embed_dims: 100
+  num_heads: 1
   mlp_depths: 2
-  mlp_widths: 59
-  inference_mlp_depth: 2
-  inference_mlp_width: 346
-  inference_time_embedding_dim: 64
+  mlp_widths: 141
+  inference_mlp_depth: 4
+  inference_mlp_width: 59
+  inference_time_embedding_dim: 56
 local_model:
   dropout: 0.1
   summary_dim: 16

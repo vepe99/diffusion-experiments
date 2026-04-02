@@ -37,14 +37,16 @@ param_name_global = [
 ]
 
 N = 333
-# add_nocomposition = '_nocomposition'
+# add_nocomposition = 'nocomposition_'
 add_nocomposition = ''
-base_dir = '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/plots/new_bf_cut300/use_validation'
+base_dir = '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/plots/gala6D/'
 posterior_sample_dir = [
-    f'plots_galax6D_1e6_concat_smalldataset_2000_hyper40_cutNGC3201{add_nocomposition}_{N}tests',
-    f'plots_galax6D_1e6_concat_smalldataset_2000_hyper13_cutNGC3201{add_nocomposition}_{N}tests',
+    # f'model28_60k_500epochs/{add_nocomposition}_{N}test',
+    # f'model40_60k_500epochs/{add_nocomposition}_{N}test',
+    f'model31_60k_500epochs/{add_nocomposition}{N}test',
+    f'model35_60k_500epochs/{add_nocomposition}{N}test',
 ]
-if add_nocomposition == '_nocomposition':
+if add_nocomposition != '':
      posterior_path = [os.path.join(base_dir, p, 'posterior.npz') for p in posterior_sample_dir]    
 else:
     posterior_path = [os.path.join(base_dir, p, 'global_posterior.npz') for p in posterior_sample_dir]
@@ -59,10 +61,10 @@ for k in ensable_posterior:
     print(f'{k} shape: {ensable_posterior[k].shape}')
 
 test_data = dict(np.load(
-    f'/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_multistream_galax/simulation_multistream_{N}.npz'
+    f'/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_multistream_gala/simulation_multistream_{N}.npz'
 ))
 
-if add_nocomposition == '_nocomposition':
+if add_nocomposition != '':
     test_data_new = {}
     for k in param_name_global:
         test_data_new[k] = np.repeat(test_data[k], 3, axis=0).reshape(-1, 1)
@@ -85,6 +87,7 @@ for ax in fig.get_axes():
         ax.grid(False)
 
 fig.savefig('./calibration_ensamble.pdf')
+print('Calibration plot saved to calibration_ensamble.pdf')
 
 
 print('hello')

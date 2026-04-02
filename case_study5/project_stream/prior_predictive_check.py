@@ -387,7 +387,7 @@ def main(cfg: EvalConfig):
     training_set = {}
     # for k in ["sim_data_projected", "j"]:
     for k in training_set_loaded.keys():
-        training_set[k] = training_set_loaded[k][0:1_000]   # ← keep as dict, never overwrite
+        training_set[k] = training_set_loaded[k][0:60_000]   # ← keep as dict, never overwrite
         print(f"Training set {k} shape: {training_set[k].shape}")
     # ── Observations ─────────────────────────────────────────────────────────
     observations_loaded = np.load(observed_data_path, allow_pickle=True)
@@ -400,8 +400,8 @@ def main(cfg: EvalConfig):
     #augumentation function for training 
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
-    # if "cut_to_300_particles" in cfg.augmentations:
-        # augmentations.append(augmentations_class.cut_to_300_particles)
+    if "cut_to_300_particles" in cfg.augmentations:
+        augmentations.append(augmentations_class.cut_to_300_particles)
     if "remove_los_velocity" in cfg.augmentations:
         augmentations.append(augmentations_class.remove_los_velocity)
     if "convert_distance_to_parallax" in cfg.augmentations:
@@ -461,7 +461,8 @@ def main(cfg: EvalConfig):
     for k in obs_data.keys():
         print(f"{k} shape after augmentation: {obs_data[k].shape}")
 
-    prior_predictive_check(training_set, obs_data, path_to_save, dims_to_show = [0, 1, 2, 3, 4])
+    prior_predictive_check(training_set, obs_data, path_to_save, dims_to_show = [0, 1, 2, 3, 4, 5])
+    print("saved at: ", path_to_save)
 
 
 if __name__ == "__main__":

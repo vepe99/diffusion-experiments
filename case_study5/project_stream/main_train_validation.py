@@ -2,7 +2,7 @@ from autocvd import autocvd
 autocvd(num_gpus=1, interval=1)
 import os
 
-# os.environ["CUDA_VISIBLE_DEVICES"] = ""
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from tqdm import tqdm
 from omegaconf import DictConfig, OmegaConf, open_dict
 import hydra
@@ -48,7 +48,7 @@ def main(cfg: TrainConfig):
     print("Train data path:", train_data_path)
     training_data = dict(np.load(train_data_path, allow_pickle=True))
     validation_data = {k: v[-10_000:,] for k, v in training_data.items()}
-    training_data = {k: v[:60_000] for k, v in training_data.items()}
+    training_data = {k: v[:290_000] for k, v in training_data.items()}
     print("Training data keys", training_data.keys())
     keys_to_drop = (
         set(training_data.keys())

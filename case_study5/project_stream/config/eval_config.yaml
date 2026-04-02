@@ -1,19 +1,19 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_gala/"
-model_dir: "models/gala6D/model35_60k_500epochs/"
-multistream_n_simulation: 100
-results_dir: "plots/gala6D/model35_60k_500epochs/100test"
+model_dir: "models/gala6D/model35_60k_500epochs"
+multistream_n_simulation: 333
+results_dir: "plots/gala6D/model35_60k_500epochs/333test"
 use_streamax_simulator: False
 
 #training hyperparameters
-n_samples: 500
+n_samples: 1000
 method: "two_step_adaptive"
 steps: "adaptive"
 max_steps: 1000
 mini_batch_size: null
 batch_size: 30
 # inverse_compositional_bridge_d1: 5.3
-inverse_compositional_bridge_d1: 5.5
+inverse_compositional_bridge_d1: 4.
 noise_schedule: null
 # noise_schedule: 
 #   min_log_snr: -15
@@ -36,6 +36,7 @@ parameters_global:
   - "rho_thick_disk"
   - "hr_thick_disk"
   - "hz_thick_disk"
+
 parameters_local:
   - "m_progenitor"
   - "a_progenitor"
