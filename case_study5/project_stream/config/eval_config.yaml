@@ -1,8 +1,8 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_gala/"
-model_dir: "models/gala6D/model35_60k_500epochs"
+model_dir: "models/gala6D/new_hyper/model54_60k_2000epochs"
 multistream_n_simulation: 333
-results_dir: "plots/gala6D/model35_60k_500epochs/333test"
+results_dir: "plots/gala6D/new_hyper/model54_60k_2000epochs/nocompositional_333test"
 use_streamax_simulator: False
 
 #training hyperparameters
@@ -12,14 +12,13 @@ steps: "adaptive"
 max_steps: 1000
 mini_batch_size: null
 batch_size: 30
-# inverse_compositional_bridge_d1: 5.3
-inverse_compositional_bridge_d1: 4.
+inverse_compositional_bridge_d1: 6
 noise_schedule: null
 # noise_schedule: 
-#   min_log_snr: -15
-#   max_log_snr: 15
-#   shift: 3
-#   weighting: "sigmoid"
+  # min_log_snr: -15
+  # max_log_snr: 15
+  # shift: 5.0
+  # weighting: "likelihood_weighting"
 verbose: 2
 
 #nmes of parameters
@@ -73,9 +72,12 @@ target_streams:
 observational_window:
   Pal5:
     ra_min: 220.98008280733634
-    ra_max: 245.89465019770668
-    dec_min: -10.644267714585839
-    dec_max: 9.279576254116762
+    # ra_max: 245.89465019770668
+    ra_max: 250.0
+    # dec_min: -10.644267714585839
+    dec_min: -13.0
+    # dec_max: 9.279576254116762
+    dec_max: 10.0
   NGC3201:
     ra_min: 42.29847920913508
     # ra_max: 178.36142433209437
@@ -84,9 +86,11 @@ observational_window:
     dec_max: 20.812029301121846
   M68:
     ra_min: 189.73694638139526
-    ra_max: 273.48942253688114
+    # ra_max: 273.48942253688114
+    ra_max: 280.0
     dec_min: -47.32109546202406
-    dec_max: 66.52056055901161
+    # dec_max: 66.52056055901161
+    dec_max: 70.0
 
 observed_n_stars:
   Pal5: 129

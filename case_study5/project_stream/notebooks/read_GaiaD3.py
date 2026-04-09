@@ -1,12 +1,13 @@
 import marimo
 
-__generated_with = "0.19.5"
+__generated_with = "0.21.1"
 app = marimo.App()
 
 
 @app.cell
 def _():
     import marimo as mo
+
     return (mo,)
 
 
@@ -19,6 +20,7 @@ def _():
     import matplotlib.pyplot as plt
     from scipy.stats import gaussian_kde
     import galstreams
+
     return ascii, galstreams, gaussian_kde, np, pd, plt
 
 
@@ -199,7 +201,6 @@ def _(tbl_data):
     # ax.set_ylabel('e_Vhel')
     # ax.legend(title='r_VHel')
     # ...existing code...
-
     return (tbl_data_pandas,)
 
 

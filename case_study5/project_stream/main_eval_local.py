@@ -13,7 +13,7 @@ from hydra.core.config_store import ConfigStore
 import numpy as np
 
 if "KERAS_BACKEND" not in os.environ:
-    os.environ["KERAS_BACKEND"] = "torch"
+    os.environ["KERAS_BACKEND"] = "jax"
 import keras
 import bayesflow as bf
 from scipy import  special 
@@ -149,172 +149,165 @@ def main(cfg: EvalConfig):
     print('Test data attention mask shape: ', test_data['attention_mask'].shape)
     print('###############')
     print('Repeating for each posterior sample the sim data and also the attention mask')
-    # test_data[cfg.sim_data] = np.repeat(test_data[cfg.sim_data][:, None, :, :], cfg.n_samples, axis=1).reshape(cfg.multistream_n_simulation*cfg.n_samples*len(cfg.target_streams), test_data[cfg.sim_data].shape[-2], test_data[cfg.sim_data].shape[-1])
-    # test_data['attention_mask'] = np.repeat(test_data['attention_mask'][:, None, :], cfg.n_samples, axis=1).reshape(cfg.multistream_n_simulation*cfg.n_samples*len(cfg.target_streams), 1, -1)
-    # print('Test data sim shape after repeating: ', test_data[cfg.sim_data].shape)
-    # print('Test data attention mask shape after repeating: ', test_data['attention_mask'].shape)
 
     #WE NEED TO GET ALSO THE SAMPLES FROM THE GLOBAL PRIOR
-    global_posterior = dict(np.load('/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/plots/plots_galax6D_1e6_concat_500_hyper40_cutNGC3201_100tests/global_posterior.npz', allow_pickle=True))
+    global_posterior = dict(np.load('/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/plots/gala6D/new_hyper/model54_60k_1000epochs/333test/global_posterior.npz', allow_pickle=True))
     print('keys global posterior: ', global_posterior.keys())
-    def expand_global_posterior(arr):
-        """
-        Expand global posterior samples for local inference.
-        
-        arr: shape (N_TEST, N_SAMPLES, ...) from global posterior
-        Returns: shape (N_TEST * N_SUBJECTS * N_SAMPLES, ...)
-        
-        For each test case, we have N_SUBJECTS streams, and N_SAMPLES posterior samples.
-        Each stream gets the same posterior samples for the global parameters.
-        """
-        arr = np.asarray(arr)
-        # arr shape: (N_TEST, N_SAMPLES, ...)
-        
-        # Expand for subjects: (N_TEST, 1, N_SAMPLES, ...) -> (N_TEST, N_SUBJECTS, N_SAMPLES, ...)
-        arr = np.repeat(arr[:, None, :, ...], len(cfg.target_streams), axis=1)
-        
-        # Flatten: (N_TEST * N_SUBJECTS * N_SAMPLES, ...)
-        return arr.reshape(cfg.multistream_n_simulation * len(cfg.target_streams) * cfg.n_samples, *arr.shape[3:])
-    
-    def expand_local_test_param(arr):
-        """
-        Expand local test parameters for local inference.
-        
-        arr: shape (N_TEST * N_SUBJECTS, 1) — already flattened
-        Returns: shape (N_TEST * N_SUBJECTS * N_SAMPLES, 1)
-        
-        Each (test, subject) pair gets repeated N_SAMPLES times.
-        """
-        arr = np.asarray(arr)
-        
-        # Ensure 2D: (N_TEST * N_SUBJECTS, 1)
-        if arr.ndim == 1:
-            arr = arr[:, None]
-        
-        # Repeat for samples: (N_TEST * N_SUBJECTS, 1) -> (N_TEST * N_SUBJECTS, N_SAMPLES, 1)
-        arr = np.repeat(arr[:, None, :], cfg.n_samples, axis=1)
-        
-        # Flatten: (N_TEST * N_SUBJECTS * N_SAMPLES, 1)
-        return arr.reshape(-1, arr.shape[-1])
-
-    #conditions 
-    conditions = {cfg.sim_data: test_data[cfg.sim_data],}
-    conditions['j'] = expand_local_test_param(test_data['j'])
-    # conditions['j'] = test_data['j']
-    for param in cfg.parameters_global:
-        conditions[param] = expand_global_posterior(global_posterior[param])
-        print(f'Condition {param} shape after expansion: ', conditions[param].shape)
-    
 
     logging.info("Starting Partial-Pooling (local) inference...")
 
-    def sample_in_batches(data, workflow, num_samples, batch_size, sampler_settings=None) -> dict:
-        """
-        Batch over expanded conditions (N_TEST * N_SUBJECTS * N_SAMPLES).
-        For each batch, look up the corresponding sim_data and attention_mask
-        by mapping back to the observation index (i // N_SAMPLES).
-        """
-        posterior_samples = None
-        n_total = len(data['j'])  # N_TEST * N_SUBJECTS * N_SAMPLES
-        sim_data_full = test_data[cfg.sim_data]       # (N_TEST * N_SUBJECTS, N_PARTICLES, D)
-        attn_mask_full = test_data['attention_mask']   # (N_TEST * N_SUBJECTS, 1, N_PARTICLES)
+    # --- Build conditions with correct shapes for ancestral_sample ---
+    n_test    = cfg.multistream_n_simulation          # e.g. 100 test cases
+    n_streams = len(cfg.target_streams)               # e.g. 3 streams
 
-        if sampler_settings is None:
-            pass
-        else:
-            workflow.approximator.inference_network.integrate_kwargs.update({
-                'method': sampler_settings['method'],
-                'steps': sampler_settings['steps'],
-                "max_steps": sampler_settings['max_steps'],
-                })
-        
-        for i in tqdm(range(0, n_total, batch_size)):
-            batch_conds = {k: v[i:i + batch_size] for k, v in data.items()}
-            actual_batch_size = batch_conds['j'].shape[0]
-            
-            # Map each expanded index back to the observation index
-            obs_indices = np.arange(i, i + actual_batch_size) // cfg.n_samples
-            
-            # Gather the corresponding sim_data and attention_mask
-            batch_conds[cfg.sim_data] = sim_data_full[obs_indices]
-            batch_attn = attn_mask_full[obs_indices]
-            
-            batch_samples = workflow.sample(conditions=batch_conds, num_samples=num_samples,
-                                                kwargs={'attention_mask': batch_attn}, 
-                                                )
-            if posterior_samples is None:
-                posterior_samples = batch_samples
+    # sim_data: (N_TEST * N_STREAMS, N_PARTICLES, D) -> (N_TEST, N_STREAMS, N_PARTICLES, D)
+    sim_data_4d = test_data[cfg.sim_data].reshape(
+        n_test, n_streams, *test_data[cfg.sim_data].shape[1:]
+    )
+
+    # j: (N_TEST * N_STREAMS, 1) -> (N_TEST, N_STREAMS, 1)
+    j_3d = test_data['j'].reshape(n_test, n_streams, 1)
+
+
+    # attention_mask: (N_TEST * N_STREAMS, 1, N_PARTICLES) -> (N_TEST, N_STREAMS, 1, N_PARTICLES)
+    attn_mask_4d = test_data['attention_mask'].reshape(
+        n_test, n_streams, *test_data['attention_mask'].shape[1:]
+    )
+    # attn_mask_4d = test_data['attention_mask']
+
+    conditions = {
+        cfg.sim_data: sim_data_4d,   # (N_TEST, N_STREAMS, N_PARTICLES, D)
+        'j':          j_3d,          # (N_TEST, N_STREAMS, 1)
+    }
+
+    # ancestral_conditions must be (N_TEST, N_PARENT_SAMPLES, 1) — do NOT repeat by n_streams
+    # global_posterior[param] is already (N_TEST, N_PARENT_SAMPLES, 1), use as-is
+    ancestral_conds = {
+        param: global_posterior[param]   # (N_TEST, N_PARENT_SAMPLES, 1)
+        for param in cfg.parameters_global
+    }
+
+    # Also add global params to conditions so the adapter can see them
+    for param in cfg.parameters_global:
+        # repeat each param across streams: (N_TEST, 1, 1) -> broadcast or explicit repeat
+        conditions[param] = np.repeat(
+            global_posterior[param][:, :1, :],   # take first sample as placeholder shape
+            n_streams, axis=1
+        )  # shape: (N_TEST, N_STREAMS, 1) — the ancestral_sample will handle the actual conditioning
+
+
+    def ancestral_sample_batched(workflow, conditions, ancestral_conds, attn_mask_4d, cfg, n_test_per_batch=5):
+        """
+        Manually batch over the n_datasets (test cases) axis to avoid OOM,
+        since _prepare_ancestral_conditions converts everything to GPU at once.
+        """
+        n_test = cfg.multistream_n_simulation
+        all_samples = None
+
+        for i in tqdm(range(0, n_test, n_test_per_batch)):
+            # Slice along n_datasets axis for all inputs
+            batch_conditions = {k: v[i:i + n_test_per_batch] for k, v in conditions.items()}
+            batch_ancestral  = {k: v[i:i + n_test_per_batch] for k, v in ancestral_conds.items()}
+            batch_attn       = attn_mask_4d[i:i + n_test_per_batch]
+
+            batch_samples = workflow.ancestral_sample(
+                conditions=batch_conditions,
+                ancestral_conditions=batch_ancestral,
+                kwargs={'attention_mask': batch_attn},
+            )
+
+            if all_samples is None:
+                all_samples = batch_samples
             else:
-                for key in posterior_samples.keys():
-                    posterior_samples[key] = np.vstack([posterior_samples[key], batch_samples[key]])
-        return posterior_samples
-    
-    local_posterior_flat = sample_in_batches(
-        workflow=workflow_local,
-        data=conditions,
-        num_samples=1,
-        batch_size=cfg.batch_size*10,
-        sampler_settings=dict(method="tsit5", steps=50, max_steps=50)
-        )
+                for k in all_samples:
+                    all_samples[k] = np.concatenate([all_samples[k], batch_samples[k]], axis=0)
 
-    local_posterior = {}
-    for k in local_posterior_flat.keys():
-        arr = local_posterior_flat[k][:, 0]  # only one sample per condition
-        # arr shape: (N_TEST * N_SUBJECTS * N_SAMPLES, ...)
-        arr = arr.reshape(cfg.multistream_n_simulation * len(cfg.target_streams), cfg.n_samples, *arr.shape[1:])
-        local_posterior[k] = arr
-    os.makedirs(name= os.path.join(cfg.base_dir, cfg.results_dir), exist_ok=True)
+        return all_samples
+
+
+    local_posterior = ancestral_sample_batched(
+        workflow=workflow_local,
+        conditions=conditions,
+        ancestral_conds=ancestral_conds,
+        attn_mask_4d=attn_mask_4d,
+        cfg=cfg,
+        n_test_per_batch=cfg.batch_size,   # tune this down if still OOM, up for speed
+    )
+
+    for k in local_posterior.keys():
+        print(f'Local posterior {k} shape: ', local_posterior[k].shape)
+
+
+
+    os.makedirs(name=os.path.join(cfg.base_dir, cfg.results_dir), exist_ok=True)
     ps = local_posterior.copy()
+    # ps shape: (N_TEST, N_STREAMS, N_PARENT_SAMPLES, 1)
     np.savez(os.path.join(cfg.base_dir, cfg.results_dir, 'local_posterior.npz'), **ps)
 
-    # ps = dict(np.load(os.path.join(cfg.base_dir, cfg.results_dir, 'local_posterior.npz'), allow_pickle=True))
-    # ps_clean = {}
-    # for k in cfg.parameters_local:
-    #     ps_clean[k] = ps[k]
-    # ps = ps_clean
-
-
+    # Build ground-truth targets: (N_TEST * N_STREAMS, 1) -> (N_TEST, N_STREAMS, 1)
     test_params_local = {}
     for p in param_names_local:
-        # test_data[p] shape: (N_TEST, N_SUBJECTS, 1) or similar
         arr = test_data[p]
         if arr.ndim == 3:
-            # (N_TEST, N_SUBJECTS, 1) -> (N_TEST * N_SUBJECTS, 1)
-            test_params_local[p] = arr.reshape(cfg.multistream_n_simulation * len(cfg.target_streams), -1)
+            test_params_local[p] = arr.reshape(n_test, n_streams, -1)
         elif arr.ndim == 2:
-            # (N_TEST, N_SUBJECTS) -> (N_TEST * N_SUBJECTS, 1)
-            test_params_local[p] = arr.reshape(cfg.multistream_n_simulation * len(cfg.target_streams), 1)
+            test_params_local[p] = arr.reshape(n_test, n_streams, 1)
         else:
+            test_params_local[p] = arr.reshape(n_test, n_streams, 1)
+    # test_params_local[p] shape: (N_TEST, N_STREAMS, 1)
+
+    
+    ###############
+    # PLOTS LOCAL #
+    ###############
+    test_params_local = {}
+    for p in param_names_local:
+        arr = np.asarray(test_data[p])  # force numpy, not JAX array
+        print(f'  {p} raw shape: {arr.shape}')
+        if arr.ndim == 3:
+            # (N_TEST, N_STREAMS, D) -> (N_TEST * N_STREAMS, D)
+            test_params_local[p] = arr.reshape(n_test * n_streams, -1)
+        elif arr.ndim == 2 and arr.shape[0] == n_test and arr.shape[1] == n_streams:
+            # (N_TEST, N_STREAMS) -> (N_TEST * N_STREAMS, 1)
+            test_params_local[p] = arr.reshape(n_test * n_streams, 1)
+        elif arr.ndim == 2:
+            # already (N_TEST * N_STREAMS, D)
+            test_params_local[p] = arr
+        elif arr.ndim == 1 and arr.shape[0] == n_test * n_streams:
+            # (N_TEST * N_STREAMS,) -> (N_TEST * N_STREAMS, 1)
             test_params_local[p] = arr.reshape(-1, 1)
+        elif arr.ndim == 1 and arr.shape[0] == n_test:
+            # (N_TEST,) -> repeat for each stream -> (N_TEST * N_STREAMS, 1)
+            test_params_local[p] = np.repeat(arr, n_streams).reshape(-1, 1)
+        else:
+            raise ValueError(f'Unexpected shape for {p}: {arr.shape}')
     test_data = test_params_local
 
-
     ###############
-    # PLOTS LOCAL#
+    # PLOTS LOCAL #
     ###############
 
-    # We need the j index to filter by stream
-    # test_data['j'] was overwritten by test_params_local, so we need to get it from the original
-    # j was stored before augmentation as (N_TEST * N_SUBJECTS, 1)
-    j_flat = expand_local_test_param(np.load(test_data_path, allow_pickle=True)['j'].reshape(-1, 1))
-    # j_flat: (N_TEST * N_SUBJECTS * N_SAMPLES, 1) — but we only need per-observation j
-    # For test_data filtering: (N_TEST * N_SUBJECTS,)
-    j_per_obs = np.load(test_data_path, allow_pickle=True)['j'].reshape(-1)  # (N_TEST * N_SUBJECTS,)
+    # Flatten ps: (N_TEST, N_STREAMS, N_SAMPLES, D) -> (N_TEST * N_STREAMS, N_SAMPLES, D)
+    ps_flat = {k: np.asarray(v).reshape(n_test * n_streams, *v.shape[2:]) for k, v in ps.items()}
+
+    # j per observation: force numpy to avoid JAX boolean indexing issues
+    j_per_obs = np.asarray(np.load(test_data_path, allow_pickle=True)['j']).reshape(-1)
+    print(f'j_per_obs shape: {j_per_obs.shape}')
+    print(f'test_data sample shape: {next(iter(test_data.values())).shape}')
+    print(f'ps_flat sample shape: {next(iter(ps_flat.values())).shape}')
 
     for stream_name, j_idx in cfg.target_streams.items():
         print(f'\n===== Generating plots for {stream_name} (j={j_idx}) =====')
-        
-        # Filter test_data (targets): shape (N_TEST * N_SUBJECTS, 1) -> select where j == j_idx
-        obs_mask = (j_per_obs == j_idx)
-        test_data_stream = {k: v[obs_mask] for k, v in test_data.items()}
-        
-        # Filter ps (estimates): shape (N_TEST * N_SUBJECTS, N_SAMPLES, D) -> select where j == j_idx
-        ps_stream = {k: v[obs_mask] for k, v in ps.items()}
-        
-        print(f'  test_data keys and shapes: { {k: v.shape for k, v in test_data_stream.items()} }')
-        print(f'  ps keys and shapes: { {k: v.shape for k, v in ps_stream.items()} }')
 
-        # Recovery plot
+        obs_mask = (j_per_obs == j_idx)  # (N_TEST * N_STREAMS,) numpy boolean
+
+        test_data_stream = {k: v[obs_mask] for k, v in test_data.items()}
+        ps_stream        = {k: v[obs_mask] for k, v in ps_flat.items()}
+
+        print(f'  test_data shapes: { {k: v.shape for k, v in test_data_stream.items()} }')
+        print(f'  ps shapes:        { {k: v.shape for k, v in ps_stream.items()} }')
+
+        # --- Recovery ---
         fig = bf.diagnostics.recovery(
             estimates=ps_stream,
             targets=test_data_stream,
@@ -328,19 +321,7 @@ def main(cfg: EvalConfig):
         print(f'  Saved {stream_name}_recovery.pdf')
         plt.close(fig)
 
-        # Corner plot
-        # dataset_id = np.array([0])
-        # fig = bf.diagnostics.plots.pairs_posterior(
-        #     estimates=ps_stream,
-        #     targets=test_data_stream,
-        #     dataset_id=dataset_id,
-        #     variable_names=cfg.parameter_local_pretty,
-        # )
-        # fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'{stream_name}_pairs_posterior_datasetid_{dataset_id[0]}.pdf'))
-        # print(f'  Saved {stream_name}_pairs_posterior_datasetid_{dataset_id[0]}.pdf')
-        # plt.close(fig)
-
-        # Calibration ECDF (difference=True)
+        # --- Calibration ECDF (difference=True) ---
         fig = bf.diagnostics.calibration_ecdf(
             estimates=ps_stream,
             targets=test_data_stream,
@@ -353,7 +334,7 @@ def main(cfg: EvalConfig):
         print(f'  Saved {stream_name}_calibration.pdf')
         plt.close(fig)
 
-        # Calibration ECDF (difference=False)
+        # --- Calibration ECDF (difference=False) ---
         fig = bf.diagnostics.calibration_ecdf(
             estimates=ps_stream,
             targets=test_data_stream,
@@ -366,13 +347,12 @@ def main(cfg: EvalConfig):
         print(f'  Saved {stream_name}_calibration_no_diff.pdf')
         plt.close(fig)
 
-        # Calibration histograms (split into two groups)
+        # --- Calibration histograms (split into two groups) ---
         ps_keys = list(ps_stream.keys())
-        ps_stream_1 = {k: ps_stream[k] for k in ps_keys[:4]}
-        test_data_stream_1 = {k: test_data_stream[k] for k in ps_keys[:4]}
+
         fig_1 = bf.diagnostics.plots.calibration_histogram(
-            estimates=ps_stream_1,
-            targets=test_data_stream_1,
+            estimates={k: ps_stream[k]       for k in ps_keys[:4]},
+            targets  ={k: test_data_stream[k] for k in ps_keys[:4]},
             variable_names=cfg.parameter_local_pretty[:4]
         )
         for ax in fig_1.get_axes():
@@ -381,11 +361,9 @@ def main(cfg: EvalConfig):
         plt.close(fig_1)
 
         if len(ps_keys) > 4:
-            ps_stream_2 = {k: ps_stream[k] for k in ps_keys[4:]}
-            test_data_stream_2 = {k: test_data_stream[k] for k in ps_keys[4:]}
             fig_2 = bf.diagnostics.plots.calibration_histogram(
-                estimates=ps_stream_2,
-                targets=test_data_stream_2,
+                estimates={k: ps_stream[k]       for k in ps_keys[4:]},
+                targets  ={k: test_data_stream[k] for k in ps_keys[4:]},
                 variable_names=cfg.parameter_local_pretty[4:]
             )
             for ax in fig_2.get_axes():
@@ -395,7 +373,7 @@ def main(cfg: EvalConfig):
 
         print(f'  Saved {stream_name}_histograms plots')
 
-        # Z-score contraction
+        # --- Z-score contraction ---
         fig = bf.diagnostics.plots.z_score_contraction(
             estimates=ps_stream,
             targets=test_data_stream,

@@ -36,15 +36,15 @@ param_name_global = [
     "hz_thick_disk"
 ]
 
-N = 333
-# add_nocomposition = 'nocomposition_'
-add_nocomposition = ''
+N = 100
+add_nocomposition = 'nocomposition_'
+# add_nocomposition = ''
 base_dir = '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/plots/gala6D/'
 posterior_sample_dir = [
-    # f'model28_60k_500epochs/{add_nocomposition}_{N}test',
-    # f'model40_60k_500epochs/{add_nocomposition}_{N}test',
-    f'model31_60k_500epochs/{add_nocomposition}{N}test',
-    f'model35_60k_500epochs/{add_nocomposition}{N}test',
+    # f'model31_60k_500epochs/{add_nocomposition}{N}test',
+    # f'model35_60k_500epochs/{add_nocomposition}{N}test',
+    f'new_hyper/5D/model40_60k_1000epochs/{add_nocomposition}{N}test',
+    f'new_hyper/5D/model54_60k_1000epochs/{add_nocomposition}{N}test',
 ]
 if add_nocomposition != '':
      posterior_path = [os.path.join(base_dir, p, 'posterior.npz') for p in posterior_sample_dir]    

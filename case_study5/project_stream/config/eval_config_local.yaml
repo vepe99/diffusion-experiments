@@ -1,8 +1,8 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
-data_dir: "streams/data_multistream_galax/"
-model_dir: "models/local_models/model_local_galax6D_1e6_concat_300_hyper24_cutNGC3201/"
-multistream_n_simulation: 100
-results_dir: "plots/plots_local/plots_local_galax6D_1e6_concat_300_hyper24_cutNGC3201_100tests/"
+data_dir: "streams/data_multistream_gala/"
+model_dir: "models/local_models/gala6D/new_hyper/model54_60k_1000epochs/"
+multistream_n_simulation: 333
+results_dir: "plots/plots_local/gala6D/new_hyper/model54_60k_1000epochs_333/"
 use_streamax_simulator: True
 
 #training hyperparameters
@@ -70,9 +70,12 @@ target_streams:
 observational_window:
   Pal5:
     ra_min: 220.98008280733634
-    ra_max: 245.89465019770668
-    dec_min: -10.644267714585839
-    dec_max: 9.279576254116762
+    # ra_max: 245.89465019770668
+    ra_max: 250.0
+    # dec_min: -10.644267714585839
+    dec_min: -13.0
+    # dec_max: 9.279576254116762
+    dec_max: 10.0
   NGC3201:
     ra_min: 42.29847920913508
     # ra_max: 178.36142433209437
@@ -81,9 +84,11 @@ observational_window:
     dec_max: 20.812029301121846
   M68:
     ra_min: 189.73694638139526
-    ra_max: 273.48942253688114
+    # ra_max: 273.48942253688114
+    ra_max: 280.0
     dec_min: -47.32109546202406
-    dec_max: 66.52056055901161
+    # dec_max: 66.52056055901161
+    dec_max: 70.0
 
 observed_n_stars:
   Pal5: 129
@@ -123,19 +128,20 @@ gaia_id:
   M68: "Fjorm"
 
 augmentations:
-  # - "remove_los_velocity"
-  - "convert_distance_to_parallax"
-  - "observational_window"
-  - "observed_n_stars"
-  - "mask_vlos"
-  - "sample_magnitudes"
-  - "sample_obs_error"
-  - "apply_obs_error"
-  # - "flip_dirz"
-  - "concatentate_sigma_error_to_sim_data"
-  - "concatenate_magnitudes_to_sim_data"
-  - "concatenate_vlos_mask_to_sim_data"
-  - "concatenate_j_to_sim_data"
+- "cut_to_300_particles"
+# - remove_los_velocity
+- convert_distance_to_parallax
+- observational_window
+- observed_n_stars
+- mask_vlos
+- sample_magnitudes
+- sample_obs_error
+- apply_obs_error
+# - flip_dirz
+- concatentate_sigma_error_to_sim_data
+- concatenate_magnitudes_to_sim_data
+- concatenate_vlos_mask_to_sim_data
+- concatenate_j_to_sim_data
 
 #global model network:
 global_model:

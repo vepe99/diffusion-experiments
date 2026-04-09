@@ -1,18 +1,17 @@
 base_dir: /export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/
 data_dir: streams/data_gala/
 N_simulations: 300_000
-results_dir: models/gala6D/model53_300k_500epochs
+results_dir: models/gala6D/new_hyper/model54_60k_3000epochs
 test: false
 
 
-n_epochs: 500
+n_epochs: 3000
 batch_size: 1024
 learning_rate: 0.01
 weight_decay: 0.0001
 lr_scheduler_step_size: 10
 lr_scheduler_gamma: 0.1
 verbose: 2
-
 
 sim_data: sim_data_projected
 inference_conditions:
@@ -27,7 +26,6 @@ parameters_global:
 - rho_thick_disk
 - hr_thick_disk
 - hz_thick_disk
-- m_bulge
 
 parameters_local:
 - m_progenitor
@@ -46,7 +44,7 @@ paramater_global_pretty:
 - $\\rho_k$
 - $h_k$
 - $z_k$
-- "$M_{PSP}$"
+
 parameter_local_pretty:
 - $M_{prog}$
 - $a_{prog}$
@@ -117,7 +115,7 @@ gaia_id:
 
 augmentations:
 - "cut_to_300_particles"
-  # - "remove_los_velocity"
+# - "remove_los_velocity"
 - convert_distance_to_parallax
 - observational_window
 - observed_n_stars
@@ -133,14 +131,14 @@ augmentations:
 
 global_model:
   dropout: 0.1
-  summary_dim: 39
-  embed_dims: 68
-  num_heads: 6
+  summary_dim: 182
+  embed_dims: 67
+  num_heads: 2
   mlp_depths: 3
-  mlp_widths: 169
-  inference_mlp_depth: 4
-  inference_mlp_width: 134
-  inference_time_embedding_dim: 22
+  mlp_widths: 49
+  inference_mlp_depth: 3
+  inference_mlp_width: 143
+  inference_time_embedding_dim: 62
 local_model:
   dropout: 0.1
   summary_dim: 16

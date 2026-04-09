@@ -32,11 +32,11 @@ def objective(trial, cfg):
     clear_gpu_memory()
 
     try:
-        summary_dim = trial.suggest_int("SetTransformer_summary_dim", 20, 64)
-        embed_dims = trial.suggest_int("SetTransformer_embed_dims", 48, 128)
-        num_heads = trial.suggest_int("SetTransformer_num_heads", 1, 3)
+        summary_dim = trial.suggest_int("SetTransformer_summary_dim", 16, 256)
+        embed_dims = trial.suggest_int("SetTransformer_embed_dims", 16, 128)
+        num_heads = trial.suggest_int("SetTransformer_num_heads", 4, 6)
         mlp_depths = trial.suggest_int("SetTransformer_mlp_depths", 2, 6) 
-        mlp_widths = trial.suggest_int("SetTransformer_mlp_widths", 32, 256)
+        mlp_widths = trial.suggest_int("SetTransformer_mlp_widths", 16, 256)
 
         inference_mlp_depth = trial.suggest_int("inference_mlp_depth", 2, 8)
         inference_mlp_width = trial.suggest_int("inference_mlp_width", 32, 512)
@@ -79,11 +79,11 @@ def objective(trial, cfg):
             )
        
         
-        batch_size_training = 500
+        batch_size_training = 1024
         try:
             history = workflow_global.fit_offline(
                 training_data,
-                epochs=500,
+                epochs=1000,
                 batch_size=batch_size_training,
                 verbose=2,
                 augmentations=augmentations,
@@ -94,17 +94,13 @@ def objective(trial, cfg):
             batch_size_training = int(batch_size_training/2)
             history = workflow_global.fit_offline(
                 training_data,
-                epochs=500,
+                epochs=1000,
                 batch_size=batch_size_training,
                 verbose=2,
                 augmentations=augmentations,
             )
 
-        # workflow_global.approximator.inference_network.integrate_kwargs.update({
-        #     'method': "two_step_adaptive",
-        #     'steps': "adaptive",
-        #     "max_steps": 1000,
-        #     })
+
         
         batch_size_sampling = 100
         try: 
@@ -141,7 +137,7 @@ def objective(trial, cfg):
                 variable_names=param_names_global,
             )
         average_rms = root_mean_squared_error['values'].mean()
-        average_calibration = calibration_errors['values'][:3].mean()
+        average_calibration = calibration_errors['values'].mean()
         return average_rms, average_calibration
 
 
@@ -205,13 +201,13 @@ if __name__ == "__main__":
         cfg = compose(config_name="train_config")
     
     base_dir =  '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/'
-    data_dir = 'streams/data_galax_1e6/'
-    N_simulations = 1_000_000
+    data_dir = 'streams/data_gala/'
+    N_simulations = 300_000
 
 
-    train_data_path = os.path.join(base_dir, data_dir, f"training_data_local_{N_simulations}.npz")
+    train_data_path = os.path.join(base_dir, data_dir, f"training_data_{N_simulations}.npz")
     training_data = dict(np.load(train_data_path, allow_pickle=True))
-    training_data = {k: training_data[k][:300_000] for k in training_data.keys()}
+    training_data = {k: training_data[k][:60_000] for k in training_data.keys()}
 
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
@@ -258,15 +254,15 @@ if __name__ == "__main__":
     
 
     test_data = dict(np.load(train_data_path, allow_pickle=True))
-    test_data = {k: test_data[k][-1_000:] for k in test_data.keys()}
+    test_data = {k: test_data[k][-6_000:] for k in test_data.keys()}
     for aug in augmentations:
         test_data = aug(test_data)
     for k in test_data.keys():
         test_data[k] = np.array(test_data[k])
         
     print("Loaded config:", cfg)
-    study_name = 'study_DiffusionModel_small'  # Unique identifier of the study.
-    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/new_bf/optuna_diffusionmodel_galax_cutNGC3201.log"))
+    study_name = 'study_DiffusionModel'  # Unique identifier of the study.
+    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/gala/big_heads/optuna_diffusionmodel_gala_cutNGC3201.log"))
     study = optuna.create_study(study_name=study_name, storage=storage_name, directions=['minimize', 'minimize'], load_if_exists=True)
     study.optimize(
         lambda trial: objective(trial, cfg),

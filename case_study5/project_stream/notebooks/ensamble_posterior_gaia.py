@@ -51,8 +51,11 @@ posterior_names = [
 base_dir = '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/plots/gala6D/'
 
 posterior_sample_dirs = [
-    'model31_60k_500epochs/',
-    'model35_60k_500epochs/',
+    # 'model31_60k_500epochs/',
+    # 'model35_60k_500epochs/',
+    # 'model40_60k_1000epochs/',
+    f'new_hyper/modelDEFAULT_60k_1000epochs/',
+    f'new_hyper/model54_60k_1000epochs/',
 ]
 
 

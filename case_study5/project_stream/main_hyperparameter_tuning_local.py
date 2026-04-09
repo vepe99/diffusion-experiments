@@ -27,19 +27,19 @@ def clear_gpu_memory():
     gc.collect()
 
 
-def objective(trial, cfg):
+def objective(trial, cfg, test_data):
     # Clear memory at the start of each trial
     clear_gpu_memory()
 
     try:
-        summary_dim = trial.suggest_int("SetTransformer_summary_dim", 20, 64)
-        embed_dims = trial.suggest_int("SetTransformer_embed_dims", 48, 128)
+        summary_dim = trial.suggest_int("SetTransformer_summary_dim", 16, 128)
+        embed_dims = trial.suggest_int("SetTransformer_embed_dims", 16, 128)
         num_heads = trial.suggest_int("SetTransformer_num_heads", 1, 3)
         mlp_depths = trial.suggest_int("SetTransformer_mlp_depths", 2, 6) 
-        mlp_widths = trial.suggest_int("SetTransformer_mlp_widths", 32, 256)
+        mlp_widths = trial.suggest_int("SetTransformer_mlp_widths", 16, 128)
 
-        inference_mlp_depth = trial.suggest_int("inference_mlp_depth", 2, 8)
-        inference_mlp_width = trial.suggest_int("inference_mlp_width", 32, 512)
+        inference_mlp_depth = trial.suggest_int("inference_mlp_depth", 2, 6)
+        inference_mlp_width = trial.suggest_int("inference_mlp_width", 32, 256)
         time_embedding_dim = trial.suggest_int("inference_time_embedding_dim", 16, 64, step=2)
 
         param_names_global = list(cfg.parameters_global)
@@ -82,11 +82,11 @@ def objective(trial, cfg):
             )
        
         
-        batch_size_training = 500
+        batch_size_training = 1000
         try:
             history = workflow_global.fit_offline(
                 training_data,
-                epochs=500,
+                epochs=1000,
                 batch_size=batch_size_training,
                 verbose=2,
             )
@@ -96,50 +96,142 @@ def objective(trial, cfg):
             batch_size_training = int(batch_size_training/2)
             history = workflow_global.fit_offline(
                 training_data,
-                epochs=100,
+                epochs=1000,
                 batch_size=batch_size_training,
                 verbose=2,
             )
 
-        workflow_global.approximator.inference_network.integrate_kwargs.update({
-            'method': "tsit5",
-            "steps":50, 
-            "max_steps":50
-            })
-        
-        batch_size_sampling = 100
-        conditions = {cfg.sim_data: test_data[cfg.sim_data],}
-        conditions['j'] = test_data['j']
-        # conditions['j'] = test_data['j']
+        #this hyperparameter is fixed on the global posterior of choice
+        global_posterior = dict(np.load('/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/plots/gala6D/new_hyper/model54_60k_1000epochs/333test/global_posterior.npz', allow_pickle=True))
+
+        # --- Build conditions with correct shapes for ancestral_sample ---
+        n_test    = 333         # e.g. 100 test cases
+        n_streams = len(cfg.target_streams)               # e.g. 3 streams
+
+        # sim_data: (N_TEST * N_STREAMS, N_PARTICLES, D) -> (N_TEST, N_STREAMS, N_PARTICLES, D)
+        sim_data_4d = test_data[cfg.sim_data].reshape(
+            n_test, n_streams, *test_data[cfg.sim_data].shape[1:]
+        )
+
+        # j: (N_TEST * N_STREAMS, 1) -> (N_TEST, N_STREAMS, 1)
+        j_3d = test_data['j'].reshape(n_test, n_streams, 1)
+
+
+        # attention_mask: (N_TEST * N_STREAMS, 1, N_PARTICLES) -> (N_TEST, N_STREAMS, 1, N_PARTICLES)
+        # attn_mask_4d = test_data['attention_mask'].reshape(
+        #     n_test, n_streams, *test_data['attention_mask'].shape[1:]
+        # )
+        attn_mask_4d = test_data['attention_mask']
+
+        conditions = {
+            cfg.sim_data: sim_data_4d,   # (N_TEST, N_STREAMS, N_PARTICLES, D)
+            'j':          j_3d,          # (N_TEST, N_STREAMS, 1)
+        }
+
+        # ancestral_conditions must be (N_TEST, N_PARENT_SAMPLES, 1) — do NOT repeat by n_streams
+        # global_posterior[param] is already (N_TEST, N_PARENT_SAMPLES, 1), use as-is
+        ancestral_conds = {
+            param: global_posterior[param]   # (N_TEST, N_PARENT_SAMPLES, 1)
+            for param in cfg.parameters_global
+        }
+
+        # Also add global params to conditions so the adapter can see them
         for param in cfg.parameters_global:
-            conditions[param] = test_data[param]
+            # repeat each param across streams: (N_TEST, 1, 1) -> broadcast or explicit repeat
+            conditions[param] = np.repeat(
+                global_posterior[param][:, :1, :],   # take first sample as placeholder shape
+                n_streams, axis=1
+            )  # shape: (N_TEST, N_STREAMS, 1) — the ancestral_sample will handle the actual conditioning
+
+
+        def ancestral_sample_batched(workflow, conditions, ancestral_conds, attn_mask_4d, cfg, n_test_per_batch=5):
+            """
+            Manually batch over the n_datasets (test cases) axis to avoid OOM,
+            since _prepare_ancestral_conditions converts everything to GPU at once.
+            """
+            n_test = 333
+            all_samples = None
+
+            for i in tqdm(range(0, n_test, n_test_per_batch)):
+                # Slice along n_datasets axis for all inputs
+                batch_conditions = {k: v[i:i + n_test_per_batch] for k, v in conditions.items()}
+                batch_ancestral  = {k: v[i:i + n_test_per_batch] for k, v in ancestral_conds.items()}
+                batch_attn       = attn_mask_4d[i:i + n_test_per_batch]
+
+                batch_samples = workflow.ancestral_sample(
+                    conditions=batch_conditions,
+                    ancestral_conditions=batch_ancestral,
+                    kwargs={'attention_mask': batch_attn},
+                )
+
+                if all_samples is None:
+                    all_samples = batch_samples
+                else:
+                    for k in all_samples:
+                        all_samples[k] = np.concatenate([all_samples[k], batch_samples[k]], axis=0)
+
+            return all_samples
+
+
+        
         try: 
-            gloabl_posterior = workflow_global.sample(
-                                num_samples=1000,
-                                conditions=conditions, 
-                                batch_size=batch_size_sampling,
-                                kwargs={'attention_mask': test_data['attention_mask']}
-                            )
+            local_posterior = ancestral_sample_batched(
+                workflow=workflow_global,
+                conditions=conditions,
+                ancestral_conds=ancestral_conds,
+                attn_mask_4d=attn_mask_4d,
+                cfg=cfg,
+                n_test_per_batch=30,   # tune this down if still OOM, up for speed
+            )
         except Exception as e:
             logging.error(f"Sampling failed with error: {e}")
             logging.error('Half batch for sampling and retrying...')
             batch_size_sampling = int(batch_size_sampling/2)
-            gloabl_posterior = workflow_global.sample(
-                                num_samples=1000,
-                                conditions=conditions, 
-                                batch_size=batch_size_sampling,
-                                kwargs={'attention_mask': test_data['attention_mask']}
-                            )
+            local_posterior = ancestral_sample_batched(
+                    workflow=workflow_global,
+                    conditions=conditions,
+                    ancestral_conds=ancestral_conds,
+                    attn_mask_4d=attn_mask_4d,
+                    cfg=cfg,
+                    n_test_per_batch=batch_size_sampling,   # tune this down if still OOM, up for speed
+                )
+        ps = local_posterior.copy()
+
+        test_params_local = {}
+        for p in param_names_local:
+            arr = np.asarray(test_data[p])  # force numpy, not JAX array
+            print(f'  {p} raw shape: {arr.shape}')
+            if arr.ndim == 3:
+                # (N_TEST, N_STREAMS, D) -> (N_TEST * N_STREAMS, D)
+                test_params_local[p] = arr.reshape(n_test * n_streams, -1)
+            elif arr.ndim == 2 and arr.shape[0] == n_test and arr.shape[1] == n_streams:
+                # (N_TEST, N_STREAMS) -> (N_TEST * N_STREAMS, 1)
+                test_params_local[p] = arr.reshape(n_test * n_streams, 1)
+            elif arr.ndim == 2:
+                # already (N_TEST * N_STREAMS, D)
+                test_params_local[p] = arr
+            elif arr.ndim == 1 and arr.shape[0] == n_test * n_streams:
+                # (N_TEST * N_STREAMS,) -> (N_TEST * N_STREAMS, 1)
+                test_params_local[p] = arr.reshape(-1, 1)
+            elif arr.ndim == 1 and arr.shape[0] == n_test:
+                # (N_TEST,) -> repeat for each stream -> (N_TEST * N_STREAMS, 1)
+                test_params_local[p] = np.repeat(arr, n_streams).reshape(-1, 1)
+            else:
+                raise ValueError(f'Unexpected shape for {p}: {arr.shape}')
+        test_data = test_params_local
+        # Flatten ps: (N_TEST, N_STREAMS, N_SAMPLES, D) -> (N_TEST * N_STREAMS, N_SAMPLES, D)
+        ps_flat = {k: np.asarray(v).reshape(n_test * n_streams, *v.shape[2:]) for k, v in ps.items()}
+
             
         root_mean_squared_error = bf_metrics.root_mean_squared_error(
-                estimates=gloabl_posterior,
+                estimates=ps_flat,
                 targets=test_data,
                 variable_keys=param_names_local,
                 variable_names=param_names_local,
             )
         
         calibration_errors = bf_metrics.calibration_error(
-                estimates=gloabl_posterior,
+                estimates=ps_flat,
                 targets=test_data,
                 variable_keys=param_names_local,
                 variable_names=param_names_local,
@@ -206,11 +298,11 @@ if __name__ == "__main__":
 
     with initialize_config_dir(version_base=None, config_dir=config_path):
         # 3. Compose: loads train_config.yaml, validated against TrainConfig schema
-        cfg = compose(config_name="train_config_local")
+        cfg = compose(config_name="eval_config_local")
     
     base_dir =  '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/'
-    data_dir = 'streams/data_galax_1e6/'
-    N_simulations = 1_000_000
+    data_dir = 'streams/data_gala/'
+    N_simulations = 300_000
 
 
     train_data_path = os.path.join(base_dir, data_dir, f"training_data_local_{N_simulations}.npz")
@@ -258,16 +350,19 @@ if __name__ == "__main__":
         print(f'  {k}: {v.shape}')
     
 
-    test_data = dict(np.load(train_data_path, allow_pickle=True))
-    test_data = {k: test_data[k][-1_000:] for k in test_data.keys()}
+    # test_data = dict(np.load('.', allow_pickle=True))
+    # test_data = {k: test_data[k][-1_000:] for k in test_data.keys()}
+    test_data = dict(np.load(os.path.join(base_dir, 'streams/data_multistream_gala/simulation_multistream_333.npz')))
+    test_data[cfg.sim_data] = test_data[cfg.sim_data].reshape(-1, test_data[cfg.sim_data].shape[-2], test_data[cfg.sim_data].shape[-1])
+    test_data['j'] = test_data['j'].reshape(-1, 1)
     for aug in augmentations:
         test_data = aug(test_data)
         
     print("Loaded config:", cfg)
     study_name = 'study_DiffusionMode_local'  # Unique identifier of the study.
-    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/optuna_diffusionmodel_galax_local_cutNGC3201.log"))
+    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/gala/local/optuna_diffusionmodel_galax_local_cutNGC3201.log"))
     study = optuna.create_study(study_name=study_name, storage=storage_name, directions=['minimize', 'minimize'], load_if_exists=True)
     study.optimize(
-        lambda trial: objective(trial, cfg),
+        lambda trial: objective(trial, cfg, test_data),
         callbacks=[MaxTrialsCallback(100, states=(TrialState.COMPLETE, TrialState.FAIL))],
     )

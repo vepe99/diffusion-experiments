@@ -126,6 +126,9 @@ def main(cfg: EvalConfig):
     test_data = dict(np.load(test_data_path, allow_pickle=True))
     keys_to_drop = set(test_data.keys()) - set(param_names_global) - {sim_data} - set(inference_conditions)
     keys_to_drop = list(keys_to_drop) 
+    with open(os.path.join(cfg.base_dir, cfg.model_dir, '.hydra', 'config.yaml'), "r") as f:
+        model_config = yaml.safe_load(f)
+    print(model_config)
 
 
     adapter = (
@@ -137,9 +140,21 @@ def main(cfg: EvalConfig):
         .rename(sim_data, "summary_variables")
         .rename(inference_conditions, "inference_conditions")
     )
-    with open(os.path.join(cfg.base_dir, cfg.model_dir, '.hydra', 'config.yaml'), "r") as f:
-        model_config = yaml.safe_load(f)
-    print(model_config)
+    if cfg.noise_schedule is not None:
+        inference_network = bf.networks.CompositionalDiffusionModel(
+                                                        subnet_kwargs={
+                                                        "widths": [model_config['global_model']['inference_mlp_width']] * model_config['global_model']['inference_mlp_depth'],
+                                                        "time_embedding_dim": model_config['global_model']['inference_time_embedding_dim'],
+                                                        },
+                                                        schedule_kwargs = {**cfg.noise_schedule,},
+                                                        )
+    else:
+        #probably needs to fix it to the training noise schedule 
+        inference_network = bf.networks.CompositionalDiffusionModel(subnet_kwargs={
+                                                        "widths": [model_config['global_model']['inference_mlp_width']] * model_config['global_model']['inference_mlp_depth'],
+                                                        "time_embedding_dim": model_config['global_model']['inference_time_embedding_dim'],
+                                                        },)
+    
 
     workflow_global = bf.BasicWorkflow(
         adapter=adapter,
@@ -149,13 +164,17 @@ def main(cfg: EvalConfig):
                                                    mlp_depths=(model_config['global_model']['mlp_depths'], model_config['global_model']['mlp_depths']),
                                                    mlp_widths=(model_config['global_model']['mlp_widths'], model_config['global_model']['mlp_widths']),
                                                    dropout=0.1),
-        inference_network = bf.networks.CompositionalDiffusionModel(subnet_kwargs={
-                                                        "widths": [model_config['global_model']['inference_mlp_width']] * model_config['global_model']['inference_mlp_depth'],
-                                                        "time_embedding_dim": model_config['global_model']['inference_time_embedding_dim'],
-                                                        },),
+        # inference_network = bf.networks.CompositionalDiffusionModel(subnet_kwargs={
+        #                                                 "widths": [model_config['global_model']['inference_mlp_width']] * model_config['global_model']['inference_mlp_depth'],
+        #                                                 "time_embedding_dim": model_config['global_model']['inference_time_embedding_dim'],
+        #                                                 },),
+        inference_network = inference_network,
         standardize=["inference_variables", "summary_variables"]
     )
     workflow_global.approximator = keras.models.load_model(model_path)
+    # rng_ = np.random.default_rng(42)
+    # val_index = rng_.integers(low=0, high=len(test_data[cfg.sim_data]), size=333, )
+    # test_data = {k: test_data[k][val_index] for k in cfg.parameters_global + [cfg.sim_data, "j"] }
     test_data = {k: test_data[k] for k in cfg.parameters_global + [cfg.sim_data, "j"] }
     # Augmentation
     augmentations_class = AugmentationsClass(cfg)
