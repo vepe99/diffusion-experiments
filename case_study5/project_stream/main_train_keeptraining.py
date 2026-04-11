@@ -1,9 +1,8 @@
 from autocvd import autocvd
-
 autocvd(num_gpus=1, interval=1)
 import os
 
-# os.environ["CUDA_VISIBLE_DEVICES"] = "7"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from tqdm import tqdm
 from omegaconf import DictConfig, OmegaConf, open_dict
 import hydra
@@ -31,7 +30,7 @@ cs.store(name="train_config", node=TrainConfig)
 @hydra.main(
     version_base=None,
     config_path="config",
-    config_name="train_config_local",
+    config_name="train_config",
 )
 def main(cfg: TrainConfig):
     print(cfg)
@@ -40,63 +39,62 @@ def main(cfg: TrainConfig):
         cfg.results_dir,
     )
     os.makedirs(model_path, exist_ok=True)
-    param_names_local = list(cfg.parameters_local)
     param_names_global = list(cfg.parameters_global)
     sim_data = str(cfg.sim_data)
     inference_conditions = str(cfg.inference_conditions[0])  # jut 1
     train_data_path = os.path.join(
-        cfg.base_dir, cfg.data_dir, f"training_data_local_{cfg.N_simulations}.npz"
+        cfg.base_dir, cfg.data_dir, f"training_data_{cfg.N_simulations}.npz"
     )
     print("Train data path:", train_data_path)
     training_data = dict(np.load(train_data_path, allow_pickle=True))
-    training_data = {k: v[:60_000] for k, v in training_data.items()}
+    
+    # training_data = {k: v[:60_000] for k, v in training_data.items()}
     print("Training data keys", training_data.keys())
     keys_to_drop = (
         set(training_data.keys())
-        - set(param_names_local)
         - set(param_names_global)
         - {sim_data}
         - set(inference_conditions)
     )
     keys_to_drop = list(keys_to_drop)
-    inference_conditions = param_names_global + [inference_conditions]
 
     adapter = (
         bf.adapters.Adapter()
         .to_array()
         .convert_dtype("float64", "float32")
         .drop(keys_to_drop)
-        .concatenate(param_names_local, into="inference_variables")
+        .concatenate(param_names_global, into="inference_variables")
         .rename(sim_data, "summary_variables")
-        .concatenate(inference_conditions, into="inference_conditions")
+        .rename(inference_conditions, "inference_conditions")
     )
-    workflow_local = bf.BasicWorkflow(
+    workflow_global = bf.BasicWorkflow(
         adapter=adapter,
         summary_network=bf.networks.SetTransformer(
-            summary_dim=cfg.local_model.summary_dim,
-            embed_dims=(cfg.local_model.embed_dims, cfg.local_model.embed_dims),
+            summary_dim=cfg.global_model.summary_dim,
+            embed_dims=(cfg.global_model.embed_dims, cfg.global_model.embed_dims),
             num_heads=(
-                cfg.local_model.num_heads,
-                cfg.local_model.num_heads,
+                cfg.global_model.num_heads,
+                cfg.global_model.num_heads,
             ),
-            mlp_depths=(cfg.local_model.mlp_depths, cfg.local_model.mlp_depths),
-            mlp_widths=(cfg.local_model.mlp_widths, cfg.local_model.mlp_widths),
-            dropout=cfg.local_model.dropout,
+            mlp_depths=(cfg.global_model.mlp_depths, cfg.global_model.mlp_depths),
+            mlp_widths=(cfg.global_model.mlp_widths, cfg.global_model.mlp_widths),
+            dropout=cfg.global_model.dropout,
         ),
         inference_network=bf.networks.CompositionalDiffusionModel(
             subnet_kwargs={
-                "widths": [cfg.local_model.inference_mlp_width]
-                * cfg.local_model.inference_mlp_depth,
-                "time_embedding_dim": cfg.local_model.inference_time_embedding_dim,
+                "widths": [cfg.global_model.inference_mlp_width]
+                * cfg.global_model.inference_mlp_depth,
+                "time_embedding_dim": cfg.global_model.inference_time_embedding_dim,
             }
         ),
-        standardize=["inference_variables", "summary_variables", "inference_conditions"],
+        standardize=["inference_variables", "summary_variables"],
         checkpoint_filepath=model_path,
-        checkpoint_name="checkpoint_local_model.keras",
+        checkpoint_name="checkpoint_global_model.keras",
     )
 
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
+
     if "cut_to_300_particles" in cfg.augmentations:
         augmentations.append(augmentations_class.cut_to_300_particles)
     if "remove_los_velocity" in cfg.augmentations: #remove this if you want to train with vlos and errors
@@ -389,15 +387,14 @@ def main(cfg: TrainConfig):
                     fig_sigma.savefig(os.path.join(model_path, "augmentation_sigma_vlos_mask.pdf"))
                     plt.show()
 
-    history = workflow_local.fit_offline(
+    history = workflow_global.fit_offline(
         training_data,
         epochs=cfg.n_epochs,
         batch_size=cfg.batch_size,
         verbose=cfg.verbose,
         augmentations=augmentations,
     )
-    workflow_local.approximator.save(os.path.join(model_path, "local_model.keras"))
-    workflow_local.approximator.save_weights(model_path.replace('.keras', '.weights.h5'))
+    workflow_global.approximator.save(os.path.join(model_path, "global_model.keras"))
     loss_plot = bf.diagnostics.plots.loss(
         history,
     )
