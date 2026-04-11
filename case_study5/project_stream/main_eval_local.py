@@ -151,7 +151,7 @@ def main(cfg: EvalConfig):
     print('Repeating for each posterior sample the sim data and also the attention mask')
 
     #WE NEED TO GET ALSO THE SAMPLES FROM THE GLOBAL PRIOR
-    global_posterior = dict(np.load('/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/plots/gala6D/new_hyper/model54_60k_1000epochs/333test/global_posterior.npz', allow_pickle=True))
+    global_posterior = dict(np.load('/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/plots/gala6D/model31_300k_500epochs/100test/global_posterior.npz', allow_pickle=True))
     print('keys global posterior: ', global_posterior.keys())
 
     logging.info("Starting Partial-Pooling (local) inference...")

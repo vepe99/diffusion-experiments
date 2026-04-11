@@ -14,13 +14,15 @@ def main():
     from optuna.storages import JournalStorage, JournalFileStorage
 
     from optuna.visualization import plot_pareto_front, plot_param_importances
-    storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/optuna_diffusionmodel_gala_cutNGC3201.log"))
-    # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/optuna_diffusionmodel_galax_local.log"))
+    # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/optuna_diffusionmodel_gala_cutNGC3201.log"))
+    storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/local/optuna_diffusionmodel_galax_local_cutNGC3201.log"))
+    # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/big_heads/optuna_diffusionmodel_gala_cutNGC3201.log"))
+
     # study_names = optuna.study.get_all_study_names(storage)
     # print("Studies in storage:", study_names)
     study = optuna.load_study(
-        # study_name="study_DiffusionMode_local",
-        study_name='study_DiffusionModel',
+        # study_name='study_DiffusionModel',
+        study_name="study_DiffusionMode_local",
         storage=storage,
     )
     fig = plot_pareto_front(study, target_names=["RMSE", "Calibration Error"])

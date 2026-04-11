@@ -171,7 +171,9 @@ def main(cfg: EvalConfig):
         inference_network = inference_network,
         standardize=["inference_variables", "summary_variables"]
     )
-    workflow_global.approximator = keras.models.load_model(model_path)
+    # workflow_global.approximator = keras.models.load_model(model_path)
+    # workflow_global.approximator.save_weights(model_path.replace('.keras', '.weights.h5'))
+    
     # rng_ = np.random.default_rng(42)
     # val_index = rng_.integers(low=0, high=len(test_data[cfg.sim_data]), size=333, )
     # test_data = {k: test_data[k][val_index] for k in cfg.parameters_global + [cfg.sim_data, "j"] }
@@ -238,6 +240,28 @@ def main(cfg: EvalConfig):
         return score
 
     logging.info("Starting Partial-Pooling (global) inference...")
+
+    #LOADING FROM WEIGTH
+    dummy_test_set_sample = {k: v[:2] for k, v in test_data.items()}
+
+    # Flatten streams into batch dim, matching what the model saw during training
+    n_streams = len(cfg.target_streams)
+    dummy_test_set_sample[cfg.sim_data] = dummy_test_set_sample[cfg.sim_data].reshape(
+        -1, 
+        dummy_test_set_sample[cfg.sim_data].shape[-2],  # n_stars=300
+        dummy_test_set_sample[cfg.sim_data].shape[-1],  # features=15
+    )
+    dummy_test_set_sample['j'] = dummy_test_set_sample['j'].reshape(-1, 1)
+
+    # Now adapt and build
+    dummy_adapted = workflow_global.adapter(dummy_test_set_sample)
+    dummy_tensors = keras.tree.map_structure(keras.ops.convert_to_tensor, dummy_adapted)
+    workflow_global.approximator.build_from_data(dummy_tensors)
+    workflow_global.approximator.load_weights(model_path.replace('.keras', '.weights.h5'))
+    print('Model loaded and weights set successfully.')
+
+
+    # Update inference kwargs with values from config
     workflow_global.approximator.inference_network.integrate_kwargs.update({
         'method': cfg.method,
         'steps': cfg.steps,

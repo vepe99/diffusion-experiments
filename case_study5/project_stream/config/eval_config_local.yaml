@@ -1,8 +1,8 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_gala/"
-model_dir: "models/local_models/gala6D/new_hyper/model54_60k_1000epochs/"
-multistream_n_simulation: 333
-results_dir: "plots/plots_local/gala6D/new_hyper/model54_60k_1000epochs_333/"
+model_dir: "models/local_models/gala6D/new_hyper/modeltest_60k_1000epochs/"
+multistream_n_simulation: 100
+results_dir: "plots/plots_local/gala6D/new_hyper/modeltest_60k_1000epochs_100/"
 use_streamax_simulator: True
 
 #training hyperparameters

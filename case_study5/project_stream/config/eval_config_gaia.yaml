@@ -1,8 +1,8 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_gala/"
-model_dir: "models/gala6D/new_hyper/5D/model54_60k_1000epochs"
+model_dir: "models/gala6D/model40_300k_2000epochs"
 multistream_n_simulation: 333
-results_dir: "plots/gala6D/new_hyper/5D/model54_60k_1000epochs"
+results_dir: "plots/gala6D/model40_300k_2000epochs"
 use_streamax_simulator: True
 
 #training hyperparameters
@@ -102,14 +102,14 @@ min_star_with_vlos:
   NGC3201: 37
   M68: 29
 
-error_keys: null #default is ["ra", "dec", "parallax", "mu_ra", "mu_dec"]
-# error_keys: 
-#   - "ra"
-#   - "dec"
-#   - "parallax"
-#   - "mu_ra"
-#   - "mu_dec"
-#   - "v_los" #override default error keys
+# error_keys: null #default is ["ra", "dec", "parallax", "mu_ra", "mu_dec"]
+error_keys: 
+  - "ra"
+  - "dec"
+  - "parallax"
+  - "mu_ra"
+  - "mu_dec"
+  - "v_los" #override default error keys
 
 masked_value_vlos:
   Pal5:
@@ -129,17 +129,17 @@ gaia_id:
   M68: "Fjorm"
 
 augmentations:
-  - "remove_los_velocity"
+  # - "remove_los_velocity"
   - "convert_distance_to_parallax" #we already have parallax in data, but we have to keep it even if we do not use it
   - "sample_magnitudes" #we need to keep it even if we do not use it
   - "observational_window"
-  # - "observed_n_stars"
+  - "observed_n_stars"
   - "mask_vlos"
   - "sample_obs_error"
   # - "flip_dirz"
   - "concatentate_sigma_error_to_sim_data"
   - "concatenate_magnitudes_to_sim_data"
-  # - "concatenate_vlos_mask_to_sim_data"
+  - "concatenate_vlos_mask_to_sim_data"
   - "concatenate_j_to_sim_data"
 
 #global model network:

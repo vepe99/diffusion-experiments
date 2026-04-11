@@ -31,28 +31,37 @@ def objective(trial, cfg):
     # Clear memory at the start of each trial
     clear_gpu_memory()
 
-    try:
-        summary_dim = trial.suggest_int("SetTransformer_summary_dim", 16, 256)
-        embed_dims = trial.suggest_int("SetTransformer_embed_dims", 16, 128)
-        num_heads = trial.suggest_int("SetTransformer_num_heads", 4, 6)
-        mlp_depths = trial.suggest_int("SetTransformer_mlp_depths", 2, 6) 
-        mlp_widths = trial.suggest_int("SetTransformer_mlp_widths", 16, 256)
+    
+    summary_dim = trial.suggest_int("SetTransformer_summary_dim", 16, 256)
+    embed_dims = trial.suggest_int("SetTransformer_embed_dims", 16, 128)
+    num_heads = trial.suggest_int("SetTransformer_num_heads", 4, 6)
+    mlp_depths = trial.suggest_int("SetTransformer_mlp_depths", 2, 6) 
+    mlp_widths = trial.suggest_int("SetTransformer_mlp_widths", 16, 256)
 
-        inference_mlp_depth = trial.suggest_int("inference_mlp_depth", 2, 8)
-        inference_mlp_width = trial.suggest_int("inference_mlp_width", 32, 512)
-        time_embedding_dim = trial.suggest_int("inference_time_embedding_dim", 16, 64, step=2)
+    inference_mlp_depth = trial.suggest_int("inference_mlp_depth", 2, 8)
+    inference_mlp_width = trial.suggest_int("inference_mlp_width", 32, 512)
+    time_embedding_dim = trial.suggest_int("inference_time_embedding_dim", 16, 64, step=2)
 
-        param_names_global = list(cfg.parameters_global)
-        sim_data = 'sim_data_projected'
-        inference_conditions = 'j' #just 1
-        keys_to_drop = (
-            set(training_data.keys())
-            - set(param_names_global)
-            - {sim_data}
-            - set(inference_conditions)
+    # --- Validate hyperparameters before building the model ---
+    if embed_dims % num_heads != 0:
+        logging.warning(
+            f"Trial {trial.number} pruned: embed_dims={embed_dims} not divisible by num_heads={num_heads}"
         )
-        keys_to_drop = list(keys_to_drop)
+        raise optuna.TrialPruned("embed_dims must be divisible by num_heads")
+
+
+    param_names_global = list(cfg.parameters_global)
+    sim_data = 'sim_data_projected'
+    inference_conditions = 'j' #just 1
+    keys_to_drop = (
+        set(training_data.keys())
+        - set(param_names_global)
+        - {sim_data}
+        - set(inference_conditions)
+    )
+    keys_to_drop = list(keys_to_drop)
         
+    try:
         adapter = (
             bf.adapters.Adapter()
             .to_array()
@@ -62,125 +71,110 @@ def objective(trial, cfg):
             .rename(sim_data, "summary_variables")
             .rename(inference_conditions, "inference_conditions")
         )
+
         workflow_global = bf.BasicWorkflow(
             adapter=adapter,
-            summary_network=bf.networks.SetTransformer(summary_dim=summary_dim, 
-                                                       embed_dims=(embed_dims, embed_dims), 
-                                                       num_heads=(num_heads, num_heads),
-                                                       mlp_depths=(mlp_depths, mlp_depths),
-                                                       mlp_widths=(mlp_widths, mlp_widths),
-                                                       dropout=0.1),
+            summary_network=bf.networks.SetTransformer(
+                summary_dim=summary_dim,
+                embed_dims=(embed_dims, embed_dims),
+                num_heads=(num_heads, num_heads),
+                mlp_depths=(mlp_depths, mlp_depths),
+                mlp_widths=(mlp_widths, mlp_widths),
+                dropout=0.1,
+            ),
             inference_network=bf.networks.CompositionalDiffusionModel(
-                                                        subnet_kwargs={
-                                                        "widths": [inference_mlp_width] * inference_mlp_depth,
-                                                        "time_embedding_dim": time_embedding_dim,
-                                                        }),
-            standardize=["inference_variables", "summary_variables"]
-            )
-       
-        
+                subnet_kwargs={
+                    "widths": [inference_mlp_width] * inference_mlp_depth,
+                    "time_embedding_dim": time_embedding_dim,
+                }
+            ),
+            standardize=["inference_variables", "summary_variables"],
+        )
+
+        # --- Training with batch-size retry ---
         batch_size_training = 1024
-        try:
-            history = workflow_global.fit_offline(
-                training_data,
-                epochs=1000,
-                batch_size=batch_size_training,
-                verbose=2,
-                augmentations=augmentations,
-            )
-        except Exception as e:
-            logging.error(f"Training failed with error: {e}")
-            logging.error('Half batch for training and retrying...')
-            batch_size_training = int(batch_size_training/2)
-            history = workflow_global.fit_offline(
-                training_data,
-                epochs=1000,
-                batch_size=batch_size_training,
-                verbose=2,
-                augmentations=augmentations,
-            )
+        for attempt in range(2):
+            try:
+                history = workflow_global.fit_offline(
+                    training_data,
+                    epochs=1000,
+                    batch_size=batch_size_training,
+                    verbose=2,
+                    augmentations=augmentations,
+                )
+                break  # success
+            except Exception as e:
+                err_str = str(e).lower()
+                is_oom = "out of memory" in err_str or "cuda" in err_str or "resource exhausted" in err_str
+                if is_oom and attempt == 0:
+                    logging.warning(f"Trial {trial.number} OOM during training, halving batch size and retrying...")
+                    batch_size_training //= 2
+                    clear_gpu_memory()
+                else:
+                    raise  # non-OOM or second failure — re-raise
 
-
-        
+        # --- Sampling with batch-size retry ---
         batch_size_sampling = 100
-        try: 
-            gloabl_posterior = workflow_global.sample(
-                                num_samples=1000,
-                                conditions={cfg.sim_data: test_data[cfg.sim_data], 
-                                            "j": test_data["j"] },
-                                batch_size=batch_size_sampling,
-                                kwargs={'attention_mask': test_data['attention_mask']}
-                            )
-        except Exception as e:
-            logging.error(f"Sampling failed with error: {e}")
-            logging.error('Half batch for sampling and retrying...')
-            batch_size_sampling = int(batch_size_sampling/2)
-            gloabl_posterior = workflow_global.sample(
-                                num_samples=1000,
-                                conditions={cfg.sim_data: test_data[cfg.sim_data], 
-                                            "j": test_data["j"] },
-                                batch_size=batch_size_sampling,
-                                kwargs={'attention_mask': test_data['attention_mask']}
-                            )
-            
+        for attempt in range(2):
+            try:
+                global_posterior = workflow_global.sample(
+                    num_samples=1000,
+                    conditions={
+                        cfg.sim_data: test_data[cfg.sim_data],
+                        "j": test_data["j"],
+                    },
+                    batch_size=batch_size_sampling,
+                    kwargs={"attention_mask": test_data["attention_mask"]},
+                )
+                break
+            except Exception as e:
+                err_str = str(e).lower()
+                is_oom = "out of memory" in err_str or "cuda" in err_str or "resource exhausted" in err_str
+                if is_oom and attempt == 0:
+                    logging.warning(f"Trial {trial.number} OOM during sampling, halving batch size and retrying...")
+                    batch_size_sampling //= 2
+                    clear_gpu_memory()
+                else:
+                    raise
+
         root_mean_squared_error = bf_metrics.root_mean_squared_error(
-                estimates=gloabl_posterior,
-                targets=test_data,
-                variable_keys=param_names_global,
-                variable_names=param_names_global,
-            )
-        
+            estimates=global_posterior,
+            targets=test_data,
+            variable_keys=param_names_global,
+            variable_names=param_names_global,
+        )
         calibration_errors = bf_metrics.calibration_error(
-                estimates=gloabl_posterior,
-                targets=test_data,
-                variable_keys=param_names_global,
-                variable_names=param_names_global,
-            )
-        average_rms = root_mean_squared_error['values'].mean()
-        average_calibration = calibration_errors['values'].mean()
-        return average_rms, average_calibration
+            estimates=global_posterior,
+            targets=test_data,
+            variable_keys=param_names_global,
+            variable_names=param_names_global,
+        )
+        return root_mean_squared_error["values"].mean(), calibration_errors["values"].mean()
 
+    except optuna.TrialPruned:
+        raise  # let Optuna handle it cleanly
 
     except Exception as e:
-        # Check if it's a CUDA OOM error
-        if "out of memory" in str(e).lower() or "CUDA" in str(e):
-            logging.warning(f"Trial {trial.number} failed due to CUDA OOM: {e}")
-            
-            # Aggressive cleanup
-            try:
-                del workflow_global
-            except NameError:
-                pass
-            try:
-                del global_posteriors
-            except NameError:
-                pass
-            clear_gpu_memory()
-            
-            # Raise TrialPruned to skip this trial and continue with the next
-            raise optuna.TrialPruned(f"CUDA out of memory: {e}")
-        else:
-            # Re-raise if it's a different RuntimeError
-            raise
-    
-    except Exception as e:
-        # Catch any other unexpected errors
-        logging.error(f"Trial {trial.number} failed with unexpected error: {e}")
-        
+        err_str = str(e).lower()
+        is_oom = "out of memory" in err_str or "cuda" in err_str or "resource exhausted" in err_str
+
+        logging.error(f"Trial {trial.number} failed: {type(e).__name__}: {e}")
+
         # Cleanup
-        try:
-            del workflow_global
-        except NameError:
-            pass
-        try:
-            del global_posteriors
-        except NameError:
-            pass
+        for var_name in ("workflow_global", "global_posterior", "history"):
+            try:
+                del locals()[var_name]
+            except KeyError:
+                pass
         clear_gpu_memory()
-        
-        # Optionally prune or re-raise
-        raise optuna.TrialPruned(f"Unexpected error: {e}")
-    
+
+        if is_oom:
+            raise optuna.TrialPruned(f"OOM: {e}")
+        else:
+            # Non-OOM failures (e.g. bad hyperparam combos) get pruned too,
+            # so the study continues rather than crashing entirely.
+            raise optuna.TrialPruned(f"{type(e).__name__}: {e}")
+
 
 from hydra import compose, initialize_config_dir
 from hydra.core.config_store import ConfigStore

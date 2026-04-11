@@ -1,12 +1,12 @@
 base_dir: /export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/
 data_dir: streams/data_gala/
 N_simulations: 300_000
-results_dir: models/gala6D/new_hyper/model54_60k_3000epochs
+results_dir: models/gala6D/new_hyper/big_heads/model0_300k_1000epochs
 test: false
 
 
-n_epochs: 3000
-batch_size: 1024
+n_epochs: 1000
+batch_size: 512
 learning_rate: 0.01
 weight_decay: 0.0001
 lr_scheduler_step_size: 10
@@ -131,14 +131,14 @@ augmentations:
 
 global_model:
   dropout: 0.1
-  summary_dim: 182
-  embed_dims: 67
-  num_heads: 2
-  mlp_depths: 3
-  mlp_widths: 49
-  inference_mlp_depth: 3
-  inference_mlp_width: 143
-  inference_time_embedding_dim: 62
+  summary_dim: 61
+  embed_dims: 95
+  num_heads: 4
+  mlp_depths: 2
+  mlp_widths: 217
+  inference_mlp_depth: 4
+  inference_mlp_width: 218
+  inference_time_embedding_dim: 52
 local_model:
   dropout: 0.1
   summary_dim: 16

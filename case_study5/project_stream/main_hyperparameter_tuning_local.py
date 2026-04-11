@@ -28,258 +28,214 @@ def clear_gpu_memory():
 
 
 def objective(trial, cfg, test_data):
-    # Clear memory at the start of each trial
     clear_gpu_memory()
 
-    try:
-        summary_dim = trial.suggest_int("SetTransformer_summary_dim", 16, 128)
-        embed_dims = trial.suggest_int("SetTransformer_embed_dims", 16, 128)
-        num_heads = trial.suggest_int("SetTransformer_num_heads", 1, 3)
-        mlp_depths = trial.suggest_int("SetTransformer_mlp_depths", 2, 6) 
-        mlp_widths = trial.suggest_int("SetTransformer_mlp_widths", 16, 128)
+    summary_dim = trial.suggest_int("SetTransformer_summary_dim", 16, 128)
+    embed_dims = trial.suggest_int("SetTransformer_embed_dims", 16, 128)
+    num_heads = trial.suggest_int("SetTransformer_num_heads", 1, 3)
+    mlp_depths = trial.suggest_int("SetTransformer_mlp_depths", 2, 6)
+    mlp_widths = trial.suggest_int("SetTransformer_mlp_widths", 16, 128)
+    inference_mlp_depth = trial.suggest_int("inference_mlp_depth", 2, 6)
+    inference_mlp_width = trial.suggest_int("inference_mlp_width", 32, 256)
+    time_embedding_dim = trial.suggest_int("inference_time_embedding_dim", 16, 64, step=2)
 
-        inference_mlp_depth = trial.suggest_int("inference_mlp_depth", 2, 6)
-        inference_mlp_width = trial.suggest_int("inference_mlp_width", 32, 256)
-        time_embedding_dim = trial.suggest_int("inference_time_embedding_dim", 16, 64, step=2)
+    # --- Validate hyperparameters before touching Keras ---
+    if embed_dims % num_heads != 0:
+        logging.warning(
+            f"Trial {trial.number} pruned: embed_dims={embed_dims} not divisible by num_heads={num_heads}"
+        )
+        raise optuna.TrialPruned("embed_dims must be divisible by num_heads")
 
-        param_names_global = list(cfg.parameters_global)
-        param_names_local = list(cfg.parameters_local)
-        sim_data = 'sim_data_projected'
-        inference_conditions = 'j' #just 1
-        inference_conditions = param_names_global + [inference_conditions]
-        keys_to_drop = (
+    param_names_global = list(cfg.parameters_global)
+    param_names_local = list(cfg.parameters_local)
+    sim_data = 'sim_data_projected'
+    inference_conditions = param_names_global + ['j']
+    keys_to_drop = list(
         set(training_data.keys())
         - set(param_names_local)
         - set(param_names_global)
         - {sim_data}
         - set(inference_conditions)
-        )
-        keys_to_drop = list(keys_to_drop)
-        
+    )
+
+    try:
         adapter = (
-        bf.adapters.Adapter()
-        .to_array()
-        .convert_dtype("float64", "float32")
-        .drop(keys_to_drop)
-        .concatenate(param_names_local, into="inference_variables")
-        .rename(sim_data, "summary_variables")
-        .concatenate(inference_conditions, into="inference_conditions")
+            bf.adapters.Adapter()
+            .to_array()
+            .convert_dtype("float64", "float32")
+            .drop(keys_to_drop)
+            .concatenate(param_names_local, into="inference_variables")
+            .rename(sim_data, "summary_variables")
+            .concatenate(inference_conditions, into="inference_conditions")
         )
+
         workflow_global = bf.BasicWorkflow(
             adapter=adapter,
-            summary_network=bf.networks.SetTransformer(summary_dim=summary_dim, 
-                                                       embed_dims=(embed_dims, embed_dims), 
-                                                       num_heads=(num_heads, num_heads),
-                                                       mlp_depths=(mlp_depths, mlp_depths),
-                                                       mlp_widths=(mlp_widths, mlp_widths),
-                                                       dropout=0.1),
+            summary_network=bf.networks.SetTransformer(
+                summary_dim=summary_dim,
+                embed_dims=(embed_dims, embed_dims),
+                num_heads=(num_heads, num_heads),
+                mlp_depths=(mlp_depths, mlp_depths),
+                mlp_widths=(mlp_widths, mlp_widths),
+                dropout=0.1,
+            ),
             inference_network=bf.networks.DiffusionModel(
-                                                        subnet_kwargs={
-                                                        "widths": [inference_mlp_width] * inference_mlp_depth,
-                                                        "time_embedding_dim": time_embedding_dim,
-                                                        }),
+                subnet_kwargs={
+                    "widths": [inference_mlp_width] * inference_mlp_depth,
+                    "time_embedding_dim": time_embedding_dim,
+                }
+            ),
             standardize=["inference_variables", "summary_variables", "inference_conditions"],
-            )
-       
-        
+        )
+
+        # --- Training with batch-size retry ---
         batch_size_training = 1000
-        try:
-            history = workflow_global.fit_offline(
-                training_data,
-                epochs=1000,
-                batch_size=batch_size_training,
-                verbose=2,
-            )
-        except Exception as e:
-            logging.error(f"Training failed with error: {e}")
-            logging.error('Half batch for training and retrying...')
-            batch_size_training = int(batch_size_training/2)
-            history = workflow_global.fit_offline(
-                training_data,
-                epochs=1000,
-                batch_size=batch_size_training,
-                verbose=2,
-            )
+        for attempt in range(2):
+            try:
+                history = workflow_global.fit_offline(
+                    training_data,
+                    epochs=1000,
+                    batch_size=batch_size_training,
+                    verbose=2,
+                )
+                break  # success
+            except Exception as e:
+                err_str = str(e).lower()
+                is_oom = "out of memory" in err_str or "cuda" in err_str or "resource exhausted" in err_str
+                if is_oom and attempt == 0:
+                    logging.warning(f"Trial {trial.number} OOM during training, halving batch size and retrying...")
+                    batch_size_training //= 2
+                    clear_gpu_memory()
+                else:
+                    raise
 
-        #this hyperparameter is fixed on the global posterior of choice
-        global_posterior = dict(np.load('/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/plots/gala6D/new_hyper/model54_60k_1000epochs/333test/global_posterior.npz', allow_pickle=True))
+        # --- Build conditions for ancestral sampling ---
+        global_posterior = dict(np.load(
+            '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/plots/'
+            'gala6D/new_hyper/model54_60k_1000epochs/333test/global_posterior.npz',
+            allow_pickle=True
+        ))
 
-        # --- Build conditions with correct shapes for ancestral_sample ---
-        n_test    = 333         # e.g. 100 test cases
-        n_streams = len(cfg.target_streams)               # e.g. 3 streams
+        n_test = 333
+        n_streams = len(cfg.target_streams)
 
-        # sim_data: (N_TEST * N_STREAMS, N_PARTICLES, D) -> (N_TEST, N_STREAMS, N_PARTICLES, D)
         sim_data_4d = test_data[cfg.sim_data].reshape(
             n_test, n_streams, *test_data[cfg.sim_data].shape[1:]
         )
-
-        # j: (N_TEST * N_STREAMS, 1) -> (N_TEST, N_STREAMS, 1)
         j_3d = test_data['j'].reshape(n_test, n_streams, 1)
-
-
-        # attention_mask: (N_TEST * N_STREAMS, 1, N_PARTICLES) -> (N_TEST, N_STREAMS, 1, N_PARTICLES)
-        # attn_mask_4d = test_data['attention_mask'].reshape(
-        #     n_test, n_streams, *test_data['attention_mask'].shape[1:]
-        # )
         attn_mask_4d = test_data['attention_mask']
 
         conditions = {
-            cfg.sim_data: sim_data_4d,   # (N_TEST, N_STREAMS, N_PARTICLES, D)
-            'j':          j_3d,          # (N_TEST, N_STREAMS, 1)
+            cfg.sim_data: sim_data_4d,
+            'j': j_3d,
         }
-
-        # ancestral_conditions must be (N_TEST, N_PARENT_SAMPLES, 1) — do NOT repeat by n_streams
-        # global_posterior[param] is already (N_TEST, N_PARENT_SAMPLES, 1), use as-is
         ancestral_conds = {
-            param: global_posterior[param]   # (N_TEST, N_PARENT_SAMPLES, 1)
-            for param in cfg.parameters_global
+            param: global_posterior[param] for param in cfg.parameters_global
         }
-
-        # Also add global params to conditions so the adapter can see them
         for param in cfg.parameters_global:
-            # repeat each param across streams: (N_TEST, 1, 1) -> broadcast or explicit repeat
             conditions[param] = np.repeat(
-                global_posterior[param][:, :1, :],   # take first sample as placeholder shape
-                n_streams, axis=1
-            )  # shape: (N_TEST, N_STREAMS, 1) — the ancestral_sample will handle the actual conditioning
-
+                global_posterior[param][:, :1, :], n_streams, axis=1
+            )
 
         def ancestral_sample_batched(workflow, conditions, ancestral_conds, attn_mask_4d, cfg, n_test_per_batch=5):
-            """
-            Manually batch over the n_datasets (test cases) axis to avoid OOM,
-            since _prepare_ancestral_conditions converts everything to GPU at once.
-            """
             n_test = 333
             all_samples = None
-
             for i in tqdm(range(0, n_test, n_test_per_batch)):
-                # Slice along n_datasets axis for all inputs
                 batch_conditions = {k: v[i:i + n_test_per_batch] for k, v in conditions.items()}
                 batch_ancestral  = {k: v[i:i + n_test_per_batch] for k, v in ancestral_conds.items()}
                 batch_attn       = attn_mask_4d[i:i + n_test_per_batch]
-
                 batch_samples = workflow.ancestral_sample(
                     conditions=batch_conditions,
                     ancestral_conditions=batch_ancestral,
                     kwargs={'attention_mask': batch_attn},
                 )
-
                 if all_samples is None:
                     all_samples = batch_samples
                 else:
                     for k in all_samples:
                         all_samples[k] = np.concatenate([all_samples[k], batch_samples[k]], axis=0)
-
             return all_samples
 
-
-        
-        try: 
-            local_posterior = ancestral_sample_batched(
-                workflow=workflow_global,
-                conditions=conditions,
-                ancestral_conds=ancestral_conds,
-                attn_mask_4d=attn_mask_4d,
-                cfg=cfg,
-                n_test_per_batch=30,   # tune this down if still OOM, up for speed
-            )
-        except Exception as e:
-            logging.error(f"Sampling failed with error: {e}")
-            logging.error('Half batch for sampling and retrying...')
-            batch_size_sampling = int(batch_size_sampling/2)
-            local_posterior = ancestral_sample_batched(
+        # --- Sampling with n_test_per_batch retry ---
+        # NOTE: was previously broken — batch_size_sampling was never defined before the except block
+        n_test_per_batch = 30
+        for attempt in range(2):
+            try:
+                local_posterior = ancestral_sample_batched(
                     workflow=workflow_global,
                     conditions=conditions,
                     ancestral_conds=ancestral_conds,
                     attn_mask_4d=attn_mask_4d,
                     cfg=cfg,
-                    n_test_per_batch=batch_size_sampling,   # tune this down if still OOM, up for speed
+                    n_test_per_batch=n_test_per_batch,
                 )
-        ps = local_posterior.copy()
+                break  # success
+            except Exception as e:
+                err_str = str(e).lower()
+                is_oom = "out of memory" in err_str or "cuda" in err_str or "resource exhausted" in err_str
+                if is_oom and attempt == 0:
+                    logging.warning(f"Trial {trial.number} OOM during sampling, halving n_test_per_batch and retrying...")
+                    n_test_per_batch //= 2
+                    clear_gpu_memory()
+                else:
+                    raise
 
+        # --- Reshape posteriors and compute metrics ---
+        ps = local_posterior.copy()
         test_params_local = {}
         for p in param_names_local:
-            arr = np.asarray(test_data[p])  # force numpy, not JAX array
+            arr = np.asarray(test_data[p])
             print(f'  {p} raw shape: {arr.shape}')
             if arr.ndim == 3:
-                # (N_TEST, N_STREAMS, D) -> (N_TEST * N_STREAMS, D)
                 test_params_local[p] = arr.reshape(n_test * n_streams, -1)
             elif arr.ndim == 2 and arr.shape[0] == n_test and arr.shape[1] == n_streams:
-                # (N_TEST, N_STREAMS) -> (N_TEST * N_STREAMS, 1)
                 test_params_local[p] = arr.reshape(n_test * n_streams, 1)
             elif arr.ndim == 2:
-                # already (N_TEST * N_STREAMS, D)
                 test_params_local[p] = arr
             elif arr.ndim == 1 and arr.shape[0] == n_test * n_streams:
-                # (N_TEST * N_STREAMS,) -> (N_TEST * N_STREAMS, 1)
                 test_params_local[p] = arr.reshape(-1, 1)
             elif arr.ndim == 1 and arr.shape[0] == n_test:
-                # (N_TEST,) -> repeat for each stream -> (N_TEST * N_STREAMS, 1)
                 test_params_local[p] = np.repeat(arr, n_streams).reshape(-1, 1)
             else:
                 raise ValueError(f'Unexpected shape for {p}: {arr.shape}')
-        test_data = test_params_local
-        # Flatten ps: (N_TEST, N_STREAMS, N_SAMPLES, D) -> (N_TEST * N_STREAMS, N_SAMPLES, D)
+
+        test_data_flat = test_params_local
         ps_flat = {k: np.asarray(v).reshape(n_test * n_streams, *v.shape[2:]) for k, v in ps.items()}
 
-            
         root_mean_squared_error = bf_metrics.root_mean_squared_error(
-                estimates=ps_flat,
-                targets=test_data,
-                variable_keys=param_names_local,
-                variable_names=param_names_local,
-            )
-        
+            estimates=ps_flat,
+            targets=test_data_flat,
+            variable_keys=param_names_local,
+            variable_names=param_names_local,
+        )
         calibration_errors = bf_metrics.calibration_error(
-                estimates=ps_flat,
-                targets=test_data,
-                variable_keys=param_names_local,
-                variable_names=param_names_local,
-            )
-        average_rms = root_mean_squared_error['values'].mean()
-        average_calibration = calibration_errors['values'].mean()
-        return average_rms, average_calibration
+            estimates=ps_flat,
+            targets=test_data_flat,
+            variable_keys=param_names_local,
+            variable_names=param_names_local,
+        )
+        return root_mean_squared_error['values'].mean(), calibration_errors['values'].mean()
 
+    except optuna.TrialPruned:
+        raise  # let Optuna handle it cleanly
 
     except Exception as e:
-        # Check if it's a CUDA OOM error
-        if "out of memory" in str(e).lower() or "CUDA" in str(e):
-            logging.warning(f"Trial {trial.number} failed due to CUDA OOM: {e}")
-            
-            # Aggressive cleanup
+        err_str = str(e).lower()
+        is_oom = "out of memory" in err_str or "cuda" in err_str or "resource exhausted" in err_str
+
+        logging.error(f"Trial {trial.number} failed: {type(e).__name__}: {e}")
+
+        for var_name in ("workflow_global", "local_posterior", "history"):
             try:
-                del workflow_global
-            except NameError:
+                del locals()[var_name]
+            except KeyError:
                 pass
-            try:
-                del global_posteriors
-            except NameError:
-                pass
-            clear_gpu_memory()
-            
-            # Raise TrialPruned to skip this trial and continue with the next
-            raise optuna.TrialPruned(f"CUDA out of memory: {e}")
-        else:
-            # Re-raise if it's a different RuntimeError
-            raise
-    
-    except Exception as e:
-        # Catch any other unexpected errors
-        logging.error(f"Trial {trial.number} failed with unexpected error: {e}")
-        
-        # Cleanup
-        try:
-            del workflow_global
-        except NameError:
-            pass
-        try:
-            del global_posteriors
-        except NameError:
-            pass
         clear_gpu_memory()
-        
-        # Optionally prune or re-raise
-        raise optuna.TrialPruned(f"Unexpected error: {e}")
+
+        if is_oom:
+            raise optuna.TrialPruned(f"OOM: {e}")
+        else:
+            raise optuna.TrialPruned(f"{type(e).__name__}: {e}")
     
 
 from hydra import compose, initialize_config_dir
