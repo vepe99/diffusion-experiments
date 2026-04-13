@@ -1,0 +1,262 @@
+
+base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams"
+data_dir: "data_multistream_gala_posterior_predictive_check/model_54_60k_1000epochs/"
+simulator: "gala" #odisseo, gala, galax
+n_simulations: 1
+batch_size: 1
+
+parameters_global:
+  - "a"
+parameters_local:
+  - "a"
+
+pretty_parameters_global:
+  - "a"
+pretty_parameters_local:
+  - "a"
+
+priors_global: #str for the type and a list of values for the parameters of the prior
+  #HALO TRIXIAL
+  m_Triaxial_halo:
+    type: uniform
+    prior_parameters: [5.e10, 2.5e12]
+  r_Triaxial_halo:
+    type: uniform
+    prior_parameters: [5.0, 50.0]
+  q1_Triaxial_halo:
+    type: identity
+    prior_parameters: [1.0]
+  q2_Triaxial_halo:
+    type: uniform
+    prior_parameters: [0.5, 1.5]
+  #HALO TRIAXIAL ROTATED
+  m_Triaxial_rotated_halo:
+    type: uniform
+    prior_parameters: [1.e11, 1e13]
+  r_Triaxial_rotated_halo:
+    type: uniform
+    prior_parameters: [10.0, 25.0]
+  dirx_Triaxial_rotated_halo:
+    type: normal
+    prior_parameters: [0.0, 1.0]
+  diry_Triaxial_rotated_halo:
+    type: normal
+    prior_parameters: [0.0, 1.0]
+  dirz_Triaxial_rotated_halo:
+    type: normal
+    prior_parameters: [0.0, 1.0]
+  #HALO TWOPOWER TRIAXIAL
+  rho_TwoPowerTriaxial_halo:
+    type: uniform
+    prior_parameters: [1.e7, 1.5e8]
+  a_TwoPowerTriaxial_halo:
+    type: uniform
+    prior_parameters: [1.0, 100.0]
+  b_TwoPowerTriaxial_halo:
+    type: identity
+    prior_parameters: [1.0]
+  c_TwoPowerTriaxial_halo:
+    type: uniform
+    prior_parameters: [0.0, 6.0]
+  alpha_TwoPowerTriaxial_halo:
+    type: uniform
+    prior_parameters: [0.0, 2.0]
+  beta_TwoPowerTriaxial_halo:
+    type: uniform
+    prior_parameters: [2.0, 6.0]
+  #THIN AND THICK DISK
+  rho_thin_disk:
+    type: uniform
+    prior_parameters: [0.5e9, 2.0e9]
+  hr_thin_disk:
+    type: normal
+    prior_parameters: [2.6, 0.5]
+  hz_thin_disk:
+    type: normal
+    prior_parameters: [0.3, 0.05]
+  rho_thick_disk:
+    type: uniform
+    prior_parameters: [0.0, 1.5e9]
+  hr_thick_disk:
+    type: normal
+    prior_parameters: [2.0, 0.2]
+  hz_thick_disk:
+    type: normal
+    prior_parameters: [0.9, 0.18]
+  #Disk in MilkyWay2022
+  M_MN3ExpDisk:
+    type: identity
+    # prior_parameters: [11929250000.0, 190868000000.0] #0.25*4.7717e+10, 4*4.7717e+10
+    prior_parameters: [4.7717e+10]
+  r_MN3ExpDisk:
+    type: identity
+    # prior_parameters: [0.65, 10.4] #0.25*2.6, 4*2.6
+    prior_parameters: [2.6]
+  z_MN3ExpDisk:
+    type: uniform
+    prior_parameters: [0.075, 1.2] #0.25*0.3, 4*0.3
+  #BULGE in MilkyWay2022
+  m_bulge_2022:
+    type: identity
+    prior_parameters: [5.0e9]
+  R_bulge_2022:
+    type: identity
+    prior_parameters: [1.0]
+  #NUCLEUS in MilkyWay2022
+  m_nucleus:
+    type: identity
+    prior_parameters: [1.8142e9]
+  R_nucleus:
+    type: identity
+    prior_parameters: [0.0688867]
+
+  #DISK in MW2014
+  m_disk_MW2014:
+    type: uniform
+    prior_parameters: [3.25e10, 13.0e10] #[6.5e10]  #[6.5e10/2, 6.5e10*2]
+  r_disk_MW2014:
+    type: uniform
+    prior_parameters: [1.5, 6.0] #[3.0]
+  z_disk_MW2014:
+    type: identity
+    prior_parameters: [0.28]
+  #BULGE in MW2014
+  m_bulge:
+    type: uniform
+    prior_parameters: [2250682687.532725, 9002730750.1309] #[4501365375.06545/2, 4501365375.06545*2] #[4501365375.06545]
+  alpha_bulge:
+    type: identity
+    prior_parameters: [1.8]
+  r_bulge:
+    type: identity
+    prior_parameters: [1.9]
+
+priors_local: #str for the type and a list of values for the parameters of the prior
+  Pal5:
+    m_progenitor:
+      type: identity
+      prior_parameters: [4.3e3]
+    a_progenitor:
+      type: identity
+      prior_parameters: [8.43]
+    t_end:
+      type: identity
+      prior_parameters: [4.0]
+    ra:
+      type: identity
+      prior_parameters: [229.022]
+    dec:
+      type: identity
+      prior_parameters: [-0.112]
+    vr:
+      type: normal
+      prior_parameters: [-58.6, 0.21]
+    r:
+      type: normal
+      prior_parameters: [20.6, 0.2]
+    mu_ra_cosdec:
+      type: normal
+      prior_parameters: [-2.736, 0.064]
+    mu_dec:
+      type: normal
+      prior_parameters: [-2.646, 0.064]
+  NGC3201:
+    m_progenitor:
+      type: identity
+      prior_parameters: [6.47e4]
+    a_progenitor:
+      type: identity
+      prior_parameters: [4.9]
+    t_end:
+      type: identity
+      prior_parameters: [1.5]
+    ra:
+      type: identity
+      prior_parameters: [154.403]
+    dec:
+      type: identity
+      prior_parameters: [-46.412]
+    vr:
+      type: normal
+      prior_parameters: [494.34, 0.14]
+    r:
+      type: normal
+      prior_parameters: [4.9, 0.11]
+    mu_ra_cosdec:
+      type: normal
+      prior_parameters: [8.324, 0.044]
+    mu_dec:
+      type: normal
+      prior_parameters: [-1.991, 0.044]
+  M68:
+    m_progenitor:
+      type: identity
+      prior_parameters: [5.7e4]
+    a_progenitor:
+      type: identity
+      prior_parameters: [6.4]
+    t_end:
+      type: identity
+      prior_parameters: [1.5]
+    ra:
+      type: identity
+      prior_parameters: [189.867]
+    dec:
+      type: identity
+      prior_parameters: [-26.744]
+    vr:
+      type: normal
+      prior_parameters: [-92.99, 0.22]
+    r:
+      type: normal
+      prior_parameters: [10.3, 0.52]
+    mu_ra_cosdec:
+      type: normal
+      prior_parameters: [-2.752, 0.054]
+    mu_dec:
+      type: normal
+      prior_parameters: [1.762, 0.053]
+
+target_streams:
+  Pal5: 0 #this is the j index
+  NGC3201: 1
+  M68: 2
+
+hydra:
+  run:
+    dir: ${base_dir}/${data_dir}
+
+odisseo_config: #default values
+  N_particles: 1000
+  return_snapshots: False
+  num_snapshots: 0
+  num_timesteps: 1_000
+  external_accelerations:
+    - PSP_POTENTIAL
+    - THIN_MN3_DISK
+    - THICK_MN3_DISK
+    - TRIAXIAL_NFW_POTENTIAL
+  acceleration_scheme: DIRECT_ACC_MATRIX
+  softening: 0.01 #in pc
+  integrator: DIFFRAX_BACKEND
+  fixed_timestep: False
+  diffrax_solver: TSIT5
+  glorder: 50
+
+galax_config:
+  df_type: "FardalStreamDF" #FardalStreamDF, ChenStreamDF, MockStreamGenerator
+  n_timesteps: 1000
+
+gala_config:
+  df_type: FardalStreamDF
+  n_timesteps: 500
+  use_prog_potential: true
+  n_workers: 32
+  N_particles: 1000
+
+streamax_config:
+  n_timesteps: 4999
+  N_particles: 5000
+  type_host: "MW2014"
+  unroll: False
+  type_method: "Fardal2015"

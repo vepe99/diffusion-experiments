@@ -69,9 +69,10 @@ def simulate_stream_gala(parameters_dict, config, code_units, random_seed:int):
     else:
         gen = gd.MockStreamGenerator(df, pot)
     stream, _ = gen.run(w0, prog_mass,
-                        # n_particles=config.N_particles/2,
+                        # n_particles=config.N_particles,
                         dt=-(parameters_dict['t_end']*u.Gyr.to(u.Myr)/config.n_timesteps), 
                         n_steps=config.n_timesteps, 
+                        progress=True
                         )
     return np.array([stream.x.to(u.kpc).value, stream.y.to(u.kpc).value,stream.z.to(u.kpc).value, 
                      stream.vel._d_x.to(u.km/u.s).value, stream.vel._d_y.to(u.km/u.s).value, stream.vel._d_z.to(u.km/u.s).value]).T
@@ -155,9 +156,10 @@ def simulate_stream_gala_Rotated(parameters_dict, config, code_units, random_see
     else:
         gen = gd.MockStreamGenerator(df, pot)
     stream, _ = gen.run(w0, prog_mass,
-                        # n_particles=config.N_particles/2,
+                        n_particles=config.N_particles/2,
                         dt=-(parameters_dict['t_end']*u.Gyr.to(u.Myr)/config.n_timesteps), 
                         n_steps=config.n_timesteps, 
+                        progress=True
                         )
     return np.array([stream.x.to(u.kpc).value, stream.y.to(u.kpc).value,stream.z.to(u.kpc).value, 
                      stream.vel._d_x.to(u.km/u.s).value, stream.vel._d_y.to(u.km/u.s).value, stream.vel._d_z.to(u.km/u.s).value]).T
