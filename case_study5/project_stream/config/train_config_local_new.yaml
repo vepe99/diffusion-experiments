@@ -1,7 +1,7 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_gala/"
 N_simulations: 300_000
-results_dir: "models/local_models/gala6D_aug/new_hyper/modeltest_60k_1000epochs/"
+results_dir: "models/local_models/gala6D_aug/new_hyper/jonas/model54_60k_1000epochs/"
 test: False
 
 #training hyperparameters

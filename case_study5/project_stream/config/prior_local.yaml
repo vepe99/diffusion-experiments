@@ -1,0 +1,90 @@
+Pal5:
+  m_progenitor:
+    type: identity
+    prior_parameters: [4.3e3]
+  a_progenitor:
+    type: identity
+    prior_parameters: [8.43]
+  t_end:
+    type: identity
+    prior_parameters: [4.0]
+  ra:
+    type: identity
+    prior_parameters: [229.022]
+  dec:
+    type: identity
+    prior_parameters: [-0.112]
+  vr:
+    type: normal
+    prior_parameters: [-58.6, 0.21]
+  r:
+    type: normal
+    prior_parameters: [20.6, 0.2]
+  mu_ra_cosdec:
+    type: normal
+    # prior_parameters: [-2.736, 0.128]
+    prior_parameters: [-2.736, 0.064]
+  mu_dec:
+    type: normal
+    # prior_parameters: [-2.646, 0.128]
+    prior_parameters: [-2.646, 0.064]
+NGC3201:
+  m_progenitor:
+    type: identity
+    prior_parameters: [6.47e4]
+  a_progenitor:
+    type: identity
+    prior_parameters: [4.9]
+  t_end:
+    type: identity
+    prior_parameters: [1.5]
+  ra:
+    type: identity
+    prior_parameters: [154.403]
+  dec:
+    type: identity
+    prior_parameters: [-46.412]
+  vr:
+    type: normal
+    prior_parameters: [494.34, 0.14]
+  r:
+    type: normal
+    prior_parameters: [4.9, 0.11]
+  mu_ra_cosdec:
+    type: normal
+    # prior_parameters: [8.324, 0.088]
+    prior_parameters: [8.324, 0.044]
+  mu_dec:
+    type: normal
+    # prior_parameters: [-1.991, 0.088]
+    prior_parameters: [-1.991, 0.044]
+M68:
+  m_progenitor:
+    type: identity
+    prior_parameters: [5.7e4]
+  a_progenitor:
+    type: identity
+    prior_parameters: [6.4]
+  t_end:
+    type: identity
+    prior_parameters: [1.5]
+  ra:
+    type: identity
+    prior_parameters: [189.867]
+  dec:
+    type: identity
+    prior_parameters: [-26.744]
+  vr:
+    type: normal
+    prior_parameters: [-92.99, 0.22]
+  r:
+    type: normal
+    prior_parameters: [10.3, 0.52]
+  mu_ra_cosdec:
+    type: normal
+    # prior_parameters: [-2.752, 0.108]
+    prior_parameters: [-2.752, 0.054]
+  mu_dec:
+    type: normal
+    # prior_parameters: [1.762, 0.106]
+    prior_parameters: [1.762, 0.053]

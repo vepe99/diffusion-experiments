@@ -268,45 +268,27 @@ cs.store(name="simulator_config", node=SimulatorConfig)
 # Set N_POSTERIOR_SAMPLES = 1 to use the posterior mean.
 # Set N_POSTERIOR_SAMPLES > 1 to draw that many samples from the posterior,
 # producing N_POSTERIOR_SAMPLES simulations in total.
-N_POSTERIOR_SAMPLES = 10   # <── change this
+N_POSTERIOR_SAMPLES = 1  # <── change this
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def _draw_posterior_values(posterior_dict, param_names, n_samples, use_mean):
-    """
-    Returns a dict {param: array of shape (n_samples,)}.
-    If use_mean=True, every entry is the posterior mean repeated n_samples times.
-    If use_mean=False, draws n_samples indices (with replacement) from the posterior.
-    """
-    # Flatten each param to 1-D pool of samples
+def _draw_posterior_values(posterior_dict, param_names, n_samples, use_mean, idx=None):
     flat = {p: np.asarray(posterior_dict[p]).reshape(-1) for p in param_names if p in posterior_dict}
-
     if use_mean:
         return {p: np.full(n_samples, flat[p].mean()) for p in flat}
-    else:
-        # Draw a shared set of indices so global params stay correlated across draws
-        pool_size = min(v.shape[0] for v in flat.values())
-        idx = np.random.choice(pool_size, size=n_samples, replace=(n_samples > pool_size))
-        return {p: flat[p][idx] for p in flat}
+    return {p: flat[p][idx] for p in flat}
 
 
-def _draw_local_posterior_values(local_posterior, param_names, stream_names, n_samples, use_mean):
-    """
-    Returns a dict {stream_name: {param: array of shape (n_samples,)}}.
-    local_posterior[param] is reshaped to (n_streams, N_flat) before sampling.
-    """
+def _draw_local_posterior_values(local_posterior, param_names, stream_names, n_samples, use_mean, idx=None):
     n_streams = len(stream_names)
     result = {s: {} for s in stream_names}
-
-    # Collect per-stream flat arrays
     per_stream = {s: {} for s in stream_names}
     for param in param_names:
         if param not in local_posterior:
             continue
-        arr = np.asarray(local_posterior[param]).reshape(n_streams, -1)  # (N_STREAMS, N_SAMPLES)
+        arr = np.asarray(local_posterior[param]).reshape(n_streams, -1)  # (N_STREAMS, N_flat)
         for s_idx, stream in enumerate(stream_names):
             per_stream[stream][param] = arr[s_idx]
-
     for stream in stream_names:
         if not per_stream[stream]:
             continue
@@ -314,11 +296,8 @@ def _draw_local_posterior_values(local_posterior, param_names, stream_names, n_s
             for param, vals in per_stream[stream].items():
                 result[stream][param] = np.full(n_samples, vals.mean())
         else:
-            pool_size = min(v.shape[0] for v in per_stream[stream].values())
-            idx = np.random.choice(pool_size, size=n_samples, replace=(n_samples > pool_size))
             for param, vals in per_stream[stream].items():
                 result[stream][param] = vals[idx]
-
     return result
 
 
@@ -350,7 +329,7 @@ def main(cfg: SimulatorConfig):
     )
     local_posterior_path = os.path.join(
         cfg.base_dir,
-        '../plots/plots_local/gala6D_aug/new_hyper/model54_60k_1000epochs/gaia_local_posterior.npz'
+        '../plots/plots_local/gala6D_aug/new_hyper/jonas/model54_60k_1000epochs/gaia_local_posterior.npz'
     )
     print('Loading global posterior from:', global_posterior_path)
     global_posterior = dict(np.load(global_posterior_path, allow_pickle=True))
@@ -359,17 +338,27 @@ def main(cfg: SimulatorConfig):
 
     stream_names = list(cfg.target_streams.keys())
     n_streams    = len(stream_names)
-    use_mean     = (N_POSTERIOR_SAMPLES == 1)
-    n_ppc        = N_POSTERIOR_SAMPLES
+    use_mean = (N_POSTERIOR_SAMPLES == 1)
+    n_ppc    = N_POSTERIOR_SAMPLES
 
-    print(f'\nPPC mode: {"posterior mean (1 simulation)" if use_mean else f"{n_ppc} posterior samples"}')
+    # Draw ONE shared index vector so global and local samples stay correlated
+    if not use_mean:
+        # Use the minimum pool size across all posterior params to be safe
+        all_arrays = (
+            [np.asarray(global_posterior[p]).reshape(-1) for p in cfg.priors_global.keys() if p in global_posterior] +
+            [np.asarray(local_posterior[p]).reshape(-1) for p in ['vr', 'r', 'mu_ra_cosdec', 'mu_dec'] if p in local_posterior]
+        )
+        pool_size = min(a.shape[0] for a in all_arrays)
+        shared_idx = np.random.choice(pool_size, size=n_ppc, replace=(n_ppc > pool_size))
+        print(f'Drew {n_ppc} shared indices from pool of size {pool_size}')
+    else:
+        shared_idx = None
 
-    # Draw global and local parameter values for all PPC runs at once
     global_draws = _draw_posterior_values(
-        global_posterior, list(cfg.priors_global.keys()), n_ppc, use_mean
+        global_posterior, list(cfg.priors_global.keys()), n_ppc, use_mean, idx=shared_idx
     )
     local_draws = _draw_local_posterior_values(
-        local_posterior, ['vr', 'r', 'mu_ra_cosdec', 'mu_dec'], stream_names, n_ppc, use_mean
+        local_posterior, ['vr', 'r', 'mu_ra_cosdec', 'mu_dec'], stream_names, n_ppc, use_mean, idx=shared_idx
     )
 
     # ── Simulator setup (done once) ───────────────────────────────────────────
