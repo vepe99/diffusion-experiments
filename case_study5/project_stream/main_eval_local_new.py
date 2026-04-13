@@ -86,7 +86,7 @@ def main(cfg: EvalConfig):
         model_config = yaml.safe_load(f)
     print(model_config)
     if cfg.noise_schedule is not None:
-        inference_network = bf.networks.DiffusionModel(
+        inference_network = bf.networks.CompositionalDiffusionModel(
                                                         subnet_kwargs={
                                                         "widths": [model_config['local_model']['inference_mlp_width']] * model_config['local_model']['inference_mlp_depth'],
                                                         "time_embedding_dim": model_config['local_model']['inference_time_embedding_dim'],
@@ -95,7 +95,7 @@ def main(cfg: EvalConfig):
                                                         )
     else:
         #probably needs to fix it to the training noise schedule 
-        inference_network = bf.networks.DiffusionModel(subnet_kwargs={
+        inference_network = bf.networks.CompositionalDiffusionModel(subnet_kwargs={
                                                         "widths": [model_config['local_model']['inference_mlp_width']] * model_config['local_model']['inference_mlp_depth'],
                                                         "time_embedding_dim": model_config['local_model']['inference_time_embedding_dim'],
                                                         },)

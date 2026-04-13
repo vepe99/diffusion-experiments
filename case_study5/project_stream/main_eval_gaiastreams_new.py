@@ -231,9 +231,7 @@ def main(cfg: EvalConfig):
                             kwargs={'attention_mask': attention_mask_stream}
                             )
         ps_stream = posterior_stream.copy()
-        # r_posterior = np.sqrt(ps_stream['dirx_Triaxial_rotated_halo']**2 + ps_stream['diry_Triaxial_rotated_halo']**2 + ps_stream['dirz_Triaxial_rotated_halo']**2)
-        # u_uniform_posterior = special.erf(r_posterior/np.sqrt(2)) - np.sqrt(2/np.pi)*r_posterior*np.exp(-(r_posterior**2)/2)
-        # ps_stream['$q_{NFW}$'] = q_min + (q_max-q_min)*u_uniform_posterior
+
         np.savez(os.path.join(cfg.base_dir, cfg.results_dir, f'{stream_name}_posterior.npz'), **ps_stream)
         print(f'Saved posterior samples for stream {stream_name}')
         for k in ps_stream.keys():
@@ -245,6 +243,8 @@ def main(cfg: EvalConfig):
     fig = c.plotter.plot()
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'global_cornerplot.pdf'))
     print(f'Saved global corner plot with all streams in pathc: {os.path.join(cfg.base_dir, cfg.results_dir, "global_cornerplot.pdf")}')
+
+
 
 
 if __name__ == "__main__":
