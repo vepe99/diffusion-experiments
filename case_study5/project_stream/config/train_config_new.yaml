@@ -1,12 +1,12 @@
 base_dir: /export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/
 data_dir: streams/data_gala/
 N_simulations: 300_000
-results_dir: models/gala6D/new_hyper/big_heads/model100_60k_1000epochs
+results_dir: models/gala6D_aug/new_hyper/model54_60k_1000epochs
 test: false
 
 
 n_epochs: 1000
-batch_size: 1024
+batch_size: 1000
 learning_rate: 0.01
 weight_decay: 0.0001
 lr_scheduler_step_size: 10
@@ -114,16 +114,19 @@ gaia_id:
   M68: "Fjorm"
 
 augmentations:
-- "cut_to_300_particles"
-# - "remove_los_velocity"
+# Coordinate transforms
 - convert_distance_to_parallax
+# Observational selection
 - observational_window
 - observed_n_stars
-- mask_vlos
+- compact_to_attended
+# Photometric augmentation
 - sample_magnitudes
 - sample_obs_error
 - apply_obs_error
-# - flip_dirz
+# v_los masking
+- mask_vlos
+# Feature concatenations
 - concatentate_sigma_error_to_sim_data
 - concatenate_magnitudes_to_sim_data
 - concatenate_vlos_mask_to_sim_data
@@ -131,14 +134,14 @@ augmentations:
 
 global_model:
   dropout: 0.1
-  summary_dim: 175
-  embed_dims: 16
-  num_heads: 4
-  mlp_depths: 2
-  mlp_widths: 153
-  inference_mlp_depth: 8
-  inference_mlp_width: 256
-  inference_time_embedding_dim: 18
+  summary_dim: 182
+  embed_dims: 67
+  num_heads: 2
+  mlp_depths: 3
+  mlp_widths: 49
+  inference_mlp_depth: 3
+  inference_mlp_width: 143
+  inference_time_embedding_dim: 62
 local_model:
   dropout: 0.1
   summary_dim: 16

@@ -23,7 +23,7 @@ import logging
 logging.getLogger('bayesflow').setLevel(logging.DEBUG)
 
 from config.EvalConfig import EvalConfig
-from utils.utils_train_jax import AugmentationsClass #we will need to use the augmentations on the test_set
+from utils.utils_train_jax_new import AugmentationsClass #we will need to use the augmentations on the test_set
 
 
 cs = ConfigStore.instance()
@@ -52,7 +52,7 @@ def fix_keras_model(model_path, ):
 
 
 
-@hydra.main(version_base=None, config_path="config", config_name="eval_config_local",)
+@hydra.main(version_base=None, config_path="config", config_name="eval_config_local_new",)
 def main(cfg: EvalConfig):
 
     print(cfg)
@@ -80,7 +80,6 @@ def main(cfg: EvalConfig):
         .drop(keys_to_drop)
         .concatenate(param_names_local, into="inference_variables")
         .rename(sim_data, "summary_variables")
-        # .rename(inference_conditions, "inference_conditions")
         .concatenate(inference_conditions, into="inference_conditions")
     )
     with open(os.path.join(cfg.base_dir, cfg.model_dir, '.hydra', 'config.yaml'), "r") as f:
@@ -121,22 +120,37 @@ def main(cfg: EvalConfig):
     # Augmentation
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
+    # --- Coordinate transforms (must be first, before any masking) ---
     if "remove_los_velocity" in cfg.augmentations:
         augmentations.append(augmentations_class.remove_los_velocity)
     if "convert_distance_to_parallax" in cfg.augmentations:
         augmentations.append(augmentations_class.convert_distance_to_parallax)
+
+    # --- Observational selection (window → subsample → compact) ---
+    if "observational_window" in cfg.augmentations:
+        augmentations.append(augmentations_class.observational_window)
+    if "observed_n_stars" in cfg.augmentations:
+        augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
+    if "compact_to_attended" in cfg.augmentations:
+        augmentations.append(augmentations_class.compact_to_attended)
+
+    # --- Photometric augmentation (magnitudes → errors → apply) ---
     if "sample_magnitudes" in cfg.augmentations:
         augmentations.append(augmentations_class.sample_magnitudes)
     if "sample_obs_error" in cfg.augmentations:
         augmentations.append(augmentations_class.sample_obs_error)
     if "apply_obs_error" in cfg.augmentations:
         augmentations.append(augmentations_class.apply_obs_error)
-    if "observational_window" in cfg.augmentations:
-        augmentations.append(augmentations_class.observational_window)
-    if "observed_n_stars" in cfg.augmentations:
-        augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
+
+    # --- v_los masking (must be after apply_obs_error) ---
     if "mask_vlos" in cfg.augmentations:
         augmentations.append(augmentations_class.mask_vlos)
+
+    # --- Symmetry augmentations ---
+    if "flip_dirz" in cfg.augmentations:
+        augmentations.append(augmentations_class.flip_dirz)
+
+    # --- Feature concatenations (must be last) ---
     if "concatentate_sigma_error_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatentate_sigma_error_to_sim_data)
     if "concatenate_magnitudes_to_sim_data" in cfg.augmentations:
@@ -157,7 +171,7 @@ def main(cfg: EvalConfig):
     print('Repeating for each posterior sample the sim data and also the attention mask')
 
     #WE NEED TO GET ALSO THE SAMPLES FROM THE GLOBAL PRIOR
-    global_posterior = dict(np.load('/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/plots/gala6D/new_hyper/model54_60k_1000epochs/100test/global_posterior.npz', allow_pickle=True))
+    global_posterior = dict(np.load('/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/plots/gala6D_aug/new_hyper/model54_60k_1000epochs/100test/global_posterior.npz', allow_pickle=True))
     print('keys global posterior: ', global_posterior.keys())
 
     logging.info("Starting Partial-Pooling (local) inference...")

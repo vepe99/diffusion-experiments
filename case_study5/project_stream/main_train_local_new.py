@@ -1,8 +1,9 @@
 from autocvd import autocvd
+
 autocvd(num_gpus=1, interval=1)
 import os
 
-# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "7"
 from tqdm import tqdm
 from omegaconf import DictConfig, OmegaConf, open_dict
 import hydra
@@ -21,7 +22,7 @@ logging.getLogger("bayesflow").setLevel(logging.DEBUG)
 
 # from case_study5.project_stream.train_config import TrainConfig
 from config.TrainConfig import TrainConfig
-from utils.utils_train_jax import AugmentationsClass
+from utils.utils_train_jax_new import AugmentationsClass
 
 cs = ConfigStore.instance()
 cs.store(name="train_config", node=TrainConfig)
@@ -30,7 +31,7 @@ cs.store(name="train_config", node=TrainConfig)
 @hydra.main(
     version_base=None,
     config_path="config",
-    config_name="train_config",
+    config_name="train_config_local_new",
 )
 def main(cfg: TrainConfig):
     print(cfg)
@@ -39,82 +40,94 @@ def main(cfg: TrainConfig):
         cfg.results_dir,
     )
     os.makedirs(model_path, exist_ok=True)
+    param_names_local = list(cfg.parameters_local)
     param_names_global = list(cfg.parameters_global)
     sim_data = str(cfg.sim_data)
     inference_conditions = str(cfg.inference_conditions[0])  # jut 1
     train_data_path = os.path.join(
-        cfg.base_dir, cfg.data_dir, f"training_data_{cfg.N_simulations}.npz"
+        cfg.base_dir, cfg.data_dir, f"training_data_local_{cfg.N_simulations}.npz"
     )
     print("Train data path:", train_data_path)
     training_data = dict(np.load(train_data_path, allow_pickle=True))
-    
     training_data = {k: v[:60_000] for k, v in training_data.items()}
     print("Training data keys", training_data.keys())
     keys_to_drop = (
         set(training_data.keys())
+        - set(param_names_local)
         - set(param_names_global)
         - {sim_data}
         - set(inference_conditions)
     )
     keys_to_drop = list(keys_to_drop)
+    inference_conditions = param_names_global + [inference_conditions]
 
     adapter = (
         bf.adapters.Adapter()
         .to_array()
         .convert_dtype("float64", "float32")
         .drop(keys_to_drop)
-        .concatenate(param_names_global, into="inference_variables")
+        .concatenate(param_names_local, into="inference_variables")
         .rename(sim_data, "summary_variables")
-        .rename(inference_conditions, "inference_conditions")
+        .concatenate(inference_conditions, into="inference_conditions")
     )
-    workflow_global = bf.BasicWorkflow(
+    workflow_local = bf.BasicWorkflow(
         adapter=adapter,
         summary_network=bf.networks.SetTransformer(
-            summary_dim=cfg.global_model.summary_dim,
-            embed_dims=(cfg.global_model.embed_dims, cfg.global_model.embed_dims),
+            summary_dim=cfg.local_model.summary_dim,
+            embed_dims=(cfg.local_model.embed_dims, cfg.local_model.embed_dims),
             num_heads=(
-                cfg.global_model.num_heads,
-                cfg.global_model.num_heads,
+                cfg.local_model.num_heads,
+                cfg.local_model.num_heads,
             ),
-            mlp_depths=(cfg.global_model.mlp_depths, cfg.global_model.mlp_depths),
-            mlp_widths=(cfg.global_model.mlp_widths, cfg.global_model.mlp_widths),
-            dropout=cfg.global_model.dropout,
+            mlp_depths=(cfg.local_model.mlp_depths, cfg.local_model.mlp_depths),
+            mlp_widths=(cfg.local_model.mlp_widths, cfg.local_model.mlp_widths),
+            dropout=cfg.local_model.dropout,
         ),
         inference_network=bf.networks.CompositionalDiffusionModel(
             subnet_kwargs={
-                "widths": [cfg.global_model.inference_mlp_width]
-                * cfg.global_model.inference_mlp_depth,
-                "time_embedding_dim": cfg.global_model.inference_time_embedding_dim,
+                "widths": [cfg.local_model.inference_mlp_width]
+                * cfg.local_model.inference_mlp_depth,
+                "time_embedding_dim": cfg.local_model.inference_time_embedding_dim,
             }
         ),
-        standardize=["inference_variables", "summary_variables"],
+        standardize=["inference_variables", "summary_variables", "inference_conditions"],
         checkpoint_filepath=model_path,
-        checkpoint_name="checkpoint_global_model.keras",
+        checkpoint_name="checkpoint_local_model.keras",
     )
 
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
-
-    if "cut_to_300_particles" in cfg.augmentations:
-        augmentations.append(augmentations_class.cut_to_300_particles)
-    if "remove_los_velocity" in cfg.augmentations: #remove this if you want to train with vlos and errors
+    # --- Coordinate transforms (must be first, before any masking) ---
+    if "remove_los_velocity" in cfg.augmentations:
         augmentations.append(augmentations_class.remove_los_velocity)
     if "convert_distance_to_parallax" in cfg.augmentations:
         augmentations.append(augmentations_class.convert_distance_to_parallax)
+
+    # --- Observational selection (window → subsample → compact) ---
+    if "observational_window" in cfg.augmentations:
+        augmentations.append(augmentations_class.observational_window)
+    if "observed_n_stars" in cfg.augmentations:
+        augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
+    if "compact_to_attended" in cfg.augmentations:
+        augmentations.append(augmentations_class.compact_to_attended)
+
+    # --- Photometric augmentation (magnitudes → errors → apply) ---
     if "sample_magnitudes" in cfg.augmentations:
         augmentations.append(augmentations_class.sample_magnitudes)
     if "sample_obs_error" in cfg.augmentations:
         augmentations.append(augmentations_class.sample_obs_error)
     if "apply_obs_error" in cfg.augmentations:
         augmentations.append(augmentations_class.apply_obs_error)
-    if "observational_window" in cfg.augmentations:
-        augmentations.append(augmentations_class.observational_window)
-    if "observed_n_stars" in cfg.augmentations:
-        augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
+
+    # --- v_los masking (must be after apply_obs_error) ---
     if "mask_vlos" in cfg.augmentations:
         augmentations.append(augmentations_class.mask_vlos)
+
+    # --- Symmetry augmentations ---
     if "flip_dirz" in cfg.augmentations:
         augmentations.append(augmentations_class.flip_dirz)
+
+    # --- Feature concatenations (must be last) ---
     if "concatentate_sigma_error_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatentate_sigma_error_to_sim_data)
     if "concatenate_magnitudes_to_sim_data" in cfg.augmentations:
@@ -387,15 +400,15 @@ def main(cfg: TrainConfig):
                     fig_sigma.savefig(os.path.join(model_path, "augmentation_sigma_vlos_mask.pdf"))
                     plt.show()
 
-    history = workflow_global.fit_offline(
+    history = workflow_local.fit_offline(
         training_data,
         epochs=cfg.n_epochs,
         batch_size=cfg.batch_size,
         verbose=cfg.verbose,
         augmentations=augmentations,
     )
-    workflow_global.approximator.save(os.path.join(model_path, "global_model.keras"))
-    workflow_global.approximator.save_weights(model_path.replace('.keras', '.weights.h5'))
+    workflow_local.approximator.save(os.path.join(model_path, "local_model.keras"))
+    workflow_local.approximator.save_weights(model_path.replace('.keras', '.weights.h5'))
     loss_plot = bf.diagnostics.plots.loss(
         history,
     )

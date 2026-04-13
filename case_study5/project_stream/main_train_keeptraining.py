@@ -386,15 +386,18 @@ def main(cfg: TrainConfig):
                     fig_sigma.tight_layout()
                     fig_sigma.savefig(os.path.join(model_path, "augmentation_sigma_vlos_mask.pdf"))
                     plt.show()
-
+    import keras
+    workflow_global.approximator = keras.models.load_model('/export/data/vgiusepp/diffusion_experiments_test_new/diffusion-experiments/case_study5/project_stream/data/models/gala6D/model31_300k_1000epochs/global_model_fixed.keras')
     history = workflow_global.fit_offline(
         training_data,
         epochs=cfg.n_epochs,
         batch_size=cfg.batch_size,
         verbose=cfg.verbose,
         augmentations=augmentations,
+        initial_epoch=1000,   # start counting from here
     )
     workflow_global.approximator.save(os.path.join(model_path, "global_model.keras"))
+    workflow_global.approximator.save_weights(model_path.replace('.keras', '.weights.h5'))
     loss_plot = bf.diagnostics.plots.loss(
         history,
     )

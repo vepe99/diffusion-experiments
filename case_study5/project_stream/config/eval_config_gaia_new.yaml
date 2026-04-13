@@ -1,24 +1,23 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_gala/"
-model_dir: "models/gala6D/new_hyper/big_heads/model0_300k_1000epochs"
+model_dir: "models/gala6D_aug/new_hyper/model54_60k_1000epochs"
 multistream_n_simulation: 333
-results_dir: "plots/gala6D/new_hyper/big_heads/model0_300k_1000epochsnocomposition/nocomposition_333test"
-use_streamax_simulator: False
+results_dir: "plots/gala6D_aug/new_hyper/model54_60k_1000epochs"
+use_streamax_simulator: True
 
 #training hyperparameters
-n_samples: 1000
+n_samples: 50_000
 method: "two_step_adaptive"
 steps: "adaptive"
 max_steps: 1000
 mini_batch_size: null
-batch_size: 30
-inverse_compositional_bridge_d1: 6
+batch_size: 10
+inverse_compositional_bridge_d1: 4.5
 noise_schedule: null
-# noise_schedule: 
   # min_log_snr: -15
   # max_log_snr: 15
-  # shift: 5.0
-  # weighting: "likelihood_weighting"
+  # shift: 10
+  # weighting: "sigmoid"
 verbose: 2
 
 #nmes of parameters
@@ -35,7 +34,6 @@ parameters_global:
   - "rho_thick_disk"
   - "hr_thick_disk"
   - "hz_thick_disk"
-
 parameters_local:
   - "m_progenitor"
   - "a_progenitor"
@@ -98,16 +96,20 @@ observed_n_stars:
   NGC3201: 195
   M68: 297
 
-gaia_id:
-  Pal5: "Pal-5"
-  NGC3201: "Gjoll"
-  M68: "Fjorm"
-
 min_star_with_vlos:
   Pal5: 69
   # NGC3201: 40
   NGC3201: 37
   M68: 29
+
+# error_keys: null #default is ["ra", "dec", "parallax", "mu_ra", "mu_dec"]
+error_keys: 
+  - "ra"
+  - "dec"
+  - "parallax"
+  - "mu_ra"
+  - "mu_dec"
+  - "v_los" #override default error keys
 
 masked_value_vlos:
   Pal5:
@@ -120,30 +122,25 @@ masked_value_vlos:
     mean: -95.42
     std: 65.70
 
-augmentations:
-# - remove_los_velocity
-- cut_to_300_particles
-- convert_distance_to_parallax
-- observational_window
-- observed_n_stars
-- mask_vlos
-- sample_magnitudes
-- sample_obs_error
-- apply_obs_error
-# - flip_dirz
-- concatentate_sigma_error_to_sim_data
-- concatenate_magnitudes_to_sim_data
-- concatenate_vlos_mask_to_sim_data
-- concatenate_j_to_sim_data
 
-# error_keys: null #default is ["ra", "dec", "parallax", "mu_ra", "mu_dec"]
-error_keys:
-- ra
-- dec
-- parallax
-- mu_ra
-- mu_dec
-- v_los
+gaia_id:
+  Pal5: "Pal-5"
+  NGC3201: "Gjoll"
+  M68: "Fjorm"
+
+augmentations:
+  # - "remove_los_velocity"
+  - "convert_distance_to_parallax" #we already have parallax in data, but we have to keep it even if we do not use it
+  - "sample_magnitudes" #we need to keep it even if we do not use it
+  - "observational_window"
+  - "observed_n_stars"
+  - "mask_vlos"
+  - "sample_obs_error"
+  # - "flip_dirz"
+  - "concatentate_sigma_error_to_sim_data"
+  - "concatenate_magnitudes_to_sim_data"
+  - "concatenate_vlos_mask_to_sim_data"
+  - "concatenate_j_to_sim_data"
 
 #global model network:
 global_model:

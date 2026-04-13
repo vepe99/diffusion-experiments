@@ -21,7 +21,7 @@ logging.getLogger("bayesflow").setLevel(logging.DEBUG)
 
 # from case_study5.project_stream.train_config import TrainConfig
 from config.TrainConfig import TrainConfig
-from utils.utils_train_jax import AugmentationsClass
+from utils.utils_train_jax_new import AugmentationsClass
 
 cs = ConfigStore.instance()
 cs.store(name="train_config", node=TrainConfig)
@@ -30,7 +30,7 @@ cs.store(name="train_config", node=TrainConfig)
 @hydra.main(
     version_base=None,
     config_path="config",
-    config_name="train_config_val",
+    config_name="train_config_new",
 )
 def main(cfg: TrainConfig):
     print(cfg)
@@ -48,7 +48,7 @@ def main(cfg: TrainConfig):
     print("Train data path:", train_data_path)
     training_data = dict(np.load(train_data_path, allow_pickle=True))
     validation_data = {k: v[-10_000:,] for k, v in training_data.items()}
-    training_data = {k: v[:290_000] for k, v in training_data.items()}
+    training_data = {k: v[:100_000] for k, v in training_data.items()}
     print("Training data keys", training_data.keys())
     keys_to_drop = (
         set(training_data.keys())
@@ -95,26 +95,37 @@ def main(cfg: TrainConfig):
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
 
-    if "cut_to_300_particles" in cfg.augmentations:
-        augmentations.append(augmentations_class.cut_to_300_particles)
-    if "remove_los_velocity" in cfg.augmentations: #remove this if you want to train with vlos and errors
+    # --- Coordinate transforms (must be first, before any masking) ---
+    if "remove_los_velocity" in cfg.augmentations:
         augmentations.append(augmentations_class.remove_los_velocity)
     if "convert_distance_to_parallax" in cfg.augmentations:
         augmentations.append(augmentations_class.convert_distance_to_parallax)
+
+    # --- Observational selection (window → subsample → compact) ---
+    if "observational_window" in cfg.augmentations:
+        augmentations.append(augmentations_class.observational_window)
+    if "observed_n_stars" in cfg.augmentations:
+        augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
+    if "compact_to_attended" in cfg.augmentations:
+        augmentations.append(augmentations_class.compact_to_attended)
+
+    # --- Photometric augmentation (magnitudes → errors → apply) ---
     if "sample_magnitudes" in cfg.augmentations:
         augmentations.append(augmentations_class.sample_magnitudes)
     if "sample_obs_error" in cfg.augmentations:
         augmentations.append(augmentations_class.sample_obs_error)
     if "apply_obs_error" in cfg.augmentations:
         augmentations.append(augmentations_class.apply_obs_error)
-    if "observational_window" in cfg.augmentations:
-        augmentations.append(augmentations_class.observational_window)
-    if "observed_n_stars" in cfg.augmentations:
-        augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
+
+    # --- v_los masking (must be after apply_obs_error) ---
     if "mask_vlos" in cfg.augmentations:
         augmentations.append(augmentations_class.mask_vlos)
+
+    # --- Symmetry augmentations ---
     if "flip_dirz" in cfg.augmentations:
         augmentations.append(augmentations_class.flip_dirz)
+
+    # --- Feature concatenations (must be last) ---
     if "concatentate_sigma_error_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatentate_sigma_error_to_sim_data)
     if "concatenate_magnitudes_to_sim_data" in cfg.augmentations:
@@ -123,6 +134,7 @@ def main(cfg: TrainConfig):
         augmentations.append(augmentations_class.concatenate_vlos_mask_to_sim_data)
     if "concatenate_j_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatenate_j_to_sim_data)
+
 
 
     if cfg.test:

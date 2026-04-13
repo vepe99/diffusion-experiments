@@ -102,6 +102,7 @@ def main(cfg: EvalConfig):
         standardize=["inference_variables", "summary_variables"]
     )
     workflow_global.approximator = keras.models.load_model(model_path)
+    workflow_global.approximator.save_weights(model_path.replace('.keras', '.weights.h5'))
     test_data = {k: test_data[k] for k in cfg.parameters_global + [cfg.sim_data, "j"] }
     # Augmentation
     augmentations_class = AugmentationsClass(cfg)

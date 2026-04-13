@@ -89,7 +89,7 @@ def objective(trial, cfg, test_data):
         )
 
         # --- Training with batch-size retry ---
-        batch_size_training = 1000
+        batch_size_training = 500
         for attempt in range(2):
             try:
                 history = workflow_global.fit_offline(
@@ -97,6 +97,7 @@ def objective(trial, cfg, test_data):
                     epochs=1000,
                     batch_size=batch_size_training,
                     verbose=2,
+                    augmentations=augmentations,
                 )
                 break  # success
             except Exception as e:
@@ -111,8 +112,7 @@ def objective(trial, cfg, test_data):
 
         # --- Build conditions for ancestral sampling ---
         global_posterior = dict(np.load(
-            '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/plots/'
-            'gala6D/new_hyper/model54_60k_1000epochs/333test/global_posterior.npz',
+            '/export/data/vgiusepp/diffusion_experiments_test_new/diffusion-experiments/case_study5/project_stream/data/plots/gala6D/model31_300k_500epochs/333test/global_posterior.npz',
             allow_pickle=True
         ))
 
@@ -263,7 +263,7 @@ if __name__ == "__main__":
 
     train_data_path = os.path.join(base_dir, data_dir, f"training_data_local_{N_simulations}.npz")
     training_data = dict(np.load(train_data_path, allow_pickle=True))
-    training_data = {k: training_data[k][:60_000] for k in training_data.keys()}
+    # training_data = {k: training_data[k][:60_000] for k in training_data.keys()}
 
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
@@ -297,8 +297,8 @@ if __name__ == "__main__":
 
     
 
-    for aug in augmentations:
-        training_data = aug(training_data)
+    # for aug in augmentations:
+    #     training_data = aug(training_data)
     
     print('Training data shapes after augmentations:')
     for k, v in training_data.items():
@@ -313,10 +313,11 @@ if __name__ == "__main__":
     test_data['j'] = test_data['j'].reshape(-1, 1)
     for aug in augmentations:
         test_data = aug(test_data)
+    test_data = {k: np.array(test_data[k]) for k in test_data.keys()}
         
     print("Loaded config:", cfg)
     study_name = 'study_DiffusionMode_local'  # Unique identifier of the study.
-    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/gala/local/optuna_diffusionmodel_galax_local_cutNGC3201.log"))
+    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/gala/local/optuna_diffusionmodel_gala_local_cutNGC3201_300k.log"))
     study = optuna.create_study(study_name=study_name, storage=storage_name, directions=['minimize', 'minimize'], load_if_exists=True)
     study.optimize(
         lambda trial: objective(trial, cfg, test_data),
