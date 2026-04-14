@@ -17,7 +17,8 @@ def main():
     # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/optuna_diffusionmodel_gala_cutNGC3201.log"))
     # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/local/optuna_diffusionmodel_galax_local_cutNGC3201.log"))
     # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/local/optuna_diffusionmodel_gala_local_cutNGC3201_300k.log"))
-    storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/big_heads/optuna_diffusionmodel_gala_cutNGC3201.log"))
+    # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/big_heads/optuna_diffusionmodel_gala_cutNGC3201.log"))
+    storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/new_aug/optuna_diffusionmodel_gala_cutNGC3201.log"))
 
     # study_names = optuna.study.get_all_study_names(storage)
     # print("Studies in storage:", study_names)

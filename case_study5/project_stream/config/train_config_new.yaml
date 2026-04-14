@@ -35,23 +35,24 @@ parameters_local:
 - mu_ra_cosdec
 - mu_dec
 paramater_global_pretty:
-- $M_{NFW}$
-- $r_{NFW}$
-- $q_{NFW}$
-- $\\rho_t$
-- $h_t$
-- $z_t$
-- $\\rho_k$
-- $h_k$
-- $z_k$
+  - "$M_{NFW}$"
+  - "$r_{NFW}$"
+  - "$q_{NFW}$"
+  - "$\\rho_t$"
+  - "$h_t$"
+  - "$z_t$"
+  - "$\\rho_k$"
+  - "$h_k$"
+  - "$z_k$"
 
 parameter_local_pretty:
-- $M_{prog}$
-- $a_{prog}$
-- $v_r$
-- $r$
-- $\mu_{\alpha*}$
-- $\mu_{\delta}$
+  - "$M_{prog}$"
+  - "$a_{prog}$"
+  - "$v_r$"
+  - "$r$"
+  - "$\\mu_{\\alpha*}$"
+  - "$\\mu_{\\delta}$"
+  
 target_streams:
   Pal5: 0
   NGC3201: 1

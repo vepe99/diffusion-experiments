@@ -19,7 +19,7 @@ from optuna.trial import TrialState
 import logging
 logging.getLogger('bayesflow').setLevel(logging.DEBUG)
 
-from utils.utils_train_jax import AugmentationsClass
+from utils.utils_train_jax_new import AugmentationsClass
 import jax
 
 def clear_gpu_memory():
@@ -29,13 +29,16 @@ def clear_gpu_memory():
 
 def objective(trial, cfg, test_data):
     clear_gpu_memory()
+    results_dir = f'./data/hyperparameter_tuning/gala/local/new_aug_jonas/model_{trial.number}/'
+    os.makedirs(results_dir, exist_ok=True)
 
-    summary_dim = trial.suggest_int("SetTransformer_summary_dim", 16, 128)
-    embed_dims = trial.suggest_int("SetTransformer_embed_dims", 16, 128)
+    summary_dim = trial.suggest_int("SetTransformer_summary_dim", 32, 128)
+    embed_dims = trial.suggest_int("SetTransformer_embed_dims", 32, 128)
     num_heads = trial.suggest_int("SetTransformer_num_heads", 1, 3)
-    mlp_depths = trial.suggest_int("SetTransformer_mlp_depths", 2, 6)
-    mlp_widths = trial.suggest_int("SetTransformer_mlp_widths", 16, 128)
-    inference_mlp_depth = trial.suggest_int("inference_mlp_depth", 2, 6)
+    mlp_depths = trial.suggest_int("SetTransformer_mlp_depths", 2, 6) 
+    mlp_widths = trial.suggest_int("SetTransformer_mlp_widths", 32, 128)
+
+    inference_mlp_depth = trial.suggest_int("inference_mlp_depth", 2, 8)
     inference_mlp_width = trial.suggest_int("inference_mlp_width", 32, 256)
     time_embedding_dim = trial.suggest_int("inference_time_embedding_dim", 16, 64, step=2)
 
@@ -69,7 +72,7 @@ def objective(trial, cfg, test_data):
             .concatenate(inference_conditions, into="inference_conditions")
         )
 
-        workflow_global = bf.BasicWorkflow(
+        workflow_local = bf.BasicWorkflow(
             adapter=adapter,
             summary_network=bf.networks.SetTransformer(
                 summary_dim=summary_dim,
@@ -79,7 +82,7 @@ def objective(trial, cfg, test_data):
                 mlp_widths=(mlp_widths, mlp_widths),
                 dropout=0.1,
             ),
-            inference_network=bf.networks.DiffusionModel(
+            inference_network=bf.networks.CompositionalDiffusionModel(
                 subnet_kwargs={
                     "widths": [inference_mlp_width] * inference_mlp_depth,
                     "time_embedding_dim": time_embedding_dim,
@@ -89,10 +92,10 @@ def objective(trial, cfg, test_data):
         )
 
         # --- Training with batch-size retry ---
-        batch_size_training = 500
+        batch_size_training = 1024
         for attempt in range(2):
             try:
-                history = workflow_global.fit_offline(
+                history = workflow_local.fit_offline(
                     training_data,
                     epochs=1000,
                     batch_size=batch_size_training,
@@ -110,110 +113,83 @@ def objective(trial, cfg, test_data):
                 else:
                     raise
 
-        # --- Build conditions for ancestral sampling ---
-        global_posterior = dict(np.load(
-            '/export/data/vgiusepp/diffusion_experiments_test_new/diffusion-experiments/case_study5/project_stream/data/plots/gala6D/model31_300k_500epochs/333test/global_posterior.npz',
-            allow_pickle=True
-        ))
-
-        n_test = 333
-        n_streams = len(cfg.target_streams)
-
-        sim_data_4d = test_data[cfg.sim_data].reshape(
-            n_test, n_streams, *test_data[cfg.sim_data].shape[1:]
-        )
-        j_3d = test_data['j'].reshape(n_test, n_streams, 1)
-        attn_mask_4d = test_data['attention_mask']
-
-        conditions = {
-            cfg.sim_data: sim_data_4d,
-            'j': j_3d,
-        }
-        ancestral_conds = {
-            param: global_posterior[param] for param in cfg.parameters_global
-        }
+        #sampling
+        logging.info("Starting Partial-Pooling (local) inference...")
+        conditions = {cfg.sim_data: test_data[cfg.sim_data],}
+        conditions['j'] = test_data['j']
         for param in cfg.parameters_global:
-            conditions[param] = np.repeat(
-                global_posterior[param][:, :1, :], n_streams, axis=1
-            )
+            conditions[param] = test_data[param]
 
-        def ancestral_sample_batched(workflow, conditions, ancestral_conds, attn_mask_4d, cfg, n_test_per_batch=5):
-            n_test = 333
-            all_samples = None
-            for i in tqdm(range(0, n_test, n_test_per_batch)):
-                batch_conditions = {k: v[i:i + n_test_per_batch] for k, v in conditions.items()}
-                batch_ancestral  = {k: v[i:i + n_test_per_batch] for k, v in ancestral_conds.items()}
-                batch_attn       = attn_mask_4d[i:i + n_test_per_batch]
-                batch_samples = workflow.ancestral_sample(
-                    conditions=batch_conditions,
-                    ancestral_conditions=batch_ancestral,
-                    kwargs={'attention_mask': batch_attn},
-                )
-                if all_samples is None:
-                    all_samples = batch_samples
-                else:
-                    for k in all_samples:
-                        all_samples[k] = np.concatenate([all_samples[k], batch_samples[k]], axis=0)
-            return all_samples
-
-        # --- Sampling with n_test_per_batch retry ---
-        # NOTE: was previously broken — batch_size_sampling was never defined before the except block
-        n_test_per_batch = 30
-        for attempt in range(2):
+        # --- Sampling with batch-size retry ---
+        batch_size_sampling = 250
+        for attempt in range(3):
             try:
-                local_posterior = ancestral_sample_batched(
-                    workflow=workflow_global,
-                    conditions=conditions,
-                    ancestral_conds=ancestral_conds,
-                    attn_mask_4d=attn_mask_4d,
-                    cfg=cfg,
-                    n_test_per_batch=n_test_per_batch,
-                )
-                break  # success
+                local_posterior = workflow_local.sample(
+                        num_samples=500,
+                        conditions=conditions, 
+                        batch_size=cfg.batch_size,
+                        kwargs={'attention_mask': test_data['attention_mask']}
+                    )
+                break
             except Exception as e:
                 err_str = str(e).lower()
                 is_oom = "out of memory" in err_str or "cuda" in err_str or "resource exhausted" in err_str
                 if is_oom and attempt == 0:
-                    logging.warning(f"Trial {trial.number} OOM during sampling, halving n_test_per_batch and retrying...")
-                    n_test_per_batch //= 2
+                    logging.warning(f"Trial {trial.number} OOM during sampling, halving batch size and retrying...")
+                    batch_size_sampling //= 2
                     clear_gpu_memory()
                 else:
                     raise
+        
+        #jonas denormalization suggestion
+        for key in param_names_local:
+            print('We are going to renormalize the parameter', key, 'for each stream separately using the prior parameters from prior_local.yaml')
+            for name in cfg.target_streams.keys():
+                mask_stream = (test_data["j"] == cfg.target_streams[name]).squeeze()  # (300,)
+                mean_prior = prior_local_dict[name][key]['prior_parameters'][0]
+                std_prior  = prior_local_dict[name][key]['prior_parameters'][1]
+                local_posterior[key][mask_stream] = (local_posterior[key][mask_stream] * std_prior + mean_prior)
+                print(f"Renormalized {key} for stream {name} using mean={mean_prior} and std={std_prior}")
+        
 
-        # --- Reshape posteriors and compute metrics ---
-        ps = local_posterior.copy()
-        test_params_local = {}
-        for p in param_names_local:
-            arr = np.asarray(test_data[p])
-            print(f'  {p} raw shape: {arr.shape}')
-            if arr.ndim == 3:
-                test_params_local[p] = arr.reshape(n_test * n_streams, -1)
-            elif arr.ndim == 2 and arr.shape[0] == n_test and arr.shape[1] == n_streams:
-                test_params_local[p] = arr.reshape(n_test * n_streams, 1)
-            elif arr.ndim == 2:
-                test_params_local[p] = arr
-            elif arr.ndim == 1 and arr.shape[0] == n_test * n_streams:
-                test_params_local[p] = arr.reshape(-1, 1)
-            elif arr.ndim == 1 and arr.shape[0] == n_test:
-                test_params_local[p] = np.repeat(arr, n_streams).reshape(-1, 1)
-            else:
-                raise ValueError(f'Unexpected shape for {p}: {arr.shape}')
-
-        test_data_flat = test_params_local
-        ps_flat = {k: np.asarray(v).reshape(n_test * n_streams, *v.shape[2:]) for k, v in ps.items()}
 
         root_mean_squared_error = bf_metrics.root_mean_squared_error(
-            estimates=ps_flat,
-            targets=test_data_flat,
+            estimates=local_posterior,
+            targets=test_data,
             variable_keys=param_names_local,
             variable_names=param_names_local,
         )
         calibration_errors = bf_metrics.calibration_error(
-            estimates=ps_flat,
-            targets=test_data_flat,
+            estimates=local_posterior,
+            targets=test_data,
             variable_keys=param_names_local,
             variable_names=param_names_local,
         )
+
+        workflow_local.approximator.save(os.path.join(results_dir, "local_model.keras"))
+        #calibration plot with diff
+        for stream_name, j_idx in cfg.target_streams.items():
+            print(f'\n===== Generating plots for {stream_name} (j={j_idx}) =====')
+
+            obs_mask = (test_data['j'] == j_idx).squeeze()  # (300,) instead of (300, 1)
+
+            test_data_stream = {k: v[obs_mask] for k, v in test_data.items()}
+            ps_stream        = {k: v[obs_mask] for k, v in local_posterior.items()}
+
+            print(f'  test_data shapes: { {k: v.shape for k, v in test_data_stream.items()} }')
+            print(f'  ps shapes:        { {k: v.shape for k, v in ps_stream.items()} }')
+            # --- Calibration ECDF (difference=True) ---
+            fig = bf.diagnostics.calibration_ecdf(
+                estimates=ps_stream,
+                targets=test_data_stream,
+                difference=True,
+                variable_names=cfg.parameter_local_pretty
+            )
+            for ax in fig.get_axes():
+                ax.grid(False)
+            fig.savefig(os.path.join(results_dir, f'{stream_name}_calibration.pdf'))
+            print(f'  Saved {stream_name}_calibration.pdf')
+
         return root_mean_squared_error['values'].mean(), calibration_errors['values'].mean()
 
     except optuna.TrialPruned:
@@ -250,42 +226,73 @@ if __name__ == "__main__":
     cs.store(name="train_config_schema", node=TrainConfig)
 
     # 2. Point to the directory containing train_config.yaml
-    config_path = '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/config/'
+    config_path = '/export/data/vgiusepp/diffusion_experiments_test_new/diffusion-experiments/case_study5/project_stream/config/'
 
     with initialize_config_dir(version_base=None, config_dir=config_path):
         # 3. Compose: loads train_config.yaml, validated against TrainConfig schema
-        cfg = compose(config_name="eval_config_local")
+        cfg = compose(config_name="train_config_local_new")
     
-    base_dir =  '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/'
+    base_dir =  '/export/data/vgiusepp/diffusion_experiments_test_new/diffusion-experiments/case_study5/project_stream/data/'
     data_dir = 'streams/data_gala/'
     N_simulations = 300_000
 
 
     train_data_path = os.path.join(base_dir, data_dir, f"training_data_local_{N_simulations}.npz")
     training_data = dict(np.load(train_data_path, allow_pickle=True))
-    # training_data = {k: training_data[k][:60_000] for k in training_data.keys()}
+    training_data = {k: training_data[k][:290_000] for k in training_data.keys()}
+
+    #jonas suggestion
+    with open("./config/prior_local.yaml", "r") as f:
+        prior_local_dict = yaml.safe_load(f)
+    
+    param_names_local = list(cfg.parameters_local)
+
+    for key in param_names_local:
+        print('We are going to renormalize the parameter', key, 'for each stream separately using the prior parameters from prior_local.yaml')
+        for name in cfg.target_streams.keys():
+            mask_stream = training_data["j"] == cfg.target_streams[name]
+            mean_prior = prior_local_dict[name][key]['prior_parameters'][0]
+            std_prior = prior_local_dict[name][key]['prior_parameters'][1]
+            training_data[key][mask_stream] = (training_data[key][mask_stream] - mean_prior) / std_prior
+            print(f"Renormalized {key} for stream {name} using mean={mean_prior} and std={std_prior}")
+            print('Min and max of the renormalized parameter for this stream:', training_data[key][mask_stream].min(), training_data[key][mask_stream].max())
+
 
     augmentations_class = AugmentationsClass(cfg)
+    augmentations_class.key = jax.random.PRNGKey(0)
     augmentations = []
 
-    if "remove_los_velocity" in cfg.augmentations: #remove this if you want to train with vlos and errors
+    # --- Coordinate transforms (must be first, before any masking) ---
+    if "remove_los_velocity" in cfg.augmentations:
         augmentations.append(augmentations_class.remove_los_velocity)
     if "convert_distance_to_parallax" in cfg.augmentations:
         augmentations.append(augmentations_class.convert_distance_to_parallax)
+
+    # --- Observational selection (window → subsample → compact) ---
+    if "observational_window" in cfg.augmentations:
+        augmentations.append(augmentations_class.observational_window)
+    if "observed_n_stars" in cfg.augmentations:
+        augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
+    if "compact_to_attended" in cfg.augmentations:
+        augmentations.append(augmentations_class.compact_to_attended)
+
+    # --- Photometric augmentation (magnitudes → errors → apply) ---
     if "sample_magnitudes" in cfg.augmentations:
         augmentations.append(augmentations_class.sample_magnitudes)
     if "sample_obs_error" in cfg.augmentations:
         augmentations.append(augmentations_class.sample_obs_error)
     if "apply_obs_error" in cfg.augmentations:
         augmentations.append(augmentations_class.apply_obs_error)
-    if "observational_window" in cfg.augmentations:
-        augmentations.append(augmentations_class.observational_window)
-    if "observed_n_stars" in cfg.augmentations:
-        augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
+
+    # --- v_los masking (must be after apply_obs_error) ---
     if "mask_vlos" in cfg.augmentations:
         augmentations.append(augmentations_class.mask_vlos)
+
+    # --- Symmetry augmentations ---
     if "flip_dirz" in cfg.augmentations:
         augmentations.append(augmentations_class.flip_dirz)
+
+    # --- Feature concatenations (must be last) ---
     if "concatentate_sigma_error_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatentate_sigma_error_to_sim_data)
     if "concatenate_magnitudes_to_sim_data" in cfg.augmentations:
@@ -295,31 +302,21 @@ if __name__ == "__main__":
     if "concatenate_j_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatenate_j_to_sim_data)
 
-    
 
-    # for aug in augmentations:
-    #     training_data = aug(training_data)
-    
-    print('Training data shapes after augmentations:')
-    for k, v in training_data.items():
-        training_data[k] = np.array(training_data[k])
-        print(f'  {k}: {v.shape}')
-    
-
-    # test_data = dict(np.load('.', allow_pickle=True))
-    # test_data = {k: test_data[k][-1_000:] for k in test_data.keys()}
-    test_data = dict(np.load(os.path.join(base_dir, 'streams/data_multistream_gala/simulation_multistream_333.npz')))
-    test_data[cfg.sim_data] = test_data[cfg.sim_data].reshape(-1, test_data[cfg.sim_data].shape[-2], test_data[cfg.sim_data].shape[-1])
-    test_data['j'] = test_data['j'].reshape(-1, 1)
+    test_data = dict(np.load(train_data_path, allow_pickle=True))
+    test_data = {k: test_data[k][-1_000:] for k in test_data.keys()}
     for aug in augmentations:
         test_data = aug(test_data)
-    test_data = {k: np.array(test_data[k]) for k in test_data.keys()}
+    for k in test_data.keys():
+        test_data[k] = np.array(test_data[k])
+
+    augmentations_class.key = jax.random.PRNGKey(42)
         
     print("Loaded config:", cfg)
     study_name = 'study_DiffusionMode_local'  # Unique identifier of the study.
-    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/gala/local/optuna_diffusionmodel_gala_local_cutNGC3201_300k.log"))
+    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/gala/local/new_aug_jonas/optuna_diffusionmodel_gala_local_cutNGC3201.log"))
     study = optuna.create_study(study_name=study_name, storage=storage_name, directions=['minimize', 'minimize'], load_if_exists=True)
     study.optimize(
         lambda trial: objective(trial, cfg, test_data),
-        callbacks=[MaxTrialsCallback(100, states=(TrialState.COMPLETE, TrialState.FAIL))],
+        callbacks=[MaxTrialsCallback(200, states=(TrialState.COMPLETE, TrialState.FAIL))],
     )
