@@ -8,6 +8,7 @@ dependencies = [
     "astropy",
     "amici==0.34.2",
     "black",
+    "bayesflow",
     "chainconsumer",
     "corner",
     "colorcet>=3.1.0",
@@ -17,7 +18,8 @@ dependencies = [
     "galstreams",
     "gpustat",
     "ipython",
-    "jax[cuda]",
+    "ipykernel",
+    "jax[cuda]==0.7.1",
     "joblib==1.5.2",
     "keras>=3.10",
     "marimo",
@@ -25,11 +27,11 @@ dependencies = [
     "numba>=0.63.1",
     "numpy>=1.26.4",
     "optuna",
+    "odisseo",
     "scipy>=1.12.0",
     "tensorflow==2.20.0",
     "torch==2.9.1",
     "tqdm==4.67.1",
-    "bayesflow",
     "plotly>=6.5.2",
     "pyzmq>=27.1.0",
     "scikit-learn",
@@ -40,3 +42,4 @@ dependencies = [
 sbibm = { git = "https://github.com/arrjon/sbibm.git", rev = "dev" }
 bayesflow = { path = "../bayesflow_enviroment_most_recent/bayesflow", editable = true }
 galstreams = {git = "https://github.com/cmateu/galstreams"}
+odisseo = {path = "/export/home/vgiusepp/Odisseo", editable = true}
