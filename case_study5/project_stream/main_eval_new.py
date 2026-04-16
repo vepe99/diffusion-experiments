@@ -126,9 +126,22 @@ def main(cfg: EvalConfig):
     test_data = dict(np.load(test_data_path, allow_pickle=True))
     keys_to_drop = set(test_data.keys()) - set(param_names_global) - {sim_data} - set(inference_conditions)
     keys_to_drop = list(keys_to_drop) 
-    with open(os.path.join(cfg.base_dir, cfg.model_dir, '.hydra', 'config.yaml'), "r") as f:
-        model_config = yaml.safe_load(f)
-    print(model_config)
+    # with open(os.path.join(cfg.base_dir, cfg.model_dir, '.hydra', 'config.yaml'), "r") as f:
+    #     model_config = yaml.safe_load(f)
+    # print(model_config)
+    model_config = {'global_model':
+                    {
+                        'inference_mlp_width': cfg.global_model.inference_mlp_width,
+                        'inference_mlp_depth': cfg.global_model.inference_mlp_depth,
+                        'inference_time_embedding_dim': cfg.global_model.inference_time_embedding_dim,
+                        'summary_dim': cfg.global_model.summary_dim,
+                        'num_heads': cfg.global_model.num_heads,
+                        'embed_dims': cfg.global_model.embed_dims,
+                        'mlp_depths': cfg.global_model.mlp_depths,
+                        'mlp_widths': cfg.global_model.mlp_widths,
+                        'dropout': cfg.global_model.dropout,
+                    }
+                }
 
 
     adapter = (

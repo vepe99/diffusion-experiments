@@ -1,9 +1,10 @@
 from autocvd import autocvd
-autocvd(num_gpus = 1)
+# autocvd(num_gpus = 1)
 import os
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
-# os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 import yaml
+from functools import partial
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from omegaconf import DictConfig, OmegaConf, open_dict
@@ -23,6 +24,20 @@ logging.getLogger('bayesflow').setLevel(logging.DEBUG)
 
 from config.EvalConfig import EvalConfig
 from utils.utils_train_jax_new import AugmentationsClass #we will need to use the augmentations on the test_set
+
+
+
+import astropy.units as u
+import jax.numpy as jnp
+import jax
+
+from odisseo.dynamics import DIRECT_ACC_MATRIX
+from odisseo.potentials import combined_external_acceleration_vmpa_switch
+from odisseo.option_classes import SimulationConfig, SimulationParams, PlummerParams, PSPParams, TriaxialNFWParams,ThickMN3DiskParams, ThinMN3DiskParams 
+from odisseo.option_classes import PSP_POTENTIAL, TRIAXIAL_NFW_POTENTIAL, THICK_MN3_DISK, THIN_MN3_DISK
+from odisseo.units import CodeUnits
+
+
 
 
 cs = ConfigStore.instance()
@@ -69,9 +84,165 @@ def fix_keras_model(model_path, ):
     return fixed_model_path
 
 
+def disk_masses_from_params(p):
+    """
+    Compute total masses of thin and thick disks from parameter dict.
+
+    Args:
+        p: dict of JAX arrays (same structure as parameters_dict)
+
+    Returns:
+        dict with:
+            - M_thin_disk
+            - M_thick_disk
+    """
+
+    def s(x):
+        return jnp.squeeze(x)  # ensure scalar for clean autodiff
+
+    # Extract parameters
+    rho_thin = s(p['rho_thin_disk']) * (u.Msun / u.pc**3).to(u.Msun / u.kpc**3)
+    hr_thin  = s(p['hr_thin_disk'])
+    hz_thin  = s(p['hz_thin_disk'])
+
+    rho_thick = s(p['rho_thick_disk']) * (u.Msun / u.pc**3).to(u.Msun / u.kpc**3)
+    hr_thick  = s(p['hr_thick_disk'])
+    hz_thick  = s(p['hz_thick_disk'])
+
+    # Mass formula
+    M_thin  = 4 * jnp.pi * rho_thin  * hr_thin**2  * hz_thin
+    M_thick = 4 * jnp.pi * rho_thick * hr_thick**2 * hz_thick
+
+    return {
+        "M_thin_disk": M_thin,
+        "M_thick_disk": M_thick,
+    }
+
+code_length = 1 * u.kpc
+code_mass = 1 * u.Msun
+G = 1
+code_time = 1 * u.Myr
+code_units = CodeUnits(code_length, code_mass, G=1, unit_time = code_time )  
+
+config = SimulationConfig(N_particles = 1000, 
+                          return_snapshots = True, 
+                          num_snapshots = 1000, 
+                          num_timesteps = 1000, 
+                          external_accelerations=(TRIAXIAL_NFW_POTENTIAL, THICK_MN3_DISK, THIN_MN3_DISK, PSP_POTENTIAL), 
+                          acceleration_scheme = DIRECT_ACC_MATRIX,
+                          softening = (0.1 * u.pc).to(code_units.code_length).value,) #default values
 
 
-@hydra.main(version_base=None, config_path="config", config_name="eval_config_new",)
+# Numeric conversion factors (Python floats, JAX-safe in traced code)
+MSUN_TO_CODE_MASS = float(u.Msun.to(code_units.code_mass))
+KPC_TO_CODE_LENGTH = float(u.kpc.to(code_units.code_length))
+CODE_VEL_TO_KMS = float(code_units.code_velocity.to(u.km / u.s))
+
+
+def s(x):
+    """Squeeze array params to scalars for JAX grad compatibility."""
+    return jnp.squeeze(x)
+# Fix 1: never mutate the input dict — use fixed bulge constants separately
+BULGE_M     = 4501365375.06545 * MSUN_TO_CODE_MASS
+BULGE_ALPHA = 1.8
+BULGE_RC    = 1.9 * KPC_TO_CODE_LENGTH
+
+def construct_params_from_dict(p):
+    """Build SimulationParams from a flat dict of JAX scalars. Does NOT mutate p."""
+    disk_masses = disk_masses_from_params(p)
+    return SimulationParams(
+        t_end = (4 * u.Gyr).to(code_units.code_time).value,
+        Plummer_params= PlummerParams(
+            Mtot=(2.5e4 * u.Msun).to(code_units.code_mass).value,
+            a=(8 * u.pc).to(code_units.code_length).value
+        ),
+        PSP_params= PSPParams(
+            M     = BULGE_M,        # fixed constant, not from p
+            alpha = BULGE_ALPHA,
+            r_c   = BULGE_RC,
+        ),
+        TriaxialNFW_params= TriaxialNFWParams(
+            Mvir = s(p['m_Triaxial_halo']) * MSUN_TO_CODE_MASS,
+            r_s  = s(p['r_Triaxial_halo']) * KPC_TO_CODE_LENGTH,
+            q1   = 1.0,
+            q2   = s(p['q2_Triaxial_halo'])
+        ),
+        ThinMN3Disk_params= ThinMN3DiskParams(
+            M  = s(disk_masses['M_thin_disk']) * MSUN_TO_CODE_MASS,
+            hr = s(p['hr_thin_disk']) * KPC_TO_CODE_LENGTH,
+            hz = s(p['hz_thin_disk']) * KPC_TO_CODE_LENGTH
+        ),
+        ThickMN3Disk_params= ThickMN3DiskParams(
+            M  = s(disk_masses['M_thick_disk']) * MSUN_TO_CODE_MASS,
+            hr = s(p['hr_thick_disk']) * KPC_TO_CODE_LENGTH,
+            hz = s(p['hz_thick_disk']) * KPC_TO_CODE_LENGTH
+        ),
+        G=code_units.G,
+    )
+
+
+@partial(jax.jit, static_argnames=['config'])
+def circular_velocity_at_xyz(xyz: jnp.ndarray,
+                              config: SimulationConfig,
+                              p: dict) -> jnp.ndarray:
+    """
+    Compute the local circular velocity at arbitrary (x, y, z) positions.
+
+    Uses the general formula:
+        v_circ = sqrt(r * |dPhi/dr|) = sqrt(r * |∇Φ · r̂|)
+
+    where r = ||xyz|| and r̂ = xyz / r.
+
+    Args:
+        xyz: array of shape (N, 3) — positions in code units
+        config: SimulationConfig (static)
+        params: SimulationParams (differentiable)
+
+    Returns:
+        v_circ: array of shape (N,)
+    """
+    params = construct_params_from_dict(p)
+    xyz = jnp.atleast_2d(xyz)           # (N, 3)
+    n = xyz.shape[0]
+
+    # Build state (N, 2, 3) with zero velocities
+    state = jnp.stack([xyz, jnp.zeros_like(xyz)], axis=1)
+
+    # acc = -∇Φ, shape (N, 3)
+    acc = combined_external_acceleration_vmpa_switch(state, config, params, return_potential=False)
+
+    # r and r̂
+    r = jnp.linalg.norm(xyz, axis=-1)          # (N,)
+    r_hat = xyz / r[:, None]                    # (N, 3)
+
+    # dPhi/dr = ∇Φ · r̂ = -acc · r̂
+    dPhi_dr = -jnp.sum(acc * r_hat, axis=-1)   # (N,)
+
+    # return jnp.sqrt(r * jnp.abs(dPhi_dr)) * CODE_VEL_TO_KMS
+    return jnp.sqrt(r * jnp.abs(dPhi_dr)) 
+
+
+@partial(jax.jit, static_argnames=['config', 'func'])
+def vcirc_func(xyz: jnp.ndarray,
+               config: SimulationConfig,
+               p: dict,
+               func=lambda vc: vc) -> jnp.ndarray:
+    """
+    Evaluate an arbitrary scalar function of the circular velocity at positions xyz.
+
+    Args:
+        xyz: array of shape (N, 3) — positions in code units
+        config: static config
+        params: differentiable params
+        func: callable applied to v_circ array — should return a scalar for grad
+
+    Returns:
+        func(v_circ(xyz))
+    """
+    vc = circular_velocity_at_xyz(xyz, config, p) 
+    return func(vc)
+
+@hydra.main(version_base=None, config_path="config", config_name="eval_config_new_constrain",)
 def main(cfg: EvalConfig):
 
     print(cfg)
@@ -200,6 +371,40 @@ def main(cfg: EvalConfig):
 
     test_data[cfg.sim_data] = test_data[cfg.sim_data].reshape(-1, test_data[cfg.sim_data].shape[-2], test_data[cfg.sim_data].shape[-1])
     test_data['j'] = test_data['j'].reshape(-1, 1)
+
+    radial_positions = jnp.linspace(5, 15, 38)  # (38,) kpc
+
+    # xyz shape: (38, 3) — all positions at once, no vmap needed over positions
+    xyz_batch = jnp.stack([
+        radial_positions,
+        jnp.zeros_like(radial_positions),
+        jnp.zeros_like(radial_positions)
+    ], axis=-1)  # (38, 3)
+
+    def compute_vcirc_single_sample(params_dict):
+        """
+        Compute v_circ (km/s) for ONE sample across all radial positions.
+        
+        Args:
+            params_dict: flat dict of scalar JAX arrays (one sample's parameters)
+        Returns:
+            v_circ: shape (38,) in km/s
+        """
+        # circular_velocity_at_xyz already handles (N, 3) — no vmap needed here
+        return circular_velocity_at_xyz(xyz_batch, config, params_dict)
+
+    # vmap ONLY over the sample/batch dimension
+    vmap_vcirc = jax.vmap(compute_vcirc_single_sample)
+
+    # test_data[k] shape: (N_samples,) after [:, 0] slicing
+    vel_circ_true = vmap_vcirc({k: test_data[k][:, 0] for k in cfg.parameters_global})
+    # shape: (N_samples, 38)
+
+    print('Radial positions (kpc):', radial_positions)
+    print('True circular velocities (km/s), shape:', vel_circ_true.shape)
+    print('First sample v_circ:', vel_circ_true[0])
+
+
     print('Test data sim shape before augmentation: ', test_data[cfg.sim_data].shape)
     for aug in augmentations:
         print(f"Applying augmentation: {aug.__name__}")
@@ -258,21 +463,202 @@ def main(cfg: EvalConfig):
         "max_steps": cfg.max_steps,
         })
     
-    def constraint(z):
-        params = workflow_global.approximator.standardize_layers["inference_variables"](z, forward=False)
-        
-        
-        return a1
+    # Precompute v_circ for ALL test samples: (N_test, 38)
+    test_data = {k: test_data[k][:5] for k in test_data.keys()}  # TEMP: use only 10 samples for quick testing
+    vel_circ_true = vmap_vcirc({k: test_data[k][:, 0] for k in cfg.parameters_global})
+    print('True circular velocities shape:', vel_circ_true.shape)  # (N_test, 38)
 
-         
-    global_posterior = workflow_global.compositional_sample(
-                        num_samples=cfg.n_samples,
-                        conditions={cfg.sim_data: test_data[cfg.sim_data], 
-                                    "j": test_data["j"]},
-                        compute_prior_score=prior_global_score,
-                        batch_size = cfg.batch_size,
-                        kwargs={'attention_mask': test_data['attention_mask']},
-                        )
+    all_posteriors = []
+    N_test = vel_circ_true.shape[0]
+
+    # for j in range(N_test):
+    #     print(f"\n--- Test sample {j+1}/{N_test} ---")
+
+    #     # Fixed reference for this sample: (38,)
+    #     vel_circ_j = vel_circ_true[j]   # (38,)
+
+    #     std_layer = workflow_global.approximator.standardize_layers["inference_variables"]
+
+    #     def c_ineq_raw(z, vel_circ_ref=vel_circ_j, tol=0.3):
+    #         # z is in standardized inference-variable space
+    #         params = std_layer(z, forward=True)
+    #         print("cfg.parameters_global =", cfg.parameters_global)
+    #         print("params shape =", params.shape)
+    #         parameters_dict = {k: params[:, i] for i, k in enumerate(cfg.parameters_global)}
+    #         jax.debug.print('params in c_ineq_raw: {parameters_dict}', parameters_dict={k: parameters_dict[k][:10] for k in cfg.parameters_global})
+    #         jax.debug.print('true params for sample {j}: {true_params}', j=j, true_params={k: test_data[k][j, 0] for k in cfg.parameters_global})
+
+    #         vel_circ_pred = jax.vmap(
+    #             lambda p: circular_velocity_at_xyz(xyz_batch, config, p)
+    #         )(parameters_dict)  # (B, 38)
+
+    #         vel_circ_pred = jnp.nan_to_num(vel_circ_pred, nan=0.0, posinf=0.0, neginf=0.0)
+    #         # jax.debug.print("vel_circ_pred={vel_circ_pred}, vel_circ_ref={vel_circ_ref}", vel_circ_pred=vel_circ_pred, vel_circ_ref=vel_circ_ref)
+
+    #         rel_dev = (vel_circ_pred - vel_circ_ref[None, :]) / (jnp.abs(vel_circ_ref[None, :]) + 1e-6)
+    #         abs_rel = jnp.sqrt(rel_dev**2 + 1e-8)
+
+    #         # per-sample inequality: should be < 0 when feasible
+    #         c_per_sample = jnp.mean(abs_rel - tol, axis=-1)  # (B,)
+    #         # jax.debug.print("c_ineq_raw: vel_circ_pred={vel_circ_pred}, rel_dev={rel_dev}, abs_rel={abs_rel}, c_per_sample={c_per_sample}",
+    #         #                 vel_circ_pred=vel_circ_pred, rel_dev=rel_dev, abs_rel=abs_rel, c_per_sample=c_per_sample)  
+    #         return c_per_sample
+
+    #     def mild_scaling_function(t):
+    #         # much milder than default alpha^2/sigma^2
+    #         return keras.ops.clip(0.05 * (1.0 - t), 1e-3, 0.05)
+  
+
+
+    #     # Conditions for this single test sample — add batch dim back for the model
+    #     conditions_j = {
+    #         cfg.sim_data: test_data[cfg.sim_data][j:j+1],   # (1, n_streams, n_stars, features)
+    #         "j": test_data["j"][j:j+1],                      # (1, n_streams, 1)
+    #     }
+    #     kwargs_j = {"attention_mask": test_data["attention_mask"][j:j+1]}
+
+    #     posterior_j = workflow_global.compositional_sample(
+    #         num_samples=cfg.n_samples,
+    #         conditions=conditions_j,
+    #         compute_prior_score=prior_global_score,
+    #         batch_size=1,
+    #         kwargs=kwargs_j,
+    #         guidance_constraints=dict(
+    #             constraints=c_ineq_raw,          # raw c(x), no softplus here
+    #             guidance_strength=1e-3,          # start small (1e-4..1e-2 sweep)
+    #             scaling_function=mild_scaling_function,
+    #             reduce="sum",
+    #         ),
+    #     )
+    #     # quick NaN/Inf check
+    #     for kk, vv in posterior_j.items():
+    #         arr = np.asarray(vv)
+    #         if not np.isfinite(arr).all():
+    #             print(f"[WARN] Non-finite posterior in key={kk}:",
+    #                   "nan=", np.isnan(arr).any(), "inf=", np.isinf(arr).any())
+    #     all_posteriors.append(posterior_j)
+    # global_posterior = {
+    #     k: np.stack([np.squeeze(p[k], axis=0) for p in all_posteriors], axis=0)
+    #     for k in all_posteriors[0].keys()
+    # }
+    # # (1, 1000, 1) --squeeze axis=0--> (1000, 1) --stack 100x--> (100, 1000, 1) ✓
+    # print("Final posterior shape (first key):",
+    #     global_posterior[list(global_posterior.keys())[0]].shape)
+
+
+
+    # def constrain(z, ):
+    #     print(z.shape)
+    #     params = workflow_global.approximator.standardize_layers["inference_variables"](z, forward=False)
+        
+    #     parameters_dict = {k: params[:, i] for i, k in enumerate(cfg.parameters_global)}
+    #     jax.debug.print('params in c_ineq_raw: {parameters_dict}', parameters_dict={k: parameters_dict[k][:10] for k in cfg.parameters_global})
+    #     jax.debug.print('true params for sample: {true_params}', true_params={k: test_data[k][:, 0] for k in cfg.parameters_global})
+    #     quit()
+    #     return params
+
+
+
+
+    # global_posterior = workflow_global.compositional_sample(
+    #                     num_samples=cfg.n_samples,
+    #                     conditions={cfg.sim_data: test_data[cfg.sim_data], 
+    #                                 "j": test_data["j"]},
+    #                     compute_prior_score=prior_global_score,
+    #                     batch_size = cfg.batch_size,
+    #                     kwargs={'attention_mask': test_data['attention_mask']},
+    #                     guidance_constraints=dict(constraints=constrain)
+    #                     )
+    
+    # Use only a subset if desired
+    # test_data = {k: test_data[k][:5] for k in test_data.keys()}
+
+    # Split test set into chunks
+    # ...existing code...
+
+    eval_chunk_size = 5
+    all_posteriors = []
+    N_test = test_data[cfg.sim_data].shape[0]
+
+    for start in range(0, N_test, eval_chunk_size):
+        end = min(start + eval_chunk_size, N_test)
+        print(f"\n--- Sampling batch {start}:{end} ---")
+
+        # chunk-specific conditions
+        conditions_batch = {
+            cfg.sim_data: test_data[cfg.sim_data][start:end],
+            "j": test_data["j"][start:end],
+        }
+        kwargs_batch = {
+            "attention_mask": test_data["attention_mask"][start:end]
+        }
+
+        # chunk-specific reference circular velocities
+        vel_circ_chunk = vel_circ_true[start:end]  # (chunk_size, 38)
+        std_layer = workflow_global.approximator.standardize_layers["inference_variables"]
+
+        def c_ineq_raw(z, vel_circ_ref=vel_circ_chunk, tol=0.003):
+            # z: (B, n_params) where B = batch_size * n_samples
+            params = std_layer(z, forward=True)
+            jax.debug.print('z: {z}', z=z,)
+            parameters_dict = {k: params[:, i] for i, k in enumerate(cfg.parameters_global)}
+            jax.debug.print('params in c_ineq_raw: {parameters_dict}', parameters_dict={k: parameters_dict[k][:10] for k in cfg.parameters_global})
+    #         jax.debug.print('true params for sample {j}: {true_params}', j=j, true_params={k: test_data[k][j, 0] for k in cfg.parameters_global})
+
+            vel_circ_pred = jax.vmap(
+                lambda p: circular_velocity_at_xyz(xyz_batch, config, p)
+            )(parameters_dict)  # (B, 38)
+
+            vel_circ_pred = jnp.nan_to_num(vel_circ_pred, nan=0.0, posinf=0.0, neginf=0.0)
+
+            # vel_circ_ref: (chunk_size, 38)
+            # vel_circ_pred: (B, 38) where B = chunk_size * n_samples_per_chunk
+            # Reshape vel_circ_ref to (chunk_size, 1, 38) then broadcast to (chunk_size, n_samples_per_chunk, 38)
+            chunk_size = vel_circ_ref.shape[0]
+            n_samples_per_chunk = z.shape[0] // chunk_size
+            
+            vel_circ_ref_expanded = jnp.repeat(vel_circ_ref, n_samples_per_chunk, axis=0)  # (B, 38)
+            
+            # Now both have shape (B, 38)
+            rel_dev = (vel_circ_pred - vel_circ_ref_expanded) / (jnp.abs(vel_circ_ref_expanded) + 1e-6)
+            abs_rel = jnp.sqrt(rel_dev**2 + 1e-8)
+
+            # one scalar per posterior sample
+            c_per_sample = jnp.mean(abs_rel - tol, axis=-1)  # (B,)
+            return c_per_sample
+
+        def mild_scaling_function(t):
+            return keras.ops.clip(0.05 * (1.0 - t), 1e-3, 0.05)
+
+        posterior_batch = workflow_global.compositional_sample(
+            num_samples=cfg.n_samples,
+            conditions=conditions_batch,
+            compute_prior_score=prior_global_score,
+            batch_size=(end - start),
+            kwargs=kwargs_batch,
+            guidance_constraints=dict(
+                constraints=c_ineq_raw,
+                guidance_strength=0.0,
+                # scaling_function=mild_scaling_function,
+                # reduce="sum",
+            ),
+        )
+
+        all_posteriors.append(posterior_batch)
+
+    global_posterior = {
+        k: np.concatenate([p[k] for p in all_posteriors], axis=0)
+        for k in all_posteriors[0].keys()
+}
+
+
+
+    print("global_posterior shapes:")
+    for k, v in global_posterior.items():
+        print(k, v.shape)
+    
+        
+    # → (N_test, n_samples)
     os.makedirs(name= os.path.join(cfg.base_dir, cfg.results_dir), exist_ok=True)
     ps = global_posterior.copy()
     if cfg.use_streamax_simulator:
