@@ -30,19 +30,20 @@ def clear_gpu_memory():
 def objective(trial, cfg):
     # Clear memory at the start of each trial
     clear_gpu_memory()
-    results_dir = f'./data/hyperparameter_tuning/gala/new_aug/model_{trial.number}/'
+    results_dir = f'./data/hyperparameter_tuning/gala/new_aug_bigheads/model_{trial.number}/'
     os.makedirs(results_dir, exist_ok=True)
 
 
     
     summary_dim = trial.suggest_int("SetTransformer_summary_dim", 32, 128)
-    embed_dims = trial.suggest_int("SetTransformer_embed_dims", 32, 128)
-    num_heads = trial.suggest_int("SetTransformer_num_heads", 1, 3)
+    num_heads = trial.suggest_int("SetTransformer_num_heads", 4, 8)
+    embed_dim_multiplier = trial.suggest_int("SetTransformer_embed_dim_multiplier", 4, 16)
+    embed_dims = embed_dim_multiplier * num_heads  # always divisible, range ~16-128
     mlp_depths = trial.suggest_int("SetTransformer_mlp_depths", 2, 6) 
     mlp_widths = trial.suggest_int("SetTransformer_mlp_widths", 32, 128)
 
     inference_mlp_depth = trial.suggest_int("inference_mlp_depth", 2, 8)
-    inference_mlp_width = trial.suggest_int("inference_mlp_width", 32, 256)
+    inference_mlp_width = trial.suggest_int("inference_mlp_width", 32, 256, step=16)
     time_embedding_dim = trial.suggest_int("inference_time_embedding_dim", 16, 64, step=2)
 
     # --- Validate hyperparameters before building the model ---
@@ -153,6 +154,7 @@ def objective(trial, cfg):
             variable_names=param_names_global,
         )
         workflow_global.approximator.save(os.path.join(results_dir, "global_model.keras"))
+        workflow_global.approximator.save_weights(os.path.join(results_dir, "global_model.weights.h5"))
         #calibration plot with diff
         fig = bf.diagnostics.calibration_ecdf(
             estimates=global_posterior,
@@ -269,7 +271,7 @@ if __name__ == "__main__":
     
 
     test_data = dict(np.load(train_data_path, allow_pickle=True))
-    test_data = {k: test_data[k][-1_000:] for k in test_data.keys()}
+    test_data = {k: test_data[k][-6_000:] for k in test_data.keys()}
     for aug in augmentations:
         test_data = aug(test_data)
     for k in test_data.keys():
@@ -279,9 +281,9 @@ if __name__ == "__main__":
         
     print("Loaded config:", cfg)
     study_name = 'study_DiffusionModel'  # Unique identifier of the study.
-    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/gala/new_aug/optuna_diffusionmodel_gala_cutNGC3201.log"))
+    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/gala/new_aug_bigheads/optuna_diffusionmodel_gala_cutNGC3201.log"))
     study = optuna.create_study(study_name=study_name, storage=storage_name, directions=['minimize', 'minimize'], load_if_exists=True)
     study.optimize(
         lambda trial: objective(trial, cfg),
-        callbacks=[MaxTrialsCallback(200, states=(TrialState.COMPLETE, TrialState.FAIL))],
+        callbacks=[MaxTrialsCallback(300, states=(TrialState.COMPLETE, TrialState.FAIL))],
     )
