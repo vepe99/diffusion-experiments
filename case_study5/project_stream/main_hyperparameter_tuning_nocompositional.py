@@ -28,6 +28,7 @@ def clear_gpu_memory():
 
 
 def objective(trial, cfg):
+    augmentations_class.key = jax.random.PRNGKey(42)
     # Clear memory at the start of each trial
     clear_gpu_memory()
     results_dir = f'./data/hyperparameter_tuning/gala/new_aug_bigheads/model_{trial.number}/'

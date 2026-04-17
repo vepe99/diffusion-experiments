@@ -1,8 +1,8 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_gala/"
-model_dir: "hyperparameter_tuning/gala/new_aug/model_1" 
+model_dir: "hyperparameter_tuning/gala/new_aug_bigheads/model_0" 
 multistream_n_simulation: 100
-results_dir: "hyperparameter_tuning/gala/new_aug/model_1/nocomposition_100test"
+results_dir: "hyperparameter_tuning/gala/new_aug_bigheads/model_0/nocomposition_100test"
 use_streamax_simulator: False
 
 #training hyperparameters
@@ -12,13 +12,13 @@ steps: "adaptive"
 max_steps: 1000
 mini_batch_size: null
 batch_size: 30
-inverse_compositional_bridge_d1: 6
+inverse_compositional_bridge_d1: 5.0
 noise_schedule: null
 # noise_schedule: 
-  # min_log_snr: -15
-  # max_log_snr: 15
-  # shift: 5.0
-  # weighting: "likelihood_weighting"
+#   min_log_snr: -15
+#   max_log_snr: 15
+#   shift: 3.0
+#   weighting: "likelihood_weighting"
 verbose: 2
 
 #nmes of parameters
@@ -151,14 +151,14 @@ error_keys:
 #global model network:
 global_model:
   dropout: 0.1
-  summary_dim: 116
-  embed_dims: 87
-  num_heads: 3
-  mlp_depths: 2
-  mlp_widths: 120
-  inference_mlp_depth: 8
-  inference_mlp_width: 113
-  inference_time_embedding_dim: 46
+  summary_dim: 77
+  embed_dims: 48
+  num_heads: 8
+  mlp_depths: 3
+  mlp_widths: 85
+  inference_mlp_depth: 5
+  inference_mlp_width: 128
+  inference_time_embedding_dim: 52
 
 #local model network:
 local_model:
