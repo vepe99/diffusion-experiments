@@ -45,6 +45,7 @@ class SimulatorConfig:
     n_simulations: Union[int, list[int]]
     batch_size: int
     use_rotated_halo: bool
+    use_SCF: Optional[bool]
     
 
     base_dir: str
@@ -76,5 +77,7 @@ class SimulatorConfig:
     hydra: Optional[Any] = field(default=None)
 
     use_flattened_halo: Optional[bool] = None #only for galax
+
+
 
     

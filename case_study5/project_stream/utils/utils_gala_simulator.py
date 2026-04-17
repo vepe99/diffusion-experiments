@@ -8,6 +8,8 @@ import gala.dynamics as gd
 import gala.potential as gp
 from gala.units import galactic
 from gala.dynamics import mockstream as ms
+from gala.potential import scf
+
 
 from scipy import special
 from scipy.spatial.transform import Rotation
@@ -196,3 +198,70 @@ def _run_gala_single(args):
 
 
 
+
+
+def disk_density(x, y, z, rho0, hr, hz):
+    """Density of a double exponential disk."""
+    r = np.sqrt(x**2 + y**2)
+    return (rho0/(2*hz)) * np.exp(-(r/hr)-np.abs(z)/hz)
+
+def halo_density(s, rho0, a, alpha, beta, q):
+    return rho0 * (s/a)**(-alpha) * (1 + (s/a))**(alpha - beta)
+
+def halo_density_flattened(x, y, z, rho0, a, alpha, beta, q):
+    s = np.sqrt(x**2 + y**2 + (z/q)**2)
+    return halo_density(s, rho0, a, alpha, beta, q)
+
+def bulge_density(s, rho0, h, a, alpha):
+    return rho0 * ((1 + (s/h))**(-alpha)) * np.exp(- (s/a)**2)
+
+def bulge_density_flattened(x, y, z, rho0, h, a, alpha, q):
+    s = np.sqrt(x**2 + y**2 + (z/q)**2)
+    return bulge_density(s, rho0, h, a, alpha)
+
+
+def simulate_stream_gala_SCF(parameters_dict, config, code_units, random_seed:int):
+    '''
+    Docstring for simulate_stream_galax
+    code_units it is not used 
+    
+    :param parameters_dict: Description
+    :param config: Description
+    :type config: SimulationConfig
+    :param code_units: Description
+    :type code_units: CodeUnits
+    :param random_seed: Description
+    :type random_seed: int
+    '''
+
+    pot = gp.CCompositePotential()
+
+
+
+
+
+
+
+    w0 = coord.Galactocentric(x=parameters_dict['x'][0]*u.kpc, y=parameters_dict['y'][0]*u.kpc, z=parameters_dict['z'][0]*u.kpc,
+                             v_x=parameters_dict['vx'][0]*u.km/u.s, v_y=parameters_dict['vy'][0]*u.km/u.s, v_z=parameters_dict['vz'][0]*u.km/u.s)
+    w0 = gd.PhaseSpacePosition(w0)
+
+    prog_mass = parameters_dict['m_progenitor'][0] * u.Msun
+    b_prog = parameters_dict['a_progenitor'][0] * u.pc
+    prog_pot = gp.PlummerPotential(m=prog_mass, b=b_prog, units=galactic)
+    if config.df_type == "ChenStreamDF":
+        df = gd.ChenStreamDF()
+    elif config.df_type == "FardalStreamDF":
+        df = gd.FardalStreamDF()
+    if config.use_prog_potential:
+        gen = gd.MockStreamGenerator(df, pot, progenitor_potential=prog_pot)
+    else:
+        gen = gd.MockStreamGenerator(df, pot)
+    stream, _ = gen.run(w0, prog_mass,
+                        # n_particles=config.N_particles,
+                        dt=-(parameters_dict['t_end']*u.Gyr.to(u.Myr)/config.n_timesteps), 
+                        n_steps=config.n_timesteps, 
+                        progress=True
+                        )
+    return np.array([stream.x.to(u.kpc).value, stream.y.to(u.kpc).value,stream.z.to(u.kpc).value, 
+                     stream.vel._d_x.to(u.km/u.s).value, stream.vel._d_y.to(u.km/u.s).value, stream.vel._d_z.to(u.km/u.s).value]).T

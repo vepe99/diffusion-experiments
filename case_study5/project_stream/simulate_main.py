@@ -103,9 +103,11 @@ def main(cfg: SimulatorConfig):
 
     elif cfg.simulator == "gala":
         from joblib import Parallel, delayed
-        from utils.utils_gala_simulator import simulate_stream_gala, simulate_stream_gala_Rotated, _run_gala_single
+        from utils.utils_gala_simulator import simulate_stream_gala, simulate_stream_gala_Rotated, _run_gala_single, simulate_stream_gala_SCF
         if cfg.use_rotated_halo:
             simulate_stream_gala_fn = simulate_stream_gala_Rotated
+        elif cfg.use_SCF:
+            simulate_stream_gala_fn = simulate_stream_gala_SCF
         else:
             simulate_stream_gala_fn = simulate_stream_gala
         config = cfg.gala_config

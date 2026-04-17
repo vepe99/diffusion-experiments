@@ -1,14 +1,13 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams"
-data_dir: "data_galax_1e6/data_gala_SCF/fix_beta/"
-simulator: "gala" #odisseo, gala, galax, StreaMax
+data_dir: "data_galax_1e6/data_galax_newprior/data_3"
+simulator: "galaz" #odisseo, gala, galax, StreaMax
 n_simulations: [0, 100_000] #1
 # n_simulations: [66_000, 100_000] #3
 # n_simulations: [50_000, 100_000] #2
 # n_simulations: [0, 100_000] #3
 batch_size: 512
-use_rotated_halo: True #only for gala
-use_flattened_halo: False #only for galax
-use_SCF: True #only for gala
+use_rotated_halo: False #only for gala
+use_flattened_halo: True #only for galax
 
 parameters_global:
   - "a"
@@ -21,24 +20,58 @@ pretty_parameters_local:
   - "a"
 
 priors_global: #str for the type and a list of values for the parameters of the prior
+  #HALO TRIXIAL
+  m_Triaxial_halo:
+    type: uniform
+    prior_parameters: [5.e10, 1e13]
+  r_Triaxial_halo:
+    type: uniform
+    prior_parameters: [5.0, 100.0]
+  q1_Triaxial_halo:
+    type: identity
+    prior_parameters: [1.0]
+  q2_Triaxial_halo:
+    type: uniform
+    prior_parameters: [0.5, 1.5]
+  gamma_NFW_halo: #used only if use_flattened_halo is True
+    type: uniform
+    prior_parameters: [0.0, 1.80]
+
+  #HALO TRIAXIAL ROTATED
+  m_Triaxial_rotated_halo:
+    type: uniform
+    prior_parameters: [1.e11, 1e13]
+  r_Triaxial_rotated_halo:
+    type: uniform
+    prior_parameters: [10.0, 25.0]
+  dirx_Triaxial_rotated_halo:
+    type: normal
+    prior_parameters: [0.0, 1.0]
+  diry_Triaxial_rotated_halo:
+    type: normal
+    prior_parameters: [0.0, 1.0]
+  dirz_Triaxial_rotated_halo:
+    type: normal
+    prior_parameters: [0.0, 1.0]
   #HALO TWOPOWER TRIAXIAL
   rho_TwoPowerTriaxial_halo:
     type: uniform
-    prior_parameters: [1.0e5, 1.5e8]
-  alpha_TwoPowerTriaxial_halo:
-    type: uniform
-    prior_parameters: [-2.0, 2.0]
+    prior_parameters: [1.e7, 1.5e8]
   a_TwoPowerTriaxial_halo:
     type: uniform
     prior_parameters: [1.0, 100.0]
-  beta_TwoPowerTriaxial_halo:
-    # type: uniform
-    # prior_parameters: [2.0, 6.0]
+  b_TwoPowerTriaxial_halo:
     type: identity
-    prior_parameters: [3.0]
-  q_TwoPowerTriaxial_halo:
+    prior_parameters: [1.0]
+  c_TwoPowerTriaxial_halo:
     type: uniform
-    prior_parameters: [0.3, 3.0]
+    prior_parameters: [0.0, 6.0]
+  alpha_TwoPowerTriaxial_halo:
+    type: uniform
+    prior_parameters: [0.0, 2.0]
+  beta_TwoPowerTriaxial_halo:
+    type: uniform
+    prior_parameters: [2.0, 6.0]
   #THIN AND THICK DISK
   rho_thin_disk:
     type: uniform
@@ -51,29 +84,60 @@ priors_global: #str for the type and a list of values for the parameters of the 
     prior_parameters: [0.3, 0.05]
   rho_thick_disk:
     type: uniform
-    prior_parameters: [1.0e5, 1.5e9]
+    prior_parameters: [0.0, 1.5e9]
   hr_thick_disk:
     type: normal
     prior_parameters: [2.0, 0.2]
   hz_thick_disk:
     type: normal
     prior_parameters: [0.9, 0.18]
-  #BULGE 
-  rho_bulge:
+  #Disk in MilkyWay2022
+  M_MN3ExpDisk:
+    type: identity
+    # prior_parameters: [11929250000.0, 190868000000.0] #0.25*4.7717e+10, 4*4.7717e+10
+    prior_parameters: [4.7717e+10]
+  r_MN3ExpDisk:
+    type: identity
+    # prior_parameters: [0.65, 10.4] #0.25*2.6, 4*2.6
+    prior_parameters: [2.6]
+  z_MN3ExpDisk:
     type: uniform
-    prior_parameters: [5.0e10, 14.0e10]
+    prior_parameters: [0.075, 1.2] #0.25*0.3, 4*0.3
+  #BULGE in MilkyWay2022
+  m_bulge_2022:
+    type: identity
+    prior_parameters: [5.0e9]
+  R_bulge_2022:
+    type: identity
+    prior_parameters: [1.0]
+  #NUCLEUS in MilkyWay2022
+  m_nucleus:
+    type: identity
+    prior_parameters: [1.8142e9]
+  R_nucleus:
+    type: identity
+    prior_parameters: [0.0688867]
+
+  #DISK in MW2014
+  m_disk_MW2014:
+    type: uniform
+    prior_parameters: [3.25e10, 13.0e10] #[6.5e10]  #[6.5e10/2, 6.5e10*2]
+  r_disk_MW2014:
+    type: uniform
+    prior_parameters: [1.5, 6.0] #[3.0]
+  z_disk_MW2014:
+    type: identity
+    prior_parameters: [0.28]
+  #BULGE in MW2014
+  m_bulge:
+    type: uniform
+    prior_parameters: [2250682687.532725, 9002730750.1309] #[4501365375.06545/2, 4501365375.06545*2] #[4501365375.06545]
   alpha_bulge:
     type: identity
     prior_parameters: [1.8]
-  a_bulge:
+  r_bulge:
     type: identity
-    prior_parameters: [2.1]
-  h_bulge:
-    type: identity
-    prior_parameters: [0.075]
-  q_bulge:
-    type: identity
-    prior_parameters: [0.5]
+    prior_parameters: [1.9]
 
 priors_local: #str for the type and a list of values for the parameters of the prior
   Pal5:
@@ -100,9 +164,11 @@ priors_local: #str for the type and a list of values for the parameters of the p
       prior_parameters: [20.6, 0.2]
     mu_ra_cosdec:
       type: normal
+      # prior_parameters: [-2.736, 0.128]
       prior_parameters: [-2.736, 0.064]
     mu_dec:
       type: normal
+      # prior_parameters: [-2.646, 0.128]
       prior_parameters: [-2.646, 0.064]
   NGC3201:
     m_progenitor:
@@ -128,9 +194,11 @@ priors_local: #str for the type and a list of values for the parameters of the p
       prior_parameters: [4.9, 0.11]
     mu_ra_cosdec:
       type: normal
+      # prior_parameters: [8.324, 0.088]
       prior_parameters: [8.324, 0.044]
     mu_dec:
       type: normal
+      # prior_parameters: [-1.991, 0.088]
       prior_parameters: [-1.991, 0.044]
   M68:
     m_progenitor:
@@ -156,9 +224,11 @@ priors_local: #str for the type and a list of values for the parameters of the p
       prior_parameters: [10.3, 0.52]
     mu_ra_cosdec:
       type: normal
+      # prior_parameters: [-2.752, 0.108]
       prior_parameters: [-2.752, 0.054]
     mu_dec:
       type: normal
+      # prior_parameters: [1.762, 0.106]
       prior_parameters: [1.762, 0.053]
 
 target_streams:
@@ -192,8 +262,8 @@ galax_config:
   n_timesteps: 1000
 
 gala_config:
-  df_type: "ChenStreamDF" #FardalStreamDF, ChenStreamDF, MockStreamGenerator
-  n_timesteps: 499
+  df_type: "FardalStreamDF" #FardalStreamDF, ChenStreamDF, MockStreamGenerator
+  n_timesteps: 199
   use_prog_potential: True
   n_workers: 40
   N_particles: 1000
