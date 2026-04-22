@@ -209,7 +209,7 @@ if __name__ == "__main__":
 
     with initialize_config_dir(version_base=None, config_dir=config_path):
         # 3. Compose: loads train_config.yaml, validated against TrainConfig schema
-        cfg = compose(config_name="train_config_new")
+        cfg = compose(config_name="train_config_local")
     
     base_dir =  '/export/data/vgiusepp/diffusion_experiments_test_new/diffusion-experiments/case_study5/project_stream/data/'
     data_dir = 'streams/data_gala/'
