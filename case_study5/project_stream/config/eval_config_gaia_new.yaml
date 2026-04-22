@@ -1,8 +1,8 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_gala/"
-model_dir: "hyperparameter_tuning/gala/new_aug_bigheads/model_0"
+model_dir: "hyperparameter_tuning/gala/new_aug_bigheads/model_77" #45 era per niente male
 multistream_n_simulation: 333
-results_dir: "hyperparameter_tuning/gala/new_aug_bigheads/model_0/"
+results_dir: "hyperparameter_tuning/gala/new_aug_bigheads/model_77/"
 use_streamax_simulator: True
 
 #training hyperparameters
@@ -146,13 +146,13 @@ augmentations:
 global_model:
   dropout: 0.1
   summary_dim: 77
-  embed_dims: 48
-  num_heads: 8
-  mlp_depths: 3
-  mlp_widths: 85
-  inference_mlp_depth: 5
-  inference_mlp_width: 128
-  inference_time_embedding_dim: 52
+  embed_dims: 105
+  num_heads: 7
+  mlp_depths: 5
+  mlp_widths: 121
+  inference_mlp_depth: 7
+  inference_mlp_width: 208
+  inference_time_embedding_dim: 58
 
 #local model network:
 local_model:

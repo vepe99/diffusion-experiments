@@ -1,18 +1,18 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_gala/"
-model_dir: "hyperparameter_tuning/gala/local/jonas/streamnomr_standardize/model_23"
-multistream_n_simulation: 100
-results_dir: "hyperparameter_tuning/gala/local/jonas/streamnomr_standardize/model_23/nocomposition_100test"
+model_dir: "hyperparameter_tuning/gala/local/jonas/streamnomr_standardize/model_2"
+multistream_n_simulation: 333
+results_dir: "hyperparameter_tuning/gala/local/jonas/streamnomr_standardize/model_2/gaia"
 use_streamax_simulator: True
 
 #training hyperparameters
-n_samples: 1_000
+n_samples: 50_000
 method: "two_step_adaptive"
 steps: "adaptive"
 max_steps: 1000
 mini_batch_size: null
-batch_size: 10
-inverse_compositional_bridge_d1: 6
+batch_size: 5000
+inverse_compositional_bridge_d1: 4.5
 noise_schedule: null
   # min_log_snr: -15
   # max_log_snr: 15
@@ -98,6 +98,7 @@ observed_n_stars:
 
 min_star_with_vlos:
   Pal5: 69
+  # NGC3201: 40
   NGC3201: 37
   M68: 29
 
@@ -128,23 +129,18 @@ gaia_id:
   M68: "Fjorm"
 
 augmentations:
-# Coordinate transforms
-- convert_distance_to_parallax
-# Observational selection
-- observational_window
-- observed_n_stars
-- compact_to_attended
-# Photometric augmentation
-- sample_magnitudes
-- sample_obs_error
-- apply_obs_error
-# v_los masking
-- mask_vlos
-# Feature concatenations
-- concatentate_sigma_error_to_sim_data
-- concatenate_magnitudes_to_sim_data
-- concatenate_vlos_mask_to_sim_data
-- concatenate_j_to_sim_data
+  # - "remove_los_velocity"
+  - "convert_distance_to_parallax" #we already have parallax in data, but we have to keep it even if we do not use it
+  - "sample_magnitudes" #we need to keep it even if we do not use it
+  - "observational_window"
+  - "observed_n_stars"
+  - "mask_vlos"
+  - "sample_obs_error"
+  # - "flip_dirz"
+  - "concatentate_sigma_error_to_sim_data"
+  - "concatenate_magnitudes_to_sim_data"
+  - "concatenate_vlos_mask_to_sim_data"
+  - "concatenate_j_to_sim_data"
 
 #global model network:
 global_model:

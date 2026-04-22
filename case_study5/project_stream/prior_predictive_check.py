@@ -21,38 +21,6 @@ import corner
 cs = ConfigStore.instance()
 cs.store(name="eval_config", node=EvalConfig)
 
-"""
-prior_predictive_check.py  –  corner-library version
-──────────────────────────────────────────────────────
-Uses `corner.corner` for the training-prior density, then overlays Gaia
-observations as scatter / dashed histograms on the same axes.
-
-Quick usage
------------
-# Default: dims 0-4 (no v_los), all three streams
-prior_predictive_check(training_set, obs_data, path_to_save)
-
-# Include v_los
-prior_predictive_check(training_set, obs_data, path_to_save,
-                       dims_to_show=[0, 1, 2, 3, 4, 5])
-
-# Only RA/Dec, Pal5 only
-prior_predictive_check(training_set, obs_data, path_to_save,
-                       dims_to_show=[0, 1], stream_indices=[0])
-"""
-
-# from __future__ import annotations
-
-# import os
-# from typing import Optional
-
-# import corner
-# import matplotlib
-# matplotlib.use("Agg")
-# import matplotlib.pyplot as plt
-# import numpy as np
-# from matplotlib.lines import Line2D
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Constants
 # ─────────────────────────────────────────────────────────────────────────────
@@ -374,13 +342,478 @@ def prior_predictive_check(
         plt.close(fig)
         print(f"  → saved {out_path}")
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Imports needed for the new function (add at the top of your file)
+# ─────────────────────────────────────────────────────────────────────────────
+import astropy.units as u
+import gala.potential as gp
+from gala.units import galactic
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helper: build potential and return v_circ at r_vc
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _build_potential_and_vcirc(params: dict, r_vc_kpc: float = 8.0) -> float:
+    """
+    Instantiate a CCompositePotential from a single-row parameter dict
+    and return the circular velocity (km/s) at r_vc_kpc.
+
+    Missing keys fall back to the defaults listed below, so you can safely
+    comment out any parameters you don't want to vary.
+
+    Defaults
+    --------
+    q1_Triaxial_halo  → 1.0   (spherical b-axis)
+    q2_Triaxial_halo  → 1.0   (spherical c-axis)
+    m_bulge / r_bulge / alpha_bulge → bulge component omitted entirely
+    """
+    def _s(key, default=None):
+        """Scalar value from a possibly length-1 array; uses default if key absent."""
+        if key not in params:
+            if default is not None:
+                return float(default)
+            raise KeyError(
+                f"_build_potential_and_vcirc: required key '{key}' missing from params "
+                f"and no default is defined."
+            )
+        return float(np.asarray(params[key]).flat[0])
+
+    pot = gp.CCompositePotential()
+
+    pot["halo"] = gp.NFWPotential(
+        m   = _s("m_Triaxial_halo"),
+        r_s = _s("r_Triaxial_halo"),
+        a   = 1.0,
+        b   = _s("q1_Triaxial_halo", default=1.0),   # ← default: spherical
+        c   = _s("q2_Triaxial_halo", default=1.0),   # ← default: spherical
+        units=galactic,
+    )
+
+    rho_thin = _s("rho_thin_disk")
+    hr_thin  = _s("hr_thin_disk")
+    hz_thin  = _s("hz_thin_disk")
+    pot["thin_disk"] = gp.MN3ExponentialDiskPotential(
+        m    = 4 * np.pi * rho_thin * hr_thin**2 * hz_thin,
+        h_R  = hr_thin,
+        h_z  = hz_thin,
+        units=galactic,
+        positive_density=True,
+    )
+
+    rho_thick = _s("rho_thick_disk")
+    hr_thick  = _s("hr_thick_disk")
+    hz_thick  = _s("hz_thick_disk")
+    pot["thick_disk"] = gp.MN3ExponentialDiskPotential(
+        m    = 4 * np.pi * rho_thick * hr_thick**2 * hz_thick,
+        h_R  = hr_thick,
+        h_z  = hz_thick,
+        units=galactic,
+        positive_density=True,
+    )
+
+    # Bulge is optional — only added when all three keys are present
+    bulge_keys = ("m_bulge", "r_bulge", "alpha_bulge")
+    if all(k in params for k in bulge_keys):
+        pot["bulge"] = gp.PowerLawCutoffPotential(
+            m     = _s("m_bulge"),
+            r_c   = _s("r_bulge"),
+            alpha = _s("alpha_bulge"),
+            units =galactic,
+        )
+
+    vc = pot.circular_velocity(q=[r_vc_kpc, 0.0, 0.0] * u.kpc)
+    return float(vc.to(u.km / u.s).value.flat[0])
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main plotting function
+# ─────────────────────────────────────────────────────────────────────────────
+
+# def prior_parameters_corner(
+#     parameters: dict[str, np.ndarray],
+#     path_to_save: str,
+#     # ── v_circ constraint ──────────────────────────────────────────────────
+#     vc_target_kms: float = 220.0,
+#     vc_tolerance:  float = 0.10,        # fractional; 0.10 → ±10 %
+#     r_vc_kpc:      float = 8.0,
+#     # ── which parameters to display ───────────────────────────────────────
+#     param_keys: Optional[list[str]] = None,
+#     param_labels: Optional[dict[str, str]] = None,
+#     # ── aesthetics ────────────────────────────────────────────────────────
+#     bins:             int   = 40,
+#     smooth:           float = 0.5,
+#     figsize_per_cell: float = 2.2,
+#     scatter_size:     float = 8.0,
+#     scatter_alpha:    float = 0.60,
+#     prior_color:      str   = "#aec7e8",   # light blue  – all prior samples
+#     vc_color:         str   = "#d62728",   # red         – v_circ-consistent
+#     percentile_range: tuple[float, float] = (0.5, 99.5),
+#     dpi:              int   = 150,
+#     filename:         str   = "prior_parameters_corner.png",
+#     verbose:          bool  = True,
+# ) -> None:
+#     """
+#     Corner plot of the prior parameter distribution, with a highlighted
+#     subset whose circular velocity at ``r_vc_kpc`` lies within
+#     ``vc_tolerance`` of ``vc_target_kms``.
+
+#     Parameters
+#     ----------
+#     parameters : dict[str, np.ndarray]
+#         Flat dict mapping parameter names → 1-D arrays of length N_samples.
+#         Expected keys (must all be present for the v_circ calculation):
+#             m_Triaxial_halo, r_Triaxial_halo, q1_Triaxial_halo, q2_Triaxial_halo,
+#             rho_thin_disk, hr_thin_disk, hz_thin_disk,
+#             rho_thick_disk, hr_thick_disk, hz_thick_disk,
+#             m_bulge, r_bulge, alpha_bulge
+#     param_keys : list[str], optional
+#         Subset of parameter names to include in the corner axes.
+#         Defaults to all keys in *parameters*.
+#     param_labels : dict[str, str], optional
+#         Mapping from key → axis label.  Missing keys fall back to the key name.
+#     vc_target_kms : float
+#         Target circular velocity in km/s  (default 220).
+#     vc_tolerance : float
+#         Fractional half-width of the accepted band  (default 0.10 → ±10 %).
+#     r_vc_kpc : float
+#         Galactocentric radius for the v_circ evaluation  (default 8 kpc).
+#     verbose : bool
+#         Print per-sample progress and summary statistics.
+#     """
+#     os.makedirs(path_to_save, exist_ok=True)
+
+#     # ── choose which parameters to display ────────────────────────────────
+#     if param_keys is None:
+#         param_keys = list(parameters.keys())
+#     if param_labels is None:
+#         param_labels = {}
+
+#     labels    = [param_labels.get(k, k) for k in param_keys]
+#     n_samples = len(next(iter(parameters.values())))
+#     n_d       = len(param_keys)
+
+#     # stack into (N, n_d) matrix for corner
+#     data_matrix = np.column_stack([
+#         np.asarray(parameters[k]).flatten()[:n_samples]
+#         for k in param_keys
+#     ])
+
+#     # ── compute v_circ for every sample ───────────────────────────────────
+#     vc_values  = np.full(n_samples, np.nan)
+#     vc_lo      = vc_target_kms * (1.0 - vc_tolerance)
+#     vc_hi      = vc_target_kms * (1.0 + vc_tolerance)
+
+#     if verbose:
+#         print(f"\nEvaluating v_circ at {r_vc_kpc} kpc for {n_samples:,} samples …")
+#         print(f"  Accepted band : [{vc_lo:.1f}, {vc_hi:.1f}] km/s")
+
+#     for i in range(n_samples):
+#         if verbose and i % max(1, n_samples // 20) == 0:
+#             print(f"  {i:>{len(str(n_samples))}}/{n_samples}", end="\r")
+#         try:
+#             single = {k: parameters[k][i] for k in parameters}
+#             vc_values[i] = _build_potential_and_vcirc(single, r_vc_kpc=r_vc_kpc)
+#         except Exception as exc:
+#             if verbose:
+#                 print(f"\n  [warn] sample {i} raised {exc!r} – skipped")
+
+#     vc_mask      = (vc_values >= vc_lo) & (vc_values <= vc_hi)
+#     n_vc_ok      = vc_mask.sum()
+#     frac_vc_ok   = n_vc_ok / n_samples if n_samples > 0 else 0.0
+
+#     if verbose:
+#         print(f"\n  v_circ stats  : min={np.nanmin(vc_values):.1f}  "
+#               f"median={np.nanmedian(vc_values):.1f}  "
+#               f"max={np.nanmax(vc_values):.1f} km/s")
+#         print(f"  Accepted      : {n_vc_ok}/{n_samples}  ({100*frac_vc_ok:.1f} %)")
+
+#     all_samples = data_matrix                       # (N, n_d)
+#     vc_samples  = data_matrix[vc_mask]              # (M, n_d)
+
+#     # ── axis ranges from full prior ────────────────────────────────────────
+#     ranges = [
+#         tuple(np.nanpercentile(all_samples[:, i], list(percentile_range)))
+#         for i in range(n_d)
+#     ]
+
+#     # ── corner plot: full prior ────────────────────────────────────────────
+#     fig = corner.corner(
+#         all_samples,
+#         labels=labels,
+#         range=ranges,
+#         bins=bins,
+#         smooth=smooth,
+#         smooth1d=smooth,
+#         color=prior_color,
+#         plot_datapoints=False,
+#         plot_density=True,
+#         fill_contours=False,
+#         levels=(0.68, 0.90, 1.0),
+#         contourf_kwargs={"alpha": 0.30},
+#         contour_kwargs={"linewidths": 1.0},
+#         hist_kwargs={"linewidth": 1.4},
+#         label_kwargs={"fontsize": 8},
+#         tick_kwargs={"labelsize": 6},
+#         fig=plt.figure(figsize=(figsize_per_cell * n_d, figsize_per_cell * n_d)),
+#     )
+
+#     # ── overlay v_circ-consistent samples ─────────────────────────────────
+#     ax_grid = np.array(fig.axes).reshape((n_d, n_d))
+
+#     if vc_samples.shape[0] >= 1:
+#         for row_i in range(n_d):
+#             # diagonal: dashed histogram
+#             ax_diag = ax_grid[row_i, row_i]
+#             n_bins_vc = max(5, min(bins, vc_samples.shape[0] // 2))
+#             ax_diag.hist(
+#                 vc_samples[:, row_i],
+#                 bins=n_bins_vc,
+#                 range=ranges[row_i],
+#                 density=False,
+#                 histtype="step",
+#                 color=vc_color,
+#                 linewidth=2.0,
+#                 linestyle="--",
+#                 zorder=5,
+#             )
+#             # lower triangle: scatter
+#             for col_i in range(row_i):
+#                 ax_grid[row_i, col_i].scatter(
+#                     vc_samples[:, col_i],
+#                     vc_samples[:, row_i],
+#                     s=scatter_size,
+#                     c=vc_color,
+#                     alpha=scatter_alpha,
+#                     zorder=5,
+#                     linewidths=0,
+#                 )
+
+#     # ── title and legend ───────────────────────────────────────────────────
+#     title = (
+#         f"Prior parameters  —  "
+#         f"$v_{{\\rm circ}}({r_vc_kpc}\\,{{\\rm kpc}}) = "
+#         f"{vc_target_kms:.0f} \\pm {100*vc_tolerance:.0f}\\%$ km/s  "
+#         f"({n_vc_ok}/{n_samples} samples)"
+#     )
+#     fig.suptitle(title, fontsize=11, fontweight="bold", y=1.002)
+
+#     fig.legend(
+#         handles=[
+#             Line2D([0], [0], color=prior_color, linewidth=3,
+#                    label="Full prior"),
+#             Line2D([0], [0], color=vc_color, linewidth=2.0,
+#                    linestyle="--",
+#                    label=f"$v_{{\\rm circ}} \\in [{vc_lo:.0f},{vc_hi:.0f}]$ km/s"),
+#         ],
+#         loc="upper right",
+#         bbox_to_anchor=(1.0, 1.0),
+#         fontsize=9,
+#         framealpha=0.9,
+#     )
+
+#     plt.tight_layout()
+#     out_path = os.path.join(path_to_save, filename)
+#     fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
+#     plt.close(fig)
+
+#     if verbose:
+#         print(f"\n  → saved {out_path}")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Add at the top of your file
+# ─────────────────────────────────────────────────────────────────────────────
+import pandas as pd
+from chainconsumer import ChainConsumer, Chain, PlotConfig
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main plotting function
+# ─────────────────────────────────────────────────────────────────────────────
+
+def prior_parameters_corner(
+    parameters: dict[str, np.ndarray],
+    path_to_save: str,
+    # ── v_circ constraint ──────────────────────────────────────────────────
+    vc_target_kms: float = 220.0,
+    vc_tolerance:  float = 0.10,         # fractional; 0.10 → ±10 %
+    r_vc_kpc:      float = 8.0,
+    # ── which parameters to display ───────────────────────────────────────
+    param_keys:    Optional[list[str]]   = None,
+    param_labels:  Optional[dict[str, str]] = None,
+    # ── aesthetics ────────────────────────────────────────────────────────
+    bins:             int   = 40,
+    smooth:           float = 1.0,        # ChainConsumer uses KDE sigma
+    figsize_per_cell: float = 2.2,
+    prior_color:      str   = "#aec7e8",  # light blue  – all prior samples
+    vc_color:         str   = "#d62728",  # red         – v_circ-consistent
+    percentile_range: tuple[float, float] = (0.5, 99.5),
+    dpi:              int   = 150,
+    filename:         str   = "prior_parameters_corner.png",
+    verbose:          bool  = True,
+) -> None:
+    """
+    Corner plot of the prior parameter distribution built with ChainConsumer,
+    with a second overlaid chain highlighting samples whose circular velocity
+    at ``r_vc_kpc`` lies within ``vc_tolerance`` of ``vc_target_kms``.
+
+    Parameters
+    ----------
+    parameters : dict[str, np.ndarray]
+        Flat dict mapping parameter names → 1-D arrays of length N_samples.
+        Expected keys (must all be present for the v_circ calculation):
+            m_Triaxial_halo, r_Triaxial_halo, q1_Triaxial_halo, q2_Triaxial_halo,
+            rho_thin_disk, hr_thin_disk, hz_thin_disk,
+            rho_thick_disk, hr_thick_disk, hz_thick_disk,
+            m_bulge, r_bulge, alpha_bulge
+    param_keys : list[str], optional
+        Subset of parameter names to include in the corner axes.
+        Defaults to all keys in *parameters*.
+    param_labels : dict[str, str], optional
+        Mapping from key → LaTeX axis label. Missing keys fall back to the
+        key name itself.
+    smooth : float
+        KDE smoothing bandwidth passed to ChainConsumer. Larger values give
+        smoother contours; set to 0 to disable KDE and use a histogram.
+    """
+    os.makedirs(path_to_save, exist_ok=True)
+
+    # ── parameter selection and labels ────────────────────────────────────
+    if param_keys is None:
+        param_keys = list(parameters.keys())
+    if param_labels is None:
+        param_labels = {}
+
+    # Map from storage key → display label (falls back to the key itself)
+    col_names  = [param_labels.get(k, k) for k in param_keys]
+    n_samples  = len(next(iter(parameters.values())))
+    n_d        = len(param_keys)
+
+    # (N, n_d) array; column order matches col_names
+    data_matrix = np.column_stack([
+        np.asarray(parameters[k]).flatten()[:n_samples]
+        for k in param_keys
+    ])
+
+    # ── evaluate v_circ for every sample ──────────────────────────────────
+    vc_values = np.full(n_samples, np.nan)
+    vc_lo     = vc_target_kms * (1.0 - vc_tolerance)
+    vc_hi     = vc_target_kms * (1.0 + vc_tolerance)
+
+    if verbose:
+        print(f"\nEvaluating v_circ at {r_vc_kpc} kpc for {n_samples:,} samples …")
+        print(f"  Accepted band : [{vc_lo:.1f}, {vc_hi:.1f}] km/s")
+
+    for i in range(n_samples):
+        if verbose and i % max(1, n_samples // 20) == 0:
+            print(f"  {i:>{len(str(n_samples))}}/{n_samples}", end="\r")
+        try:
+            single       = {k: parameters[k][i] for k in parameters}
+            vc_values[i] = _build_potential_and_vcirc(single, r_vc_kpc=r_vc_kpc)
+        except Exception as exc:
+            if verbose:
+                print(f"\n  [warn] sample {i} raised {exc!r} – skipped")
+
+    vc_mask    = (vc_values >= vc_lo) & (vc_values <= vc_hi)
+    n_vc_ok    = int(vc_mask.sum())
+    frac_vc_ok = n_vc_ok / n_samples if n_samples > 0 else 0.0
+
+    if verbose:
+        print(f"\n  v_circ stats  : min={np.nanmin(vc_values):.1f}  "
+              f"median={np.nanmedian(vc_values):.1f}  "
+              f"max={np.nanmax(vc_values):.1f} km/s")
+        print(f"  Accepted      : {n_vc_ok}/{n_samples}  ({100*frac_vc_ok:.1f} %)")
+
+    # ── build DataFrames for ChainConsumer ────────────────────────────────
+    # ChainConsumer identifies axes by DataFrame column names, so we use the
+    # display labels directly as column names here.
+    df_all = pd.DataFrame(data_matrix,              columns=col_names)
+    df_vc  = pd.DataFrame(data_matrix[vc_mask],     columns=col_names)
+
+    # ── axis extents (computed from full prior) ───────────────────────────
+    # ChainConsumer accepts per-parameter (lo, hi) tuples via the
+    # `extents` argument on Chain, keyed by column name.
+    extents = {
+        col: tuple(np.nanpercentile(data_matrix[:, i], list(percentile_range)))
+        for i, col in enumerate(col_names)
+    }
+
+    # ── assemble ChainConsumer ─────────────────────────────────────────────
+    c = ChainConsumer()
+
+    c.add_chain(
+        Chain(
+            samples     = df_all,
+            name        = "Full prior",
+            color       = "#4878CF",   # steel blue
+            shade       = True,
+            shade_alpha = 0.25,
+            bar_shade   = True,
+        )
+    )
+
+    if n_vc_ok >= 2:
+        vc_label = (
+            f"$v_{{\\rm circ}}({r_vc_kpc}\\,{{\\rm kpc}}) "
+            f"\\in [{vc_lo:.0f},{vc_hi:.0f}]$ km/s  "
+            f"({n_vc_ok}/{n_samples})"
+        )
+        c.add_chain(
+            Chain(
+                samples     = df_vc,
+                name        = vc_label,
+                color       = "#E8532A",   # vivid orange-red
+                shade       = True,
+                shade_alpha = 0.40,
+                bar_shade   = True,
+            )
+        )
+    elif verbose:
+        print("  [warn] fewer than 2 v_circ-consistent samples – overlay skipped")
+
+    # ── plot config ────────────────────────────────────────────────────────
+    c.set_plot_config(
+        PlotConfig(
+            bins             = bins,
+            smooth           = smooth,
+            fig_size         = (figsize_per_cell * n_d, figsize_per_cell * n_d),
+            label_font_size  = 9,
+            tick_font_size   = 6,
+            show_legend      = True,          # ← ensures the legend is drawn
+            legend_location  = (0, -1),       # top-right corner of the grid
+            legend_kwargs    = {
+                "fontsize"   : 9,
+                "framealpha" : 0.9,
+                "title"      : "Chains",
+                "title_fontsize": 9,
+            },
+            extents = extents,
+        )
+    )
+
+    # ── render and save ────────────────────────────────────────────────────
+    out_path = os.path.join(path_to_save, filename)
+    fig = c.plotter.plot(filename=out_path, figsize=(figsize_per_cell * n_d,
+                                                      figsize_per_cell * n_d))
+
+    title = (
+        f"Prior parameters  —  "
+        f"$v_{{\\rm circ}}({r_vc_kpc}\\,{{\\rm kpc}}) = "
+        f"{vc_target_kms:.0f} \\pm {100 * vc_tolerance:.0f}\\%$ km/s"
+    )
+    fig.suptitle(title, fontsize=11, fontweight="bold", y=1.002)
+    fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
+
+    if verbose:
+        print(f"\n  → saved {out_path}")
+
 
 @hydra.main(version_base=None, config_path="config", config_name="eval_config",)
 def main(cfg: EvalConfig):
     base_dir               = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
     training_data_data_dir = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_gala/"
     observed_data_path     = os.path.join(base_dir, "gaia_observed_streams_6Dwitherrors_cutNGC3201.npz")
-    path_to_save           = os.path.join(base_dir, "plots/prior_predictive_check/new_local_prior/")
+    path_to_save           = os.path.join(base_dir, "plots/prior_predictive_check/gala/")
 
     # ── Training set ─────────────────────────────────────────────────────────
     training_set_loaded = dict(np.load(os.path.join(base_dir, training_data_data_dir, "training_data_300000.npz")))
@@ -461,8 +894,58 @@ def main(cfg: EvalConfig):
     for k in obs_data.keys():
         print(f"{k} shape after augmentation: {obs_data[k].shape}")
 
-    prior_predictive_check(training_set, obs_data, path_to_save, dims_to_show = [0, 1, 2, 3, 4, 5])
+    # prior_predictive_check(training_set, obs_data, path_to_save, dims_to_show = [0, 1, 2, 3, 4, 5])
     print("saved at: ", path_to_save)
+
+    # ── load / build parameter dict ──────────────────────────────────────────
+    # Adjust the key names to whatever your training .npz actually stores.
+    param_npz = np.load(os.path.join(training_data_data_dir, "training_data_300000.npz"))
+    N = 300_000   # number of samples to use for the corner plot (adjust as needed)
+
+    parameters = {
+        "m_Triaxial_halo"  : param_npz["m_Triaxial_halo"]  [:N].flatten(),
+        "r_Triaxial_halo"  : param_npz["r_Triaxial_halo"]  [:N].flatten(),
+        # "q1_Triaxial_halo" : param_npz["q1_Triaxial_halo"] [:N].flatten(),
+        "q2_Triaxial_halo" : param_npz["q2_Triaxial_halo"] [:N].flatten(),
+        "rho_thin_disk"    : param_npz["rho_thin_disk"]    [:N].flatten(),
+        "hr_thin_disk"     : param_npz["hr_thin_disk"]     [:N].flatten(),
+        "hz_thin_disk"     : param_npz["hz_thin_disk"]     [:N].flatten(),
+        "rho_thick_disk"   : param_npz["rho_thick_disk"]   [:N].flatten(),
+        "hr_thick_disk"    : param_npz["hr_thick_disk"]    [:N].flatten(),
+        "hz_thick_disk"    : param_npz["hz_thick_disk"]    [:N].flatten(),
+        # "m_bulge"          : param_npz["m_bulge"]          [:N].flatten(),
+        # "r_bulge"          : param_npz["r_bulge"]          [:N].flatten(),
+        # "alpha_bulge"      : param_npz["alpha_bulge"]      [:N].flatten(),
+    }
+
+    # Nice LaTeX labels for each axis
+    param_labels = {
+        "m_Triaxial_halo"  : r"$M_{\rm halo}$",
+        "r_Triaxial_halo"  : r"$r_s$",
+        # "q1_Triaxial_halo" : r"$q_1$",
+        "q2_Triaxial_halo" : r"$q_2$",
+        "rho_thin_disk"    : r"$\rho_{\rm thin}$",
+        "hr_thin_disk"     : r"$h_{R,\rm thin}$",
+        "hz_thin_disk"     : r"$h_{z,\rm thin}$",
+        "rho_thick_disk"   : r"$\rho_{\rm thick}$",
+        "hr_thick_disk"    : r"$h_{R,\rm thick}$",
+        "hz_thick_disk"    : r"$h_{z,\rm thick}$",
+        # "m_bulge"          : r"$M_{\rm bulge}$",
+        # "r_bulge"          : r"$r_c$",
+        # "alpha_bulge"      : r"$\alpha_{\rm bulge}$",
+    }
+
+    prior_parameters_corner(
+        parameters    = parameters,
+        path_to_save  = os.path.join(base_dir, "plots/prior_predictive_check/gala/"),
+        param_labels  = param_labels,
+        vc_target_kms = 220.0,
+        vc_tolerance  = 0.10,       # ±10 %
+        r_vc_kpc      = 8.0,
+        bins          = 40,
+        verbose       = True,
+    )
+
 
 
 if __name__ == "__main__":
