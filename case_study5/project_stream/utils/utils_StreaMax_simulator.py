@@ -77,6 +77,7 @@ def simulate_stream_StreaMAX(parameters_dict, config, code_units, random_seed:in
         params_host = {'halo_params': params_halo, 
                     'disk_params': params_disk, 
                     'bulge_params': params_bulge}
+    elif type_potential == "Palau2023_mod"
 
     # Plummer Sattelite
     type_sat   = 'Plummer'
