@@ -1,10 +1,10 @@
 from autocvd import autocvd
 
-autocvd(num_gpus=1, interval=1)
+# autocvd(num_gpus=1, interval=1)
 import os
 import yaml
 
-# os.environ["CUDA_VISIBLE_DEVICES"] = "7"
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 from tqdm import tqdm
 from omegaconf import DictConfig, OmegaConf, open_dict
 import hydra
@@ -23,7 +23,7 @@ logging.getLogger("bayesflow").setLevel(logging.DEBUG)
 
 # from case_study5.project_stream.train_config import TrainConfig
 from config.TrainConfig import TrainConfig
-from utils.utils_train_jax import AugmentationsClass
+from utils.utils_train_jax_new import AugmentationsClass
 
 cs = ConfigStore.instance()
 cs.store(name="train_config", node=TrainConfig)
@@ -108,8 +108,9 @@ def main(cfg: TrainConfig):
     training_data = dict(np.load(train_data_path, allow_pickle=True))
     # validation_data = {k: v[60_000:80_000] for k, v in training_data.items()}
     # print("Validation data keys", validation_data.keys())
-    training_data = {k: v[:60_000] for k, v in training_data.items()}
+    training_data = {k: v[:290_000] for k, v in training_data.items()}
     stats = compute_and_save_stream_stats(training_data, sim_data, model_path)
+    exit()
 
     print("Training data keys", training_data.keys())
     

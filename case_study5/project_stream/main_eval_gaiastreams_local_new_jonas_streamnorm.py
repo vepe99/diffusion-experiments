@@ -76,7 +76,7 @@ def standardize_by_stream(batch, sim_data, stats):
     return batch
 
 
-@hydra.main(version_base=None, config_path="config", config_name="eval_config_gaia_local")
+@hydra.main(version_base=None, config_path="config", config_name="eval_config_gaia_local_new")
 def main(cfg: EvalConfig):
 
     print(cfg)
@@ -212,7 +212,8 @@ def main(cfg: EvalConfig):
     global_posterior_path = os.path.join(
         cfg.base_dir,
         # 'plots/gala6D/new_hyper/model54_60k_1000epochs/global_posterior.npz'
-        'hyperparameter_tuning/gala/300k/model_21/gaiastreams/global_posterior.npz'
+        # 'hyperparameter_tuning/gala/300k/model_21/gaiastreams/global_posterior.npz'
+        'hyperparameter_tuning/gala/new_aug_bigheads/model_121/gaiastreams/global_posterior.npz'
 
     )
     print('Loading global posterior from ', global_posterior_path)

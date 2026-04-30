@@ -1,18 +1,18 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_gala/"
-model_dir: "hyperparameter_tuning/gala/new_aug_bigheads/model_77" 
+model_dir: "hyperparameter_tuning/gala/new_aug_bigheads/model_121" 
 multistream_n_simulation: 100
-results_dir: "hyperparameter_tuning/gala/new_aug_bigheads/model_77/nocomposition_100test"
+results_dir: "hyperparameter_tuning/gala/new_aug_bigheads/model_121/100test"
 use_streamax_simulator: False
 
 #training hyperparameters
-n_samples: 500
+n_samples: 1000
 method: "two_step_adaptive"
 steps: "adaptive"
 max_steps: 1000
 mini_batch_size: null
 batch_size: 30
-inverse_compositional_bridge_d1: 5.0
+inverse_compositional_bridge_d1: 6.5
 noise_schedule: null
 # noise_schedule: 
 #   min_log_snr: -15

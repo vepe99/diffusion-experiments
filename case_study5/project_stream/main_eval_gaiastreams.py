@@ -1,8 +1,8 @@
 from autocvd import autocvd
-autocvd(num_gpus = 1)
+# autocvd(num_gpus = 1)
 import os
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
-# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 import yaml
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -25,7 +25,7 @@ import logging
 logging.getLogger('bayesflow').setLevel(logging.DEBUG)
 
 from config.EvalConfig import EvalConfig
-from utils.utils_train_jax import AugmentationsClass #we will need to use the augmentations on the test_set
+from utils.utils_train_jax_new import AugmentationsClass #we will need to use the augmentations on the test_set
 
 
 cs = ConfigStore.instance()
@@ -62,9 +62,22 @@ def main(cfg: EvalConfig):
     param_names_global = list(cfg.parameters_global)
     sim_data = str(cfg.sim_data)
     inference_conditions = str(cfg.inference_conditions[0])
-    with open(os.path.join(cfg.base_dir, cfg.model_dir, '.hydra', 'config.yaml'), "r") as f:
-        model_config = yaml.safe_load(f)
-    print(model_config)
+    # with open(os.path.join(cfg.base_dir, cfg.model_dir, '.hydra', 'config.yaml'), "r") as f:
+    #     model_config = yaml.safe_load(f)
+    # print(model_config)
+    model_config = {'global_model':
+                    {
+                        'inference_mlp_width': cfg.global_model.inference_mlp_width,
+                        'inference_mlp_depth': cfg.global_model.inference_mlp_depth,
+                        'inference_time_embedding_dim': cfg.global_model.inference_time_embedding_dim,
+                        'summary_dim': cfg.global_model.summary_dim,
+                        'num_heads': cfg.global_model.num_heads,
+                        'embed_dims': cfg.global_model.embed_dims,
+                        'mlp_depths': cfg.global_model.mlp_depths,
+                        'mlp_widths': cfg.global_model.mlp_widths,
+                        'dropout': cfg.global_model.dropout,
+                    }
+                }
 
     test_data_path = '/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/gaia_observed_streams_6Dwitherrors_cutNGC3201.npz'
     print('Loading test data from ', test_data_path)

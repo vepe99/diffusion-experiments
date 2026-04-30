@@ -1,5 +1,5 @@
 from autocvd import autocvd
-autocvd(num_gpus = 1)
+autocvd(num_gpus = 1, interval=1)
 import os
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"  
 from tqdm import tqdm
@@ -30,7 +30,7 @@ def clear_gpu_memory():
 def objective(trial, cfg, test_data):
     augmentations_class.key = jax.random.PRNGKey(42)
     clear_gpu_memory()
-    results_dir = f'./data/hyperparameter_tuning/gala/local/jonas/streamnomr_standardize/model_{trial.number}/'
+    results_dir = f'./data/hyperparameter_tuning/gala/local/300k_200epoch/streamnorm_standardize/model_{trial.number}/'
     os.makedirs(results_dir, exist_ok=True)
 
     summary_dim = trial.suggest_int("SetTransformer_summary_dim", 32, 128)
@@ -99,7 +99,7 @@ def objective(trial, cfg, test_data):
             try:
                 history = workflow_local.fit_offline(
                     training_data,
-                    epochs=1000,
+                    epochs=200,
                     batch_size=batch_size_training,
                     verbose=2,
                     augmentations=augmentations,
@@ -333,7 +333,8 @@ if __name__ == "__main__":
 
     train_data_path = os.path.join(base_dir, data_dir, f"training_data_local_{N_simulations}.npz")
     training_data = dict(np.load(train_data_path, allow_pickle=True))
-    training_data = {k: training_data[k][:60_000] for k in training_data.keys()}
+    # training_data = {k: training_data[k][:60_000] for k in training_data.keys()}
+    training_data = {k: training_data[k][:290_000] for k in training_data.keys()}
     stats = compute_and_save_stream_stats(training_data, cfg.sim_data, cfg.results_dir)
 
     #jonas suggestion
@@ -354,7 +355,7 @@ if __name__ == "__main__":
 
 
     augmentations_class = AugmentationsClass(cfg)
-    augmentations_class.key = jax.random.PRNGKey(0)
+    augmentations_class.key = jax.random.PRNGKey(42)
     augmentations = []
 
     # --- Coordinate transforms (must be first, before any masking) ---
@@ -389,9 +390,9 @@ if __name__ == "__main__":
     if "concatenate_j_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatenate_j_to_sim_data)
 
-
     test_data = dict(np.load(train_data_path, allow_pickle=True))
-    test_data = {k: test_data[k][-6_000:] for k in test_data.keys()}
+    # test_data = {k: test_data[k][-6_000:] for k in test_data.keys()}
+    test_data = {k: test_data[k][-10_000:] for k in test_data.keys()}
     for aug in augmentations:
         test_data = aug(test_data)
     for k in test_data.keys():
@@ -401,7 +402,7 @@ if __name__ == "__main__":
         
     print("Loaded config:", cfg)
     study_name = 'study_DiffusionMode_local'  # Unique identifier of the study.
-    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/gala/local/jonas/streamnomr_standardize/optuna_diffusionmodel_gala_local_cutNGC3201.log"))
+    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/gala/local/300k_200epoch/streamnorm_standardize/optuna_diffusionmodel_gala_local_cutNGC3201.log"))
     study = optuna.create_study(study_name=study_name, storage=storage_name, directions=['minimize', 'minimize'], load_if_exists=True)
     study.optimize(
         lambda trial: objective(trial, cfg, test_data),

@@ -1,9 +1,9 @@
 from autocvd import autocvd
 
-autocvd(num_gpus = 1)
+# autocvd(num_gpus = 1)
 import os
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
-# os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 import yaml
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -78,7 +78,7 @@ def standardize_by_stream(batch, sim_data, stats):
     return batch
 
 
-@hydra.main(version_base=None, config_path="config", config_name="eval_config_local",)
+@hydra.main(version_base=None, config_path="config", config_name="eval_config_local_new",)
 def main(cfg: EvalConfig):
 
     print(cfg)
@@ -170,24 +170,33 @@ def main(cfg: EvalConfig):
     # Augmentation
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
-    if "cut_to_300_particles" in cfg.augmentations:
-        augmentations.append(augmentations_class.cut_to_300_particles)
-    if "remove_los_velocity" in cfg.augmentations: #remove this if you want to train with vlos and errors
+    # --- Coordinate transforms (must be first, before any masking) ---
+    if "remove_los_velocity" in cfg.augmentations:
         augmentations.append(augmentations_class.remove_los_velocity)
     if "convert_distance_to_parallax" in cfg.augmentations:
         augmentations.append(augmentations_class.convert_distance_to_parallax)
+
+    # --- Observational selection (window → subsample → compact) ---
+    if "observational_window" in cfg.augmentations:
+        augmentations.append(augmentations_class.observational_window)
+    if "observed_n_stars" in cfg.augmentations:
+        augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
+    if "compact_to_attended" in cfg.augmentations:
+        augmentations.append(augmentations_class.compact_to_attended)
+
+    # --- Photometric augmentation (magnitudes → errors → apply) ---
     if "sample_magnitudes" in cfg.augmentations:
         augmentations.append(augmentations_class.sample_magnitudes)
     if "sample_obs_error" in cfg.augmentations:
         augmentations.append(augmentations_class.sample_obs_error)
     if "apply_obs_error" in cfg.augmentations:
         augmentations.append(augmentations_class.apply_obs_error)
-    if "observational_window" in cfg.augmentations:
-        augmentations.append(augmentations_class.observational_window)
-    if "observed_n_stars" in cfg.augmentations:
-        augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
+
+    # --- v_los masking (must be after apply_obs_error) ---
     if "mask_vlos" in cfg.augmentations:
         augmentations.append(augmentations_class.mask_vlos)
+
+    # --- Symmetry augmentations ---
     if "flip_dirz" in cfg.augmentations:
         augmentations.append(augmentations_class.flip_dirz)
     augmentations.append(lambda batch: standardize_by_stream(batch, sim_data=sim_data, stats=stats))  # re-standardize after flip_dirz

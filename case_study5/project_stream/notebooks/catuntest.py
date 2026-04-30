@@ -161,7 +161,7 @@ spdf_with_prog = chen24spraydf(
     pot=pot,
     tdisrupt=4.0 * u.Gyr,
     tail="both",
-    # progpot=progpot,
+    progpot=progpot,
     ro=ro,      # <-- add these
     vo=vo,      # <-- add these
 )

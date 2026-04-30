@@ -209,7 +209,7 @@ def main(cfg: EvalConfig):
         #                                                 "time_embedding_dim": model_config['global_model']['inference_time_embedding_dim'],
         #                                                 },),
         inference_network = inference_network,
-        standardize=["inference_variables", "summary_variables"]
+        standardize=["inference_variables","summary_variables"]
     )
     workflow_global.approximator = keras.models.load_model(model_path)
     # workflow_global.approximator.save_weights(model_path.replace('.keras', '.weights.h5'))

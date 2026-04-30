@@ -237,11 +237,6 @@ def simulate_stream_gala_SCF(parameters_dict, config, code_units, random_seed:in
     pot = gp.CCompositePotential()
 
 
-
-
-
-
-
     w0 = coord.Galactocentric(x=parameters_dict['x'][0]*u.kpc, y=parameters_dict['y'][0]*u.kpc, z=parameters_dict['z'][0]*u.kpc,
                              v_x=parameters_dict['vx'][0]*u.km/u.s, v_y=parameters_dict['vy'][0]*u.km/u.s, v_z=parameters_dict['vz'][0]*u.km/u.s)
     w0 = gd.PhaseSpacePosition(w0)

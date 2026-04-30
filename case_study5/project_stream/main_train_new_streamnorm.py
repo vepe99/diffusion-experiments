@@ -153,8 +153,9 @@ def main(cfg: TrainConfig):
     print("Train data path:", train_data_path)
     training_data = dict(np.load(train_data_path, allow_pickle=True))
     
-    # training_data = {k: v[:60_000] for k, v in training_data.items()}
+    training_data = {k: v[:290_000] for k, v in training_data.items()}
     stats = compute_and_save_stream_stats(training_data, sim_data, model_path)
+    exit()
     # training_data = standardize_by_stream(training_data, sim_data, stats)
 
     print("Training data keys", training_data.keys())

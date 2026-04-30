@@ -1,8 +1,8 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_gala/"
-model_dir: "models/local_models/gala6D_aug/new_hyper/jonas/model54_60k_1000epochs"
+model_dir: "hyperparameter_tuning/gala/local/new_aug_jonas_300k_200epoch/streamnorm_standardize/model_25"
 multistream_n_simulation: 333
-results_dir: "plots/plots_local/gala6D_aug/new_hyper/jonas/model54_60k_1000epochs"
+results_dir: "hyperparameter_tuning/gala/local/new_aug_jonas_300k_200epoch/streamnorm_standardize/model_25/gaia_121/"
 use_streamax_simulator: True
 
 #training hyperparameters

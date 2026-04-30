@@ -1,8 +1,8 @@
 from autocvd import autocvd
-# autocvd(num_gpus = 1)
+autocvd(num_gpus = 1)
 import os
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
+# os.environ["CUDA_VISIBLE_DEVICES"] = ""
 import yaml
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -30,6 +30,34 @@ from utils.utils_train_jax_new import AugmentationsClass #we will need to use th
 
 cs = ConfigStore.instance()
 cs.store(name="eval_config", node=EvalConfig)
+
+
+def standardize_by_stream(batch, sim_data, stats):
+    """
+    batch[sim_data]: (N, 1000, 6)
+    batch['j']:      (N, 1) or (N,)
+    """
+    observations = jnp.array(batch[sim_data])          # (N, 1000, 6)
+    stream_ids   = jnp.array(batch['j']).astype(int).squeeze()  # (N,)
+
+    # reshape stream_ids for broadcasting: (N, 1, 1)
+    j = stream_ids[:, None, None]
+
+    # per-stream stats, shaped (1, 1, 6) for broadcasting
+    mean_0, std_0 = stats['mean_stream_0'][None, None, :], stats['std_stream_0'][None, None, :]
+    mean_1, std_1 = stats['mean_stream_1'][None, None, :], stats['std_stream_1'][None, None, :]
+    mean_2, std_2 = stats['mean_stream_2'][None, None, :], stats['std_stream_2'][None, None, :]
+
+    # select mean and std based on stream id via nested where
+    mean = jnp.where(j == 0, mean_0, jnp.where(j == 1, mean_1, mean_2))  # (N, 1, 6)
+    std  = jnp.where(j == 0, std_0,  jnp.where(j == 1, std_1,  std_2))   # (N, 1, 6)
+
+    # std and mean broadcast over (N, 1000, 6)
+    observations = (observations - mean) / std
+
+    batch[sim_data] = np.array(observations)
+    return batch
+
 
 @hydra.main(version_base=None, config_path="config", config_name="eval_config_gaia_new",)
 def main(cfg: EvalConfig):
@@ -93,6 +121,8 @@ def main(cfg: EvalConfig):
             test_data[k] = test_data[k][:, :, :300]
         print(f"{k} shape after truncation: {test_data[k].shape}")
 
+    stats = np.load(os.path.join(os.path.dirname(model_path), 'stream_stats.npz'))
+
     # print('Test data keys and shape: ', test_data.keys(), test_data[list(test_data.keys())[0]].shape)
     other_things = ['attention_mask', 'magnitudes', 'vloss_mask']
     keys_to_drop = set(test_data.keys()) - set(param_names_global) - {sim_data} - set(inference_conditions) -  set(other_things)
@@ -144,6 +174,7 @@ def main(cfg: EvalConfig):
         augmentations.append(augmentations_class.observational_window)
     if "mask_vlos" in cfg.augmentations:
         augmentations.append(augmentations_class.mask_vlos)
+    augmentations.append(lambda batch: standardize_by_stream(batch, sim_data=cfg.sim_data, stats=stats))  # re-standardize after flip_dirz
     if "concatentate_sigma_error_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatentate_sigma_error_to_sim_data)
     if "concatenate_magnitudes_to_sim_data" in cfg.augmentations:

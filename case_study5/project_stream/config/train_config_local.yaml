@@ -1,7 +1,7 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_gala/"
 N_simulations: 300_000
-results_dir: "hyperparameter_tuning/gala/local/jonas/streamnomr_standardize/model_2/"
+results_dir: "hyperparameter_tuning/gala/local/new_aug_jonas_300k_200epoch/streamnorm_standardize/model_25"
 test: False
 
 #training hyperparameters

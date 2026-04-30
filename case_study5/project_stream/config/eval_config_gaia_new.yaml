@@ -1,8 +1,8 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_gala/"
-model_dir: "hyperparameter_tuning/gala/new_aug_bigheads/model_77" #45 era per niente male
+model_dir: "hyperparameter_tuning/gala/new_aug_bigheads/model_121" 
 multistream_n_simulation: 333
-results_dir: "hyperparameter_tuning/gala/new_aug_bigheads/model_77/"
+results_dir: "hyperparameter_tuning/gala/new_aug_bigheads/model_121/gaiastreams"
 use_streamax_simulator: True
 
 #training hyperparameters
@@ -12,7 +12,7 @@ steps: "adaptive"
 max_steps: 1000
 mini_batch_size: null
 batch_size: 10
-inverse_compositional_bridge_d1: 5.0
+inverse_compositional_bridge_d1: 6.5
 noise_schedule: null
   # min_log_snr: -15
   # max_log_snr: 15

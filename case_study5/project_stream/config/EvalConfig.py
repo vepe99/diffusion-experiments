@@ -7,6 +7,9 @@ class GlobalModelConfig:
     dropout: float
     summary_dim: int
     embed_dims: Optional[int] 
+    mlp_depths: Optional[int] 
+    mlp_widths: Optional[int] 
+    inference_time_embedding_dim: Optional[int]
     num_heads: int
     inference_mlp_depth: Optional[int] 
     inference_mlp_width: Optional[int] 

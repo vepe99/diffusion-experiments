@@ -1,10 +1,10 @@
 from autocvd import autocvd
-autocvd(num_gpus = 1)
+# autocvd(num_gpus = 1)
 
 
 import os
 # os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
-# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
 import yaml
 import matplotlib.pyplot as plt
@@ -25,7 +25,7 @@ import logging
 logging.getLogger('bayesflow').setLevel(logging.DEBUG)
 
 from config.EvalConfig import EvalConfig
-from utils.utils_train_jax import AugmentationsClass #we will need to use the augmentations on the test_set
+from utils.utils_train_jax_new import AugmentationsClass #we will need to use the augmentations on the test_set
 
 cs = ConfigStore.instance()
 cs.store(name="eval_config", node=EvalConfig)
@@ -84,8 +84,21 @@ def main(cfg: EvalConfig):
         .rename(sim_data, "summary_variables")
         .rename(inference_conditions, "inference_conditions")
     )
-    with open(os.path.join(cfg.base_dir, cfg.model_dir, '.hydra', 'config.yaml'), "r") as f:
-        model_config = yaml.safe_load(f)
+    # with open(os.path.join(cfg.base_dir, cfg.model_dir, '.hydra', 'config.yaml'), "r") as f:
+    #     model_config = yaml.safe_load(f)
+    model_config = {'global_model':
+                    {
+                        'inference_mlp_width': cfg.global_model.inference_mlp_width,
+                        'inference_mlp_depth': cfg.global_model.inference_mlp_depth,
+                        'inference_time_embedding_dim': cfg.global_model.inference_time_embedding_dim,
+                        'summary_dim': cfg.global_model.summary_dim,
+                        'num_heads': cfg.global_model.num_heads,
+                        'embed_dims': cfg.global_model.embed_dims,
+                        'mlp_depths': cfg.global_model.mlp_depths,
+                        'mlp_widths': cfg.global_model.mlp_widths,
+                        'dropout': cfg.global_model.dropout,
+                    }
+                }
     print(model_config)
     workflow_global = bf.BasicWorkflow(
         adapter=adapter,
@@ -102,7 +115,7 @@ def main(cfg: EvalConfig):
         standardize=["inference_variables", "summary_variables"]
     )
     workflow_global.approximator = keras.models.load_model(model_path)
-    workflow_global.approximator.save_weights(model_path.replace('.keras', '.weights.h5'))
+    # workflow_global.approximator.save_weights(model_path.replace('.keras', '.weights.h5'))
     test_data = {k: test_data[k] for k in cfg.parameters_global + [cfg.sim_data, "j"] }
     # Augmentation
     augmentations_class = AugmentationsClass(cfg)

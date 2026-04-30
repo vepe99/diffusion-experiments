@@ -19,9 +19,15 @@ def main():
     # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/local/optuna_diffusionmodel_gala_local_cutNGC3201_300k.log"))
     # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/big_heads/optuna_diffusionmodel_gala_cutNGC3201.log"))
     # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/new_aug/optuna_diffusionmodel_gala_cutNGC3201.log"))
-    # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/new_aug_bigheads/optuna_diffusionmodel_gala_cutNGC3201.log"))
+    # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/new_aug_bigheads/optuna_diffusionmodel_gala_cutNGC3201.log")) #promissing one for 300k
     # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/local/new_aug_jonas/optuna_diffusionmodel_gala_local_cutNGC3201.log"))
-    storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/local/jonas/streamnomr_standardize/optuna_diffusionmodel_gala_local_cutNGC3201.log"))
+    # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/local/jonas/streamnomr_standardize/optuna_diffusionmodel_gala_local_cutNGC3201.log")) #promissing for 60k
+    # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/new_aug_streamnorm/optuna_diffusionmodel_gala_cutNGC3201.log"))
+    # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/local/new_aug_jonas_300k/streamnorm_standardize/optuna_diffusionmodel_gala_local_cutNGC3201.log"))
+    # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/300k/optuna_diffusionmodel_gala_cutNGC3201.log"))
+    # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/local/300k/streamnorm_standardize/optuna_diffusionmodel_gala_local_cutNGC3201.log"))
+    storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/local/new_aug_jonas_300k_200epoch/streamnorm_standardize/optuna_diffusionmodel_gala_local_cutNGC3201.log"))
+    # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/local/300k_200epoch/streamnorm_standardize/optuna_diffusionmodel_gala_local_cutNGC3201.log"))
 
 
     # study_names = optuna.study.get_all_study_names(storage)
