@@ -24,17 +24,17 @@ def main():
     # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/local/jonas/streamnomr_standardize/optuna_diffusionmodel_gala_local_cutNGC3201.log")) #promissing for 60k
     # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/new_aug_streamnorm/optuna_diffusionmodel_gala_cutNGC3201.log"))
     # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/local/new_aug_jonas_300k/streamnorm_standardize/optuna_diffusionmodel_gala_local_cutNGC3201.log"))
-    # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/300k/optuna_diffusionmodel_gala_cutNGC3201.log"))
+    storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/300k/optuna_diffusionmodel_gala_cutNGC3201.log"))
     # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/local/300k/streamnorm_standardize/optuna_diffusionmodel_gala_local_cutNGC3201.log"))
-    storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/local/new_aug_jonas_300k_200epoch/streamnorm_standardize/optuna_diffusionmodel_gala_local_cutNGC3201.log"))
+    # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/local/new_aug_jonas_300k_200epoch/streamnorm_standardize/optuna_diffusionmodel_gala_local_cutNGC3201.log"))
     # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/local/300k_200epoch/streamnorm_standardize/optuna_diffusionmodel_gala_local_cutNGC3201.log"))
 
 
     # study_names = optuna.study.get_all_study_names(storage)
     # print("Studies in storage:", study_names)
     study = optuna.load_study(
-        # study_name='study_DiffusionModel',
-        study_name="study_DiffusionMode_local",
+        study_name='study_DiffusionModel',
+        # study_name="study_DiffusionMode_local",
         storage=storage,
     )
     fig = plot_pareto_front(study, target_names=["RMSE", "Calibration Error"])

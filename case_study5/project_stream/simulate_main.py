@@ -115,7 +115,12 @@ def main(cfg: SimulatorConfig):
         # Override n_workers with the number of truly free cores
         # n_free = get_free_cores(threshold_percent=10.0)
         # print(f"Detected {n_free} idle cores (out of {os.cpu_count()}). Using them as workers.")
-        
+    elif cfg.simulator == "agama":
+        from joblib import Parallel, delayed
+        from utils.utils_agama_simulator import simulate_stream_agama
+        simulate_stream_gala_fn = simulate_stream_agama
+        config = cfg.agama_config
+        code_units = None #agama does not use code units, but we need to pass something to the function        
 
 
     for batch_start in tqdm(range(index_sim_start, index_sim_end, cfg.batch_size)):
@@ -127,7 +132,7 @@ def main(cfg: SimulatorConfig):
         if (cfg.simulator == "odisseo")|(cfg.simulator == "galax")|(cfg.simulator == "StreaMax"):
             batch_params = {k: jnp.array(v[local_indices]) for k, v in prior_samples.items()}
             sim_data_batch = jax.vmap(simulate_stream, in_axes=(0, None, None, 0))(batch_params, config, code_units, jnp.array(batch_indices))  # shape (batch_size, ...)
-        elif cfg.simulator == "gala":
+        elif (cfg.simulator == "gala")|(cfg.simulator == "agama"):
             batch_params = {k: np.array(v[local_indices]) for k, v in prior_samples.items()}
     
             # Convert to individual parameter dicts

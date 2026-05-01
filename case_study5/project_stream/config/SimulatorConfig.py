@@ -24,6 +24,12 @@ class GalaConfig:
     N_particles: int
 
 @dataclass
+class AgamaConfig:
+    n_timesteps: int
+    n_workers: int
+    N_particles: int
+
+@dataclass
 class GalaxConfig:
     df_type: str
     n_timesteps: int
@@ -69,6 +75,8 @@ class SimulatorConfig:
     odisseo_config: OdisseoConfig 
 
     gala_config: GalaConfig
+    
+    agama_config: AgamaConfig
 
     galax_config: GalaxConfig
 
