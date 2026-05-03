@@ -155,7 +155,9 @@ class AugmentationsClass:
         self.error_values_stacked = jnp.stack(
             [error_values[k] for k in self.error_keys], axis=0
         )  # shape (5/6, n_mag_bins)
-
+        self.error_values_stacked = self.error_values_stacked.at[:2].set(
+            self.error_values_stacked[:2] * u.mas.to(u.deg)
+        )
         # v_los error values for mask_vlos interpolation
         self.vlos_median_std = error_values["v_los"]       # shape (n_mag_bins,)
         self.vlos_std_of_std = error_values["std_v_los"]   # shape (n_mag_bins,)

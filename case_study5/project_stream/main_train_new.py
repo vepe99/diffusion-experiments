@@ -43,12 +43,27 @@ def main(cfg: TrainConfig):
     sim_data = str(cfg.sim_data)
     inference_conditions = str(cfg.inference_conditions[0])  # jut 1
     train_data_path = os.path.join(
-        cfg.base_dir, cfg.data_dir, f"training_data_{cfg.N_simulations}.npz"
+        cfg.base_dir, cfg.data_dir, f"training_data_local_{cfg.N_simulations}.npz"
     )
     print("Train data path:", train_data_path)
     training_data = dict(np.load(train_data_path, allow_pickle=True))
     
+    
     training_data = {k: v[:60_000] for k, v in training_data.items()}
+
+    #nan cleaning
+    sim_data_array = training_data['sim_data_projected']  # shape: (N, ...)
+    # Build a boolean mask: True where the simulation is NaN-free
+    valid_mask = ~np.any(np.isnan(sim_data_array.reshape(sim_data_array.shape[0], -1)), axis=1)
+
+    n_removed = (~valid_mask).sum()
+    print(f"Removing {n_removed}/{len(valid_mask)} simulations containing NaN values.")
+
+    # Apply the mask to all arrays
+    clean_data = {key: training_data[key][valid_mask] for key in param_names_global + [inference_conditions]}
+    clean_data['sim_data_projected'] = sim_data_array[valid_mask]
+    training_data = clean_data
+
     print("Training data keys", training_data.keys())
     keys_to_drop = (
         set(training_data.keys())
