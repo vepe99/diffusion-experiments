@@ -1,8 +1,8 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_gala/"
-model_dir: "hyperparameter_tuning/gala/new_aug_bigheads/model_121" 
+model_dir: "hyperparameter_tuning/gala/new_obswindows/300k/model_2" 
 multistream_n_simulation: 333
-results_dir: "hyperparameter_tuning/gala/new_aug_bigheads/model_121/gaiastreams"
+results_dir: "hyperparameter_tuning/gala/new_obswindows/300k/model_2/gaiastreams"
 use_streamax_simulator: True
 
 #training hyperparameters
@@ -132,7 +132,8 @@ augmentations:
   # - "remove_los_velocity"
   - "convert_distance_to_parallax" #we already have parallax in data, but we have to keep it even if we do not use it
   - "sample_magnitudes" #we need to keep it even if we do not use it
-  - "observational_window"
+  # - "observational_window"
+  - "observational_window_spline"
   - "observed_n_stars"
   - "mask_vlos"
   - "sample_obs_error"

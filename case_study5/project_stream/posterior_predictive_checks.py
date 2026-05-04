@@ -371,8 +371,8 @@ def main(cfg: SimulatorConfig):
     )
     local_posterior_path = os.path.join(
         cfg.base_dir,
-        # '../hyperparameter_tuning/gala/local/new_aug_jonas_300k_200epoch/streamnorm_standardize/model_25/gaia_121/gaia_local_posterior.npz'
-        '../hyperparameter_tuning/gala/local/jonas/streamnomr_standardize/model_2/gaia_21/gaia_local_posterior.npz'
+        '../hyperparameter_tuning/gala/local/new_aug_jonas_300k_200epoch/streamnorm_standardize/model_79/gaia_121/gaia_local_posterior.npz'
+        # '../hyperparameter_tuning/gala/local/jonas/streamnomr_standardize/model_2/gaia_121/gaia_local_posterior.npz'
     )
     print('Loading global posterior from:', global_posterior_path)
     global_posterior = dict(np.load(global_posterior_path, allow_pickle=True))

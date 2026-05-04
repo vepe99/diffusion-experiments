@@ -1,8 +1,8 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_gala/"
-model_dir: "hyperparameter_tuning/gala/300k/model_21"
-multistream_n_simulation: 100
-results_dir: "hyperparameter_tuning/gala/300k/model_21/100test"
+model_dir: "hyperparameter_tuning/gala/300k/model_41"
+multistream_n_simulation: 333
+results_dir: "hyperparameter_tuning/gala/300k/model_41/nocomposition_333test"
 use_streamax_simulator: False
 
 #training hyperparameters

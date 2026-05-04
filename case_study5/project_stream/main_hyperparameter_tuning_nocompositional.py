@@ -90,7 +90,7 @@ def objective(trial, cfg):
     augmentations_class.key = jax.random.PRNGKey(42)
     # Clear memory at the start of each trial
     clear_gpu_memory()
-    results_dir = f'./data/hyperparameter_tuning/gala/300k/model_{trial.number}/'
+    results_dir = f'./data/hyperparameter_tuning/gala/random_obswindows/300k/model_{trial.number}/'
     os.makedirs(results_dir, exist_ok=True)
 
     
@@ -298,6 +298,8 @@ if __name__ == "__main__":
         augmentations.append(augmentations_class.apply_obs_error)
     if "observational_window" in cfg.augmentations:
         augmentations.append(augmentations_class.observational_window)
+    if "observational_window_random" in cfg.augmentations:
+        augmentations.append(augmentations_class.observational_window_random)
     if "observed_n_stars" in cfg.augmentations:
         augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
     if "mask_vlos" in cfg.augmentations:
@@ -314,10 +316,10 @@ if __name__ == "__main__":
         augmentations.append(augmentations_class.concatenate_j_to_sim_data)
 
 
-
     test_data = dict(np.load(train_data_path, allow_pickle=True))
     test_data = {k: test_data[k][-10_000:] for k in test_data.keys()}
     for aug in augmentations:
+        print(f"Applying augmentation {aug.__name__} to test data...")
         test_data = aug(test_data)
     for k in test_data.keys():
         test_data[k] = np.array(test_data[k])
@@ -326,7 +328,7 @@ if __name__ == "__main__":
         
     print("Loaded config:", cfg)
     study_name = 'study_DiffusionModel'  # Unique identifier of the study.
-    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/gala/300k/optuna_diffusionmodel_gala_cutNGC3201.log"))
+    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/gala/random_obswindows/300k/optuna_diffusionmodel_gala_cutNGC3201.log"))
     study = optuna.create_study(study_name=study_name, storage=storage_name, directions=['minimize', 'minimize'], load_if_exists=True)
     study.optimize(
         lambda trial: objective(trial, cfg),

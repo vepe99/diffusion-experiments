@@ -1,8 +1,8 @@
 from autocvd import autocvd
-# autocvd(num_gpus = 1)
+autocvd(num_gpus = 1)
 import os
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
+# os.environ["CUDA_VISIBLE_DEVICES"] = ""
 import yaml
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -203,6 +203,8 @@ def main(cfg: EvalConfig):
     # --- Observational selection (window → subsample → compact) ---
     if "observational_window" in cfg.augmentations:
         augmentations.append(augmentations_class.observational_window)
+    if "observational_window_spline" in cfg.augmentations:
+        augmentations.append(augmentations_class.observational_window_spline)
     if "observed_n_stars" in cfg.augmentations:
         augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
     if "compact_to_attended" in cfg.augmentations:

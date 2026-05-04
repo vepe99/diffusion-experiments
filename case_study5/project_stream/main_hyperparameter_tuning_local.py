@@ -30,7 +30,7 @@ def clear_gpu_memory():
 def objective(trial, cfg, test_data):
     augmentations_class.key = jax.random.PRNGKey(42)
     clear_gpu_memory()
-    results_dir = f'./data/hyperparameter_tuning/gala/local/300k_200epoch/streamnorm_standardize/model_{trial.number}/'
+    results_dir = f'./data/hyperparameter_tuning/gala/local/random_obswindows/streamnorm_standardize/model_{trial.number}/'
     os.makedirs(results_dir, exist_ok=True)
 
     summary_dim = trial.suggest_int("SetTransformer_summary_dim", 32, 128)
@@ -373,6 +373,8 @@ if __name__ == "__main__":
         augmentations.append(augmentations_class.apply_obs_error)
     if "observational_window" in cfg.augmentations:
         augmentations.append(augmentations_class.observational_window)
+    if "observational_window_random" in cfg.augmentations:
+        augmentations.append(augmentations_class.observational_window_random)
     if "observed_n_stars" in cfg.augmentations:
         augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
     if "mask_vlos" in cfg.augmentations:
@@ -402,7 +404,7 @@ if __name__ == "__main__":
         
     print("Loaded config:", cfg)
     study_name = 'study_DiffusionMode_local'  # Unique identifier of the study.
-    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/gala/local/300k_200epoch/streamnorm_standardize/optuna_diffusionmodel_gala_local_cutNGC3201.log"))
+    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/gala/local/random_obswindows/streamnorm_standardize/optuna_diffusionmodel_gala_local_cutNGC3201.log"))
     study = optuna.create_study(study_name=study_name, storage=storage_name, directions=['minimize', 'minimize'], load_if_exists=True)
     study.optimize(
         lambda trial: objective(trial, cfg, test_data),

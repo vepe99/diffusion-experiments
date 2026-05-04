@@ -117,8 +117,9 @@ augmentations:
 - "cut_to_300_particles"
 # - "remove_los_velocity"
 - convert_distance_to_parallax
-- observational_window
-- observed_n_stars
+# - observational_window
+- observational_window_random
+# - observed_n_stars
 - mask_vlos
 - sample_magnitudes
 - sample_obs_error

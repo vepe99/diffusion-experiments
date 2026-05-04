@@ -1,7 +1,7 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_gala/"
 N_simulations: 300_000
-results_dir: "hyperparameter_tuning/gala/local/new_aug_jonas_300k_200epoch/streamnorm_standardize/model_25"
+results_dir: "hyperparameter_tuning/gala/local/new_aug_jonas_300k_200epoch/streamnorm_standardize/model_79"
 test: False
 
 #training hyperparameters
@@ -115,10 +115,11 @@ gaia_id:
 
 augmentations:
 - "cut_to_300_particles"
-# - remove_los_velocity
+# - "remove_los_velocity"
 - convert_distance_to_parallax
-- observational_window
-- observed_n_stars
+# - observational_window
+- observational_window_random
+# - observed_n_stars
 - mask_vlos
 - sample_magnitudes
 - sample_obs_error

@@ -155,9 +155,10 @@ class AugmentationsClass:
         self.error_values_stacked = jnp.stack(
             [error_values[k] for k in self.error_keys], axis=0
         )  # shape (5/6, n_mag_bins)
-        self.error_values_stacked = self.error_values_stacked.at[:2].set(
-            self.error_values_stacked[:2] * u.mas.to(u.deg)
-        )
+        # self.error_values_stacked = self.error_values_stacked.at[:2].set(
+        #     self.error_values_stacked[:2] * u.mas.to(u.deg)
+        # )
+        # print("Error values stacked shape:", self.error_values_stacked)
         # v_los error values for mask_vlos interpolation
         self.vlos_median_std = error_values["v_los"]       # shape (n_mag_bins,)
         self.vlos_std_of_std = error_values["std_v_los"]   # shape (n_mag_bins,)
@@ -179,6 +180,51 @@ class AugmentationsClass:
         self.vlos_mean_lookup = jnp.array(vlos_mean_list)
         self.vlos_std_lookup = jnp.array(vlos_std_list)
 
+
+        #new observational windows using the track
+        from scipy.interpolate import UnivariateSpline
+
+        N_DENSE = 500  # dense enough for smooth interpolation, cheap to store
+
+        track_ra_dense  = []
+        track_dec_dense = []
+        track_width_deg = []
+        track_ra_min    = []
+        track_ra_max    = []
+
+        for idx in range(self.n_streams):
+            stream_name = self.idx_to_stream[idx]
+            track  = np.load(f"/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/{stream_name}_track.npz")
+
+            ra  = track['ra']
+            dec = track['dec']
+            order = np.argsort(ra)
+            ra, dec = ra[order], dec[order]
+
+            spl      = UnivariateSpline(ra, dec, s=0, k=3)
+            ra_dense = np.linspace(ra.min(), ra.max(), N_DENSE)
+            dec_dense = spl(ra_dense)
+
+            # 5-sigma width from observed stream members
+            source_id  = self.j_to_source_id[idx]
+            tbl_subset = self.tbl_data[self.tbl_data["Stream"] == source_id]
+            obs_ra     = np.asarray(tbl_subset["RAdeg"], dtype=float)
+            obs_dec    = np.asarray(tbl_subset["DEdeg"], dtype=float)
+            in_ra      = (obs_ra >= ra.min()) & (obs_ra <= ra.max())
+            residuals  = obs_dec[in_ra] - spl(obs_ra[in_ra])
+            width_deg  = 5.0 * float(np.std(residuals))
+
+            track_ra_dense.append(ra_dense)
+            track_dec_dense.append(dec_dense)
+            track_width_deg.append(width_deg)
+            track_ra_min.append(ra.min())
+            track_ra_max.append(ra.max())
+
+        self.track_ra_dense  = jnp.array(track_ra_dense)   # (n_streams, N_DENSE)
+        self.track_dec_dense = jnp.array(track_dec_dense)  # (n_streams, N_DENSE)
+        self.track_width_deg = jnp.array(track_width_deg)  # (n_streams,)
+        self.track_ra_min    = jnp.array(track_ra_min)     # (n_streams,)
+        self.track_ra_max    = jnp.array(track_ra_max)     # (n_streams,)
 
     # ----------------------------------------------------------------
     # Internal key management
@@ -326,6 +372,63 @@ class AugmentationsClass:
             (ra >= ra_min) & (ra <= ra_max) &
             (dec >= dec_min) & (dec <= dec_max)
         )
+        return mask[:, None, :]
+    
+    def observational_window_spline(self, batch):
+        sim_data = batch[self.cfg.sim_data]
+        j        = batch["j"]
+        batch["attention_mask"] = self._observational_window_spline_jit(sim_data, j)
+        return batch
+
+    @partial(jit, static_argnums=(0,))
+    def _observational_window_spline_jit(self, sim_data, j):
+        j_flat = j[:, 0].astype(jnp.int32)
+
+        ra  = sim_data[:, :, 0]  # (batch_size, n_particles)
+        dec = sim_data[:, :, 1]
+
+        # Index precomputed dense tracks by stream
+        ra_dense  = self.track_ra_dense[j_flat]   # (batch_size, N_DENSE)
+        dec_dense = self.track_dec_dense[j_flat]  # (batch_size, N_DENSE)
+        width     = self.track_width_deg[j_flat]  # (batch_size,)
+        ra_min    = self.track_ra_min[j_flat]     # (batch_size,)
+        ra_max    = self.track_ra_max[j_flat]     # (batch_size,)
+
+        # Interpolate track dec at each particle's RA — vmap over batch
+        dec_center = jax.vmap(jnp.interp)(ra, ra_dense, dec_dense)  # (batch_size, n_particles)
+
+        in_ra  = (ra  >= ra_min[:, None]) & (ra  <= ra_max[:, None])
+        in_dec = jnp.abs(dec - dec_center) < width[:, None]
+
+        return (in_ra & in_dec)[:, None, :]
+
+    def observational_window_random(self, batch):
+        """
+        Create attention_mask by randomly selecting observed_n_stars particles
+        from all available particles (no RA/Dec filtering).
+        Must run after cut_to_300_particles.
+        """
+        subkey = self._split_key()
+        sim_data = batch[self.cfg.sim_data]
+        j = batch["j"]
+        batch["attention_mask"] = self._observational_window_random_jit(sim_data, j, subkey)
+        return batch
+
+    @partial(jit, static_argnums=(0,))
+    def _observational_window_random_jit(self, sim_data, j, key):
+        j_flat = j[:, 0].astype(jnp.int32)
+        batch_size, n_particles, _ = sim_data.shape
+
+        max_keep = self.observed_n_stars_lookup[j_flat]  # (batch_size,)
+
+        # All particles are candidates — uniform scores over all
+        random_scores = jax.random.uniform(key, shape=(batch_size, n_particles))
+
+        # Keep the max_keep lowest scores per row
+        sorted_scores = jnp.sort(random_scores, axis=1)
+        threshold = sorted_scores[jnp.arange(batch_size), max_keep - 1]  # (batch_size,)
+        mask = random_scores <= threshold[:, None]  # (batch_size, n_particles)
+
         return mask[:, None, :]
 
     def subsampling_to_observed_n_stars(self, batch):

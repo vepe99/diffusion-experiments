@@ -119,6 +119,8 @@ def main(cfg: TrainConfig):
     # --- Observational selection (window → subsample → compact) ---
     if "observational_window" in cfg.augmentations:
         augmentations.append(augmentations_class.observational_window)
+    if "observational_window_spline" in cfg.augmentations:
+        augmentations.append(augmentations_class.observational_window_spline)
     if "observed_n_stars" in cfg.augmentations:
         augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
     if "compact_to_attended" in cfg.augmentations:
