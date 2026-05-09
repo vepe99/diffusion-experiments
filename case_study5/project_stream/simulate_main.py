@@ -95,7 +95,7 @@ def main(cfg: SimulatorConfig):
     elif cfg.simulator == "StreaMax":
         import jax
         import jax.numpy as jnp
-        from utils_StreaMax_simulator import simulate_stream_StreaMAX
+        from utils.utils_StreaMax_simulator import simulate_stream_StreaMAX
 
         simulate_stream = simulate_stream_StreaMAX
         config = cfg.streamax_config

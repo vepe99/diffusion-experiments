@@ -90,7 +90,7 @@ def objective(trial, cfg):
     augmentations_class.key = jax.random.PRNGKey(42)
     # Clear memory at the start of each trial
     clear_gpu_memory()
-    results_dir = f'./data/hyperparameter_tuning/gala/random_obswindows/300k/model_{trial.number}/'
+    results_dir = f'./data/hyperparameter_tuning/streamax_new/streamax_new/100k/model_{trial.number}/'
     os.makedirs(results_dir, exist_ok=True)
 
     
@@ -270,13 +270,13 @@ if __name__ == "__main__":
         cfg = compose(config_name="train_config")
     
     base_dir =  '/export/data/vgiusepp/diffusion_experiments_test_new/diffusion-experiments/case_study5/project_stream/data/'
-    data_dir = 'streams/data_gala/'
-    N_simulations = 300_000
+    data_dir = 'streams/data_streamax_new/'
+    N_simulations = 100_000
 
 
-    train_data_path = os.path.join(base_dir, data_dir, f"training_data_{N_simulations}.npz")
+    train_data_path = os.path.join(base_dir, data_dir, f"training_data_local_{N_simulations}.npz")
     training_data = dict(np.load(train_data_path, allow_pickle=True))
-    training_data = {k: training_data[k][:290_000] for k in training_data.keys()}
+    training_data = {k: training_data[k][:90_000] for k in training_data.keys()}
 
 
     augmentations_class = AugmentationsClass(cfg)
@@ -328,7 +328,7 @@ if __name__ == "__main__":
         
     print("Loaded config:", cfg)
     study_name = 'study_DiffusionModel'  # Unique identifier of the study.
-    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/gala/random_obswindows/300k/optuna_diffusionmodel_gala_cutNGC3201.log"))
+    storage_name = JournalStorage(JournalFileStorage("./data/hyperparameter_tuning/streamax_new/100k/optuna_diffusionmodel_gala_cutNGC3201.log"))
     study = optuna.create_study(study_name=study_name, storage=storage_name, directions=['minimize', 'minimize'], load_if_exists=True)
     study.optimize(
         lambda trial: objective(trial, cfg),

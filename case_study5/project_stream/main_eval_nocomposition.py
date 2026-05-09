@@ -3,7 +3,7 @@ autocvd(num_gpus = 1)
 
 
 import os
-# os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
+os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 # os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
 import yaml
@@ -25,7 +25,7 @@ import logging
 logging.getLogger('bayesflow').setLevel(logging.DEBUG)
 
 from config.EvalConfig import EvalConfig
-from utils.utils_train_jax_new import AugmentationsClass #we will need to use the augmentations on the test_set
+from utils.utils_train_jax import AugmentationsClass #we will need to use the augmentations on the test_set
 
 cs = ConfigStore.instance()
 cs.store(name="eval_config", node=EvalConfig)
@@ -64,6 +64,12 @@ def main(cfg: EvalConfig):
 
     print('Loading test data from ', test_data_path)
     test_data = dict(np.load(test_data_path, allow_pickle=True))
+
+    # Boolean mask: True where a simulation is NOT NaN (shape: n_simulations)
+    valid_mask = ~np.isnan(test_data['sim_data_carthesian']).any(axis=(-1, -2, -3))
+
+    # Filter every key in the dict along the simulation axis
+    test_data = {k: v[valid_mask] for k, v in test_data.items()}
     keys_to_drop = set(test_data.keys()) - set(param_names_global) - {sim_data} - set(inference_conditions)
     keys_to_drop = list(keys_to_drop) 
     # we need to subsample 
@@ -84,21 +90,21 @@ def main(cfg: EvalConfig):
         .rename(sim_data, "summary_variables")
         .rename(inference_conditions, "inference_conditions")
     )
-    # with open(os.path.join(cfg.base_dir, cfg.model_dir, '.hydra', 'config.yaml'), "r") as f:
-    #     model_config = yaml.safe_load(f)
-    model_config = {'global_model':
-                    {
-                        'inference_mlp_width': cfg.global_model.inference_mlp_width,
-                        'inference_mlp_depth': cfg.global_model.inference_mlp_depth,
-                        'inference_time_embedding_dim': cfg.global_model.inference_time_embedding_dim,
-                        'summary_dim': cfg.global_model.summary_dim,
-                        'num_heads': cfg.global_model.num_heads,
-                        'embed_dims': cfg.global_model.embed_dims,
-                        'mlp_depths': cfg.global_model.mlp_depths,
-                        'mlp_widths': cfg.global_model.mlp_widths,
-                        'dropout': cfg.global_model.dropout,
-                    }
-                }
+    with open(os.path.join(cfg.base_dir, cfg.model_dir, '.hydra', 'config.yaml'), "r") as f:
+        model_config = yaml.safe_load(f)
+    # model_config = {'global_model':
+    #                 {
+    #                     'inference_mlp_width': cfg.global_model.inference_mlp_width,
+    #                     'inference_mlp_depth': cfg.global_model.inference_mlp_depth,
+    #                     'inference_time_embedding_dim': cfg.global_model.inference_time_embedding_dim,
+    #                     'summary_dim': cfg.global_model.summary_dim,
+    #                     'num_heads': cfg.global_model.num_heads,
+    #                     'embed_dims': cfg.global_model.embed_dims,
+    #                     'mlp_depths': cfg.global_model.mlp_depths,
+    #                     'mlp_widths': cfg.global_model.mlp_widths,
+    #                     'dropout': cfg.global_model.dropout,
+    #                 }
+    #             }
     print(model_config)
     workflow_global = bf.BasicWorkflow(
         adapter=adapter,
@@ -134,6 +140,8 @@ def main(cfg: EvalConfig):
         augmentations.append(augmentations_class.apply_obs_error)
     if "observational_window" in cfg.augmentations:
         augmentations.append(augmentations_class.observational_window)
+    if "observational_window_random" in cfg.augmentations:
+        augmentations.append(augmentations_class.observational_window_random)
     if "observed_n_stars" in cfg.augmentations:
         augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
     if "mask_vlos" in cfg.augmentations:
@@ -194,10 +202,10 @@ def main(cfg: EvalConfig):
         cfg.paramater_global_pretty = cfg.paramater_global_pretty + ['$q_{NFW}$']
         #apply flipping to have all halos with dirz > 0, to avoid the degeneracy in the definition of the angles of the halo and make the plots easier to interpret
         #only needed for the 100 epochs models with onlyhalo
-        mask_posterior = ps['dirz_Triaxial_rotated_halo'] < 0
-        ps['dirz_Triaxial_rotated_halo'][mask_posterior] *= -1
-        ps['dirx_Triaxial_rotated_halo'][mask_posterior] *= -1
-        ps['diry_Triaxial_rotated_halo'][mask_posterior] *= -1
+        # mask_posterior = ps['dirz_Triaxial_rotated_halo'] < 0
+        # ps['dirz_Triaxial_rotated_halo'][mask_posterior] *= -1
+        # ps['dirx_Triaxial_rotated_halo'][mask_posterior] *= -1
+        # ps['diry_Triaxial_rotated_halo'][mask_posterior] *= -1
         
     np.savez(os.path.join(cfg.base_dir, cfg.results_dir, 'posterior.npz'), **ps)
 

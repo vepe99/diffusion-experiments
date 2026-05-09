@@ -34,7 +34,7 @@ cs.store(name="simulator_config", node=SimulatorConfig)
 # percentile of the joint distance distribution — equivalent to the ±1σ band
 # for a Gaussian posterior.
 # ──────────────────────────────────────────────────────────────────────────────
-N_POSTERIOR_SAMPLES = 10  # <── total PPC runs
+N_POSTERIOR_SAMPLES = 100  # <── total PPC runs
 QUANTILE_SAMPLING   = True   # <── set False to fall back to random / mode
 QUANTILE_LOW        = 0.16   # <── lower CDF bound (0.0 = include everything below median)
 QUANTILE_HIGH       = 0.84  # <── upper CDF bound
@@ -365,14 +365,15 @@ def main(cfg: SimulatorConfig):
     # ── Load posteriors ────────────────────────────────────────────────────────
     global_posterior_path = os.path.join(
         cfg.base_dir,
-        # '../plots/gala6D_aug/new_hyper/model54_60k_1000epochs/global_posterior.npz'
-        '../hyperparameter_tuning/gala/new_aug_bigheads/model_121/gaiastreams/global_posterior.npz'
+        '../plots/gala6D_aug/new_hyper/model54_60k_1000epochs/global_posterior.npz'
+        # '../hyperparameter_tuning/gala/new_aug_bigheads/model_121/gaiastreams/global_posterior.npz'
         # '../hyperparameter_tuning/gala/300k/model_21/gaiastreams/global_posterior.npz'
     )
     local_posterior_path = os.path.join(
         cfg.base_dir,
-        '../hyperparameter_tuning/gala/local/new_aug_jonas_300k_200epoch/streamnorm_standardize/model_79/gaia_121/gaia_local_posterior.npz'
+        # '../hyperparameter_tuning/gala/local/new_aug_jonas_300k_200epoch/streamnorm_standardize/model_79/gaia_121/gaia_local_posterior.npz'
         # '../hyperparameter_tuning/gala/local/jonas/streamnomr_standardize/model_2/gaia_121/gaia_local_posterior.npz'
+        '../hyperparameter_tuning/gala/local/jonas/streamnomr_standardize/model_2/gaia_54/gaia_local_posterior.npz'
     )
     print('Loading global posterior from:', global_posterior_path)
     global_posterior = dict(np.load(global_posterior_path, allow_pickle=True))
@@ -488,7 +489,7 @@ def main(cfg: SimulatorConfig):
                 for param, vals in local_draws[stream].items():
                     # if (stream != 'M68') and (param != 'mu_dec'):
                     # if (stream != 'M68'):
-                    if True:
+                    if False:
                         cfg.priors_local[stream][param] = {
                             'type': 'identity',
                             'prior_parameters': [float(vals[ppc_idx])],

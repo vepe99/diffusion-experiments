@@ -1,8 +1,8 @@
-# from autocvd import autocvd
-# autocvd(num_gpus=1)
+from autocvd import autocvd
+autocvd(num_gpus=1)
 import os
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
+# os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
 import yaml
 import matplotlib.pyplot as plt
@@ -211,8 +211,8 @@ def main(cfg: EvalConfig):
     # ── Load global posterior ──────────────────────────────────────────────
     global_posterior_path = os.path.join(
         cfg.base_dir,
-        # 'plots/gala6D/new_hyper/model54_60k_1000epochs/global_posterior.npz'
-        'hyperparameter_tuning/gala/300k/model_21/gaiastreams/global_posterior.npz'
+        'plots/gala6D/new_hyper/model54_60k_1000epochs/global_posterior.npz'
+        # 'hyperparameter_tuning/gala/300k/model_21/gaiastreams/global_posterior.npz'
 
     )
     print('Loading global posterior from ', global_posterior_path)

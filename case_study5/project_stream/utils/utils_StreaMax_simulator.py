@@ -61,23 +61,22 @@ def simulate_stream_StreaMAX(parameters_dict, config, code_units, random_seed:in
                     'nucleus_params': params_nucleus}
     elif type_host == "MW2014":
         params_halo = {'logM': jnp.log10(parameters_dict['m_Triaxial_rotated_halo'][0]), 
-                    'Rs': parameters_dict['r_Triaxial_rotated_halo'][0], 
+                        'Rs': parameters_dict['r_Triaxial_rotated_halo'][0], 
                         'a':1.0, 'b': 1.0, 'c': q,
                         'dirx': dirx, 'diry': diry, 'dirz': dirz,
                         'x_origin': 0.0, 'y_origin': 0.0, 'z_origin': 0.0}
         params_disk = {'logM': jnp.log10(parameters_dict['m_disk_MW2014'][0]), 
                         'Rs': parameters_dict['r_disk_MW2014'][0], 'Hs': parameters_dict['z_disk_MW2014'][0], 
-                        'positive_density': True, 'sech2_z':True,
-                        'dirx': 0.0, 'diry': 0.0, 'dirz': 1.0,
+                        'dirx': 0.0, 'diry': 0.0, 'dirz': 0.0,
                         'x_origin': 0.0, 'y_origin': 0.0, 'z_origin': 0.0}
         params_bulge = {'logM': jnp.log10(parameters_dict['m_bulge'][0]), 
-                        'Rs': parameters_dict['r_bulge'][0],
-                    'dirx': 0.0, 'diry': 0.0, 'dirz': 1.0,
+                        'alpha': parameters_dict['alpha_bulge'][0],
+                        'r_c': parameters_dict['r_c_bulge'][0],
+                    'dirx': 0.0, 'diry': 0.0, 'dirz': 0.0,
                     'x_origin': 0.0, 'y_origin': 0.0, 'z_origin': 0.0}
         params_host = {'halo_params': params_halo, 
                     'disk_params': params_disk, 
                     'bulge_params': params_bulge}
-    elif type_potential == "Palau2023_mod"
 
     # Plummer Sattelite
     type_sat   = 'Plummer'
@@ -95,7 +94,7 @@ def simulate_stream_StreaMAX(parameters_dict, config, code_units, random_seed:in
     n_particles = config.N_particles
     n_steps     = config.n_timesteps # n_steps+1 must be a factor of n_particles
 
-    # m_f_sat = jnp.log10(parameters_dict['m_progenitor'][0])
+    # m_f_sat = parameters_dict['m_progenitor'][0]*0.1
     m_f_sat = 0.0
 
     t_sat, xv_sat, xv_stream, xhi_stream = StreaMAX.generate_stream(xv_f, 
@@ -103,7 +102,8 @@ def simulate_stream_StreaMAX(parameters_dict, config, code_units, random_seed:in
                                                                     type_sat, params_sat, 
                                                                     time, alpha, n_steps,
                                                                     n_particles, 
-                                                                    config.unroll, type_method=config.type_method,
+                                                                    config.unroll, 
+                                                                    type_method=config.type_method,
                                                                     m_f_sat=m_f_sat)
     xv_stream =xv_stream.at[:, 3:].set(xv_stream[:,3:]* (u.kpc/u.Gyr).to(u.km/u.s)) # Convert velocities back to km/s
     

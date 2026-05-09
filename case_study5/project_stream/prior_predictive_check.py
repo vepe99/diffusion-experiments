@@ -12,7 +12,7 @@ import matplotlib.cm as mcm
 from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-from utils.utils_train_jax import AugmentationsClass #we will need to use the augmentations on the test_set
+from utils.utils_train_jax_new import AugmentationsClass #we will need to use the augmentations on the test_set
 from config.EvalConfig import EvalConfig
 import hydra
 from hydra.core.config_store import ConfigStore
@@ -811,12 +811,12 @@ def prior_parameters_corner(
 @hydra.main(version_base=None, config_path="config", config_name="eval_config",)
 def main(cfg: EvalConfig):
     base_dir               = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
-    training_data_data_dir = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_gala/"
+    training_data_data_dir = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_streamax_new/"
     observed_data_path     = os.path.join(base_dir, "gaia_observed_streams_6Dwitherrors_cutNGC3201.npz")
-    path_to_save           = os.path.join(base_dir, "plots/prior_predictive_check/gala/")
+    path_to_save           = os.path.join(base_dir, "plots/prior_predictive_check/streamax_new/")
 
     # ── Training set ─────────────────────────────────────────────────────────
-    training_set_loaded = dict(np.load(os.path.join(base_dir, training_data_data_dir, "training_data_300000.npz")))
+    training_set_loaded = dict(np.load(os.path.join(base_dir, training_data_data_dir, "training_data_local_100000.npz")))
     training_set = {}
     # for k in ["sim_data_projected", "j"]:
     for k in training_set_loaded.keys():
@@ -847,6 +847,8 @@ def main(cfg: EvalConfig):
         augmentations.append(augmentations_class.apply_obs_error)
     if "observational_window" in cfg.augmentations:
         augmentations.append(augmentations_class.observational_window)
+    if "observational_window_random" in cfg.augmentations:
+        augmentations.append(augmentations_class.observational_window_random)
     if "observed_n_stars" in cfg.augmentations:
         augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
     if "mask_vlos" in cfg.augmentations:
@@ -894,57 +896,57 @@ def main(cfg: EvalConfig):
     for k in obs_data.keys():
         print(f"{k} shape after augmentation: {obs_data[k].shape}")
 
-    # prior_predictive_check(training_set, obs_data, path_to_save, dims_to_show = [0, 1, 2, 3, 4, 5])
+    prior_predictive_check(training_set, obs_data, path_to_save, dims_to_show = [0, 1, 2, 3, 4, 5])
     print("saved at: ", path_to_save)
 
     # ── load / build parameter dict ──────────────────────────────────────────
     # Adjust the key names to whatever your training .npz actually stores.
-    param_npz = np.load(os.path.join(training_data_data_dir, "training_data_300000.npz"))
-    N = 300_000   # number of samples to use for the corner plot (adjust as needed)
+    # param_npz = np.load(os.path.join(training_data_data_dir, "training_data_300000.npz"))
+    # N = 300_000   # number of samples to use for the corner plot (adjust as needed)
 
-    parameters = {
-        "m_Triaxial_halo"  : param_npz["m_Triaxial_halo"]  [:N].flatten(),
-        "r_Triaxial_halo"  : param_npz["r_Triaxial_halo"]  [:N].flatten(),
-        # "q1_Triaxial_halo" : param_npz["q1_Triaxial_halo"] [:N].flatten(),
-        "q2_Triaxial_halo" : param_npz["q2_Triaxial_halo"] [:N].flatten(),
-        "rho_thin_disk"    : param_npz["rho_thin_disk"]    [:N].flatten(),
-        "hr_thin_disk"     : param_npz["hr_thin_disk"]     [:N].flatten(),
-        "hz_thin_disk"     : param_npz["hz_thin_disk"]     [:N].flatten(),
-        "rho_thick_disk"   : param_npz["rho_thick_disk"]   [:N].flatten(),
-        "hr_thick_disk"    : param_npz["hr_thick_disk"]    [:N].flatten(),
-        "hz_thick_disk"    : param_npz["hz_thick_disk"]    [:N].flatten(),
-        # "m_bulge"          : param_npz["m_bulge"]          [:N].flatten(),
-        # "r_bulge"          : param_npz["r_bulge"]          [:N].flatten(),
-        # "alpha_bulge"      : param_npz["alpha_bulge"]      [:N].flatten(),
-    }
+    # parameters = {
+    #     "m_Triaxial_halo"  : param_npz["m_Triaxial_halo"]  [:N].flatten(),
+    #     "r_Triaxial_halo"  : param_npz["r_Triaxial_halo"]  [:N].flatten(),
+    #     # "q1_Triaxial_halo" : param_npz["q1_Triaxial_halo"] [:N].flatten(),
+    #     "q2_Triaxial_halo" : param_npz["q2_Triaxial_halo"] [:N].flatten(),
+    #     "rho_thin_disk"    : param_npz["rho_thin_disk"]    [:N].flatten(),
+    #     "hr_thin_disk"     : param_npz["hr_thin_disk"]     [:N].flatten(),
+    #     "hz_thin_disk"     : param_npz["hz_thin_disk"]     [:N].flatten(),
+    #     "rho_thick_disk"   : param_npz["rho_thick_disk"]   [:N].flatten(),
+    #     "hr_thick_disk"    : param_npz["hr_thick_disk"]    [:N].flatten(),
+    #     "hz_thick_disk"    : param_npz["hz_thick_disk"]    [:N].flatten(),
+    #     # "m_bulge"          : param_npz["m_bulge"]          [:N].flatten(),
+    #     # "r_bulge"          : param_npz["r_bulge"]          [:N].flatten(),
+    #     # "alpha_bulge"      : param_npz["alpha_bulge"]      [:N].flatten(),
+    # }
 
     # Nice LaTeX labels for each axis
-    param_labels = {
-        "m_Triaxial_halo"  : r"$M_{\rm halo}$",
-        "r_Triaxial_halo"  : r"$r_s$",
-        # "q1_Triaxial_halo" : r"$q_1$",
-        "q2_Triaxial_halo" : r"$q_2$",
-        "rho_thin_disk"    : r"$\rho_{\rm thin}$",
-        "hr_thin_disk"     : r"$h_{R,\rm thin}$",
-        "hz_thin_disk"     : r"$h_{z,\rm thin}$",
-        "rho_thick_disk"   : r"$\rho_{\rm thick}$",
-        "hr_thick_disk"    : r"$h_{R,\rm thick}$",
-        "hz_thick_disk"    : r"$h_{z,\rm thick}$",
-        # "m_bulge"          : r"$M_{\rm bulge}$",
-        # "r_bulge"          : r"$r_c$",
-        # "alpha_bulge"      : r"$\alpha_{\rm bulge}$",
-    }
+    # param_labels = {
+    #     "m_Triaxial_halo"  : r"$M_{\rm halo}$",
+    #     "r_Triaxial_halo"  : r"$r_s$",
+    #     # "q1_Triaxial_halo" : r"$q_1$",
+    #     "q2_Triaxial_halo" : r"$q_2$",
+    #     "rho_thin_disk"    : r"$\rho_{\rm thin}$",
+    #     "hr_thin_disk"     : r"$h_{R,\rm thin}$",
+    #     "hz_thin_disk"     : r"$h_{z,\rm thin}$",
+    #     "rho_thick_disk"   : r"$\rho_{\rm thick}$",
+    #     "hr_thick_disk"    : r"$h_{R,\rm thick}$",
+    #     "hz_thick_disk"    : r"$h_{z,\rm thick}$",
+    #     # "m_bulge"          : r"$M_{\rm bulge}$",
+    #     # "r_bulge"          : r"$r_c$",
+    #     # "alpha_bulge"      : r"$\alpha_{\rm bulge}$",
+    # }
 
-    prior_parameters_corner(
-        parameters    = parameters,
-        path_to_save  = os.path.join(base_dir, "plots/prior_predictive_check/gala/"),
-        param_labels  = param_labels,
-        vc_target_kms = 220.0,
-        vc_tolerance  = 0.10,       # ±10 %
-        r_vc_kpc      = 8.0,
-        bins          = 40,
-        verbose       = True,
-    )
+    # prior_parameters_corner(
+    #     parameters    = parameters,
+    #     path_to_save  = os.path.join(base_dir, "plots/prior_predictive_check/gala/"),
+    #     param_labels  = param_labels,
+    #     vc_target_kms = 220.0,
+    #     vc_tolerance  = 0.10,       # ±10 %
+    #     r_vc_kpc      = 8.0,
+    #     bins          = 40,
+    #     verbose       = True,
+    # )
 
 
 

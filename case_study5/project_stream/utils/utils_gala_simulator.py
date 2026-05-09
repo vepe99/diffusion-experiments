@@ -72,6 +72,7 @@ def simulate_stream_gala(parameters_dict, config, code_units, random_seed:int):
         gen = gd.MockStreamGenerator(df, pot)
     stream, _ = gen.run(w0, prog_mass,
                         # n_particles=config.N_particles,
+                        n_particles = 1, 
                         dt=-(parameters_dict['t_end']*u.Gyr.to(u.Myr)/config.n_timesteps), 
                         n_steps=config.n_timesteps, 
                         progress=True

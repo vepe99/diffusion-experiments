@@ -168,10 +168,10 @@ def load_simulations_to_dict(base_directory, subfolders, N_simulations_per_folde
     return data_dict
 
 if __name__ == "__main__":
-    # base_directory = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_streamax/"    
-    # subfolders = ["data_streamax_1", "data_streamax_2", "data_streamax_3"]
-    base_directory = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_galax_1e6/data_galax_newlocalprior/"
-    subfolders = ["./",]
+    base_directory = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_streamax_new/"    
+    subfolders = ["data_streamax_new_1", "data_streamax_new_2", "data_streamax_new_3", "data_streamax_new_4"]
+    # base_directory = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_galax_1e6/data_galax_newlocalprior/"
+    # subfolders = ["./",]
     # subfolders = ["data_streamax_validation"]
     # Infer N_simulations_per_folder from the number of .npz files in each subfolder
     N_simulations_per_folder = []
@@ -184,7 +184,7 @@ if __name__ == "__main__":
         print(f"{subfolder}: {n_files} files (indices {N_simulations_per_folder[-1][0]} to {N_simulations_per_folder[-1][1] - 1})")
     N_total = cumulative
     print(f"Total simulations: {N_total}")
-    n_particles_subsample = 1000
+    n_particles_subsample = 2000
 
     # Load config from first subfolder
     config_path = os.path.join(base_directory, subfolders[0], '.hydra', 'config.yaml')

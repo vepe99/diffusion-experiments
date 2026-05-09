@@ -21,7 +21,7 @@ logging.getLogger("bayesflow").setLevel(logging.DEBUG)
 
 # from case_study5.project_stream.train_config import TrainConfig
 from config.TrainConfig import TrainConfig
-from utils.utils_train_jax import AugmentationsClass
+from utils.utils_train_jax_new import AugmentationsClass
 
 cs = ConfigStore.instance()
 cs.store(name="train_config", node=TrainConfig)
@@ -43,12 +43,12 @@ def main(cfg: TrainConfig):
     sim_data = str(cfg.sim_data)
     inference_conditions = str(cfg.inference_conditions[0])  # jut 1
     train_data_path = os.path.join(
-        cfg.base_dir, cfg.data_dir, f"training_data_{cfg.N_simulations}.npz"
+        cfg.base_dir, cfg.data_dir, f"training_data_local_{cfg.N_simulations}.npz"
     )
     print("Train data path:", train_data_path)
     training_data = dict(np.load(train_data_path, allow_pickle=True))
     
-    training_data = {k: v[:60_000] for k, v in training_data.items()}
+    # training_data = {k: v[:60_000] for k, v in training_data.items()}
     print("Training data keys", training_data.keys())
     keys_to_drop = (
         set(training_data.keys())
@@ -89,7 +89,7 @@ def main(cfg: TrainConfig):
         ),
         standardize=["inference_variables", "summary_variables"],
         checkpoint_filepath=model_path,
-        checkpoint_name="checkpoint_global_model.keras",
+        checkpoint_name="checkpoint_global_model",
     )
 
     augmentations_class = AugmentationsClass(cfg)
@@ -109,6 +109,8 @@ def main(cfg: TrainConfig):
         augmentations.append(augmentations_class.apply_obs_error)
     if "observational_window" in cfg.augmentations:
         augmentations.append(augmentations_class.observational_window)
+    if "observational_window_random" in cfg.augmentations:
+        augmentations.append(augmentations_class.observational_window_random)
     if "observed_n_stars" in cfg.augmentations:
         augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
     if "mask_vlos" in cfg.augmentations:
@@ -395,7 +397,7 @@ def main(cfg: TrainConfig):
         augmentations=augmentations,
     )
     workflow_global.approximator.save(os.path.join(model_path, "global_model.keras"))
-    workflow_global.approximator.save_weights(model_path.replace('.keras', '.weights.h5'))
+    # workflow_global.approximator.save_weights(model_path.replace('.keras', '.weights.h5'))
     loss_plot = bf.diagnostics.plots.loss(
         history,
     )

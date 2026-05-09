@@ -1,11 +1,15 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams"
-data_dir: "data_agama/"
-simulator: "agama" #odisseo, gala, galax, StreaMax, agama
-n_simulations: [0, 60000] #1
+data_dir: "data_streamax_new/data_streamax_new_4"
+simulator: "StreaMax" #odisseo, gala, galax, StreaMax, agama
+# n_simulations: [0, 25000] #1
+# n_simulations: [25000, 50000] #2
+# n_simulations: [50000, 75000] #3
+n_simulations: [75000, 100000] #3
+
 # n_simulations: [66_000, 100_000] #3
 # n_simulations: [50_000, 100_000] #2
 # n_simulations: [0, 100_000] #3
-batch_size: 512
+batch_size: 256
 use_rotated_halo: False #only for gala
 use_flattened_halo: False #only for galax
 use_SCF: False #only for gala
@@ -22,72 +26,53 @@ pretty_parameters_local:
 
 priors_global: #str for the type and a list of values for the parameters of the prior
   #HALO TWOPOWER TRIAXIAL
-  # m_TwoPowerTriaxial_halo:
-  #   type: uniform
-  #   prior_parameters: [0.5e12, 3e12]
-  rho_TwoPowerTriaxial_halo:
+  m_Triaxial_rotated_halo:
     type: uniform
-    prior_parameters: [0.5e8, 1.5e8]
-  gamma_TwoPowerTriaxial_halo:
+    prior_parameters:
+    - 2.18416625e11
+    - 8.736665e11
+  r_Triaxial_rotated_halo:
     type: uniform
-    prior_parameters: [0.0, 2.0]
-  a_TwoPowerTriaxial_halo:
-    type: uniform
-    prior_parameters: [1.0, 50.0]
-  beta_TwoPowerTriaxial_halo:
-    # type: uniform
-    # prior_parameters: [2.0, 6.0]
-    type: identity
-    prior_parameters: [3.0]
-  q_TwoPowerTriaxial_halo:
-    type: uniform
-    prior_parameters: [0.5, 1.5]
-  #THIN AND THICK DISK
-  rho_thin_disk:
-    type: uniform
-    prior_parameters: [0.5e9, 2.0e9]
-  hr_thin_disk:
+    prior_parameters:
+    - 5.0
+    - 25.0
+  dirx_Triaxial_rotated_halo:
     type: normal
-    prior_parameters: [2.6, 0.5]
-  hz_thin_disk:
+    prior_parameters:
+    - 0.0
+    - 1.0
+  diry_Triaxial_rotated_halo:
     type: normal
-    prior_parameters: [0.3, 0.05]
-  rho_thick_disk:
-    type: uniform
-    prior_parameters: [1.0e5, 1.5e9]
-  hr_thick_disk:
+    prior_parameters:
+    - 0.0
+    - 1.0
+  dirz_Triaxial_rotated_halo:
     type: normal
-    prior_parameters: [2.0, 0.2]
-  hz_thick_disk:
-    type: normal
-    prior_parameters: [0.9, 0.18]
+    prior_parameters:
+    - 0.0
+    - 1.0
   #BULGE 
-  rho_bulge:
-    type: uniform
-    prior_parameters: [5.0e10, 14.0e10]
+  m_bulge:
+    type: identity
+    prior_parameters: [4501365375.06545]
+    # prior_parameters: [0.0]
   alpha_bulge:
     type: identity
     prior_parameters: [1.8]
-  a_bulge:
+  r_c_bulge:
     type: identity
-    prior_parameters: [2.1]
-  h_bulge:
-    type: identity
-    prior_parameters: [0.075]
-  q_bulge:
-    type: identity
-    prior_parameters: [0.5]
+    prior_parameters: [1.9]
 
   #DISK
-  r_Disk:
-    type: normal
-    prior_parameters: [2.6, 0.5]
-  z_Disk:
-    type: normal  
-    prior_parameters: [0.3, 0.05]
-  Sigma_Disk:
-    type: uniform
-    prior_parameters: [0.5e9, 2.0e9]
+  r_disk_MW2014:
+    type: identity
+    prior_parameters: [3]
+  z_disk_MW2014:
+    type: identity  
+    prior_parameters: [0.28]
+  m_disk_MW2014:
+    type: identity
+    prior_parameters: [68193902782.346756]
 
 priors_local: #str for the type and a list of values for the parameters of the prior
   Pal5:
@@ -213,11 +198,11 @@ gala_config:
   N_particles: 1000
 
 streamax_config:
-  n_timesteps: 4999
-  N_particles: 5000
+  n_timesteps: 1999
+  N_particles: 2000
   type_host: "MW2014"
   unroll: False
-  type_method: "Fardal2015"
+  type_method: "Chen2025"
 
 agama_config:
   N_particles: 1e3

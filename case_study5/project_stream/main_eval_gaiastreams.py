@@ -1,8 +1,8 @@
 from autocvd import autocvd
-# autocvd(num_gpus = 1)
+autocvd(num_gpus = 1)
 import os
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
+# os.environ["CUDA_VISIBLE_DEVICES"] = ""
 import yaml
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -142,6 +142,8 @@ def main(cfg: EvalConfig):
         augmentations.append(augmentations_class.sample_obs_error)
     if "observational_window" in cfg.augmentations:
         augmentations.append(augmentations_class.observational_window)
+    if "observational_window_random" in cfg.augmentations:
+        augmentations.append(augmentations_class.observational_window_random)
     if "mask_vlos" in cfg.augmentations:
         augmentations.append(augmentations_class.mask_vlos)
     if "concatentate_sigma_error_to_sim_data" in cfg.augmentations:
@@ -203,13 +205,13 @@ def main(cfg: EvalConfig):
                         )
     os.makedirs(name= os.path.join(cfg.base_dir, cfg.results_dir), exist_ok=True)
     ps = global_posterior.copy()
-    # q_min = 0.5
-    # q_max = 1.5
-    # r_posterior = np.sqrt(ps['dirx_Triaxial_rotated_halo']**2 + ps['diry_Triaxial_rotated_halo']**2 + ps['dirz_Triaxial_rotated_halo']**2)
-    # u_uniform_posterior = special.erf(r_posterior/np.sqrt(2)) - np.sqrt(2/np.pi)*r_posterior*np.exp(-(r_posterior**2)/2)
-    # ps['$q_{NFW}$'] = q_min + (q_max-q_min)*u_uniform_posterior
-    # param_names_global = cfg.parameters_global + ['$q_{NFW}$']
-    # cfg.paramater_global_pretty = cfg.paramater_global_pretty + ['$q_{NFW}$']
+    q_min = 0.5
+    q_max = 1.5
+    r_posterior = np.sqrt(ps['dirx_Triaxial_rotated_halo']**2 + ps['diry_Triaxial_rotated_halo']**2 + ps['dirz_Triaxial_rotated_halo']**2)
+    u_uniform_posterior = special.erf(r_posterior/np.sqrt(2)) - np.sqrt(2/np.pi)*r_posterior*np.exp(-(r_posterior**2)/2)
+    ps['$q_{NFW}$'] = q_min + (q_max-q_min)*u_uniform_posterior
+    param_names_global = cfg.parameters_global + ['$q_{NFW}$']
+    cfg.paramater_global_pretty = cfg.paramater_global_pretty + ['$q_{NFW}$']
     np.savez(os.path.join(cfg.base_dir, cfg.results_dir, 'global_posterior.npz'), **ps)
     ###############
     # PLOTS GLOBAL#
@@ -244,9 +246,9 @@ def main(cfg: EvalConfig):
                             kwargs={'attention_mask': attention_mask_stream}
                             )
         ps_stream = posterior_stream.copy()
-        # r_posterior = np.sqrt(ps_stream['dirx_Triaxial_rotated_halo']**2 + ps_stream['diry_Triaxial_rotated_halo']**2 + ps_stream['dirz_Triaxial_rotated_halo']**2)
-        # u_uniform_posterior = special.erf(r_posterior/np.sqrt(2)) - np.sqrt(2/np.pi)*r_posterior*np.exp(-(r_posterior**2)/2)
-        # ps_stream['$q_{NFW}$'] = q_min + (q_max-q_min)*u_uniform_posterior
+        r_posterior = np.sqrt(ps_stream['dirx_Triaxial_rotated_halo']**2 + ps_stream['diry_Triaxial_rotated_halo']**2 + ps_stream['dirz_Triaxial_rotated_halo']**2)
+        u_uniform_posterior = special.erf(r_posterior/np.sqrt(2)) - np.sqrt(2/np.pi)*r_posterior*np.exp(-(r_posterior**2)/2)
+        ps_stream['$q_{NFW}$'] = q_min + (q_max-q_min)*u_uniform_posterior
         np.savez(os.path.join(cfg.base_dir, cfg.results_dir, f'{stream_name}_posterior.npz'), **ps_stream)
         print(f'Saved posterior samples for stream {stream_name}')
         for k in ps_stream.keys():

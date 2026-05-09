@@ -141,26 +141,153 @@ def main(cfg: SimulatorConfig):
                 sim_data_batch = np.stack(sim_data_clean, axis=0)
             else:
                 pass
+        # elif cfg.simulator == "gala":
+        #     batch_params = {k: np.array(v[batch_indices]) for k, v in prior_samples.items()}
+    
+            # # Convert to individual parameter dicts
+            # individual_params = [
+            #     {k: v[i] for k, v in batch_params.items()}
+            #     for i in range(len(batch_indices))
+            # ]
+            
+            # # Run in parallel with joblib
+            # results = Parallel(n_jobs=config.n_workers)(
+            #     delayed(simulate_stream_gala)(
+            #         param_dict, config, code_units, int(batch_indices[i])
+            #     )
+            #     for i, param_dict in enumerate(individual_params)
+            # )
+            
+            # # Stack results
+            # sim_data_batch = np.stack(results, axis=0)
+        # elif cfg.simulator == "gala":
+        #     batch_params = {k: np.array(v[batch_indices]) for k, v in prior_samples.items()}
+
+        #     individual_params = [
+        #         {k: v[i] for k, v in batch_params.items()}
+        #         for i in range(len(batch_indices))
+        #     ]
+
+        #     # ── safe wrapper ──────────────────────────────────────────────
+        #     n_particles = cfg.odisseo_config.N_particles
+
+        #     def _safe_simulate(param_dict, config, code_units, idx):
+        #         try:
+        #             return simulate_stream_gala(param_dict, config, code_units, idx)
+        #         except RuntimeError as e:
+        #             print(
+        #                 f"[WARNING] Integration failed for index {idx} "
+        #                 f"(code -4 or similar): {e}. Returning NaNs."
+        #             )
+        #             return np.full((n_particles+2, 6), np.nan)
+        #     # ─────────────────────────────────────────────────────────────
+
+        #     results = Parallel(n_jobs=config.n_workers)(
+        #         delayed(_safe_simulate)(
+        #             param_dict, config, code_units, int(batch_indices[i])
+        #         )
+        #         for i, param_dict in enumerate(individual_params)
+        #     )
+        #     for r in results:
+        #         print('Result shape:', r.shape)
+        #     sim_data_batch = np.stack(results, axis=0)
+
         elif cfg.simulator == "gala":
             batch_params = {k: np.array(v[batch_indices]) for k, v in prior_samples.items()}
-    
-            # Convert to individual parameter dicts
+
             individual_params = [
                 {k: v[i] for k, v in batch_params.items()}
                 for i in range(len(batch_indices))
             ]
-            
-            # Run in parallel with joblib
+
+            n_particles_gala = cfg.odisseo_config.N_particles + 2
+
+            def _safe_simulate(param_dict, config, code_units, idx):
+                try:
+                    return simulate_stream_gala(param_dict, config, code_units, idx)
+                except RuntimeError as e:
+                    print(f"[WARNING] Integration failed for index {idx} (code -4 or similar): {e}. Returning NaNs.")
+                    return np.full((n_particles_gala, 6), np.nan)
+
+            def _normalize_shape(arr, n):
+                if arr.shape[0] == n:
+                    return arr
+                elif arr.shape[0] > n:
+                    idx = np.linspace(0, arr.shape[0] - 1, n, dtype=int)
+                    return arr[idx]
+                else:
+                    pad = np.full((n - arr.shape[0], 6), np.nan)
+                    return np.vstack([arr, pad])
+
             results = Parallel(n_jobs=config.n_workers)(
-                delayed(simulate_stream_gala)(
-                    param_dict, config, code_units, int(batch_indices[i])
-                )
+                delayed(_safe_simulate)(param_dict, config, code_units, int(batch_indices[i]))
                 for i, param_dict in enumerate(individual_params)
             )
-            
-            # Stack results
-            sim_data_batch = np.stack(results, axis=0)
+            results = [_normalize_shape(r, n_particles_gala) for r in results]
 
+            # ── retry loop ────────────────────────────────────────────────
+            n_streams = len(cfg.target_streams)
+
+            max_retries = 10
+            retry_count = 0
+            while retry_count < max_retries:
+                failed_local = [i for i, r in enumerate(results) if np.isnan(r).any()]
+                if not failed_local:
+                    break
+
+                # Map failed stream slots → unique failed simulation indices
+                failed_sim_indices = list(dict.fromkeys(
+                    int(batch_indices[local_i]) // n_streams for local_i in failed_local
+                ))
+                print(f"[RETRY {retry_count + 1}/{max_retries}] Resampling {len(failed_sim_indices)} failed simulation(s) (all streams)...")
+
+                # Resample one full simulation (all streams) per failed sim
+                new_samples = sample_parameters_parallel(
+                    prior_global_dict=cfg.priors_global,
+                    prior_local_dict=cfg.priors_local,
+                    n_samples=len(failed_sim_indices),
+                    target_streams=cfg.target_streams,
+                    key_seed=rng_seed + retry_count + 1,
+                )
+                for k in cfg.priors_global.keys():
+                    new_samples[k] = np.repeat(new_samples[k][:, np.newaxis, :], n_streams, axis=1)
+                for k in new_samples.keys():
+                    new_samples[k] = new_samples[k].reshape(-1, 1)  # shape: (n_failed_sims * n_streams, 1)
+
+                # Build individual param dicts for every (failed_sim, stream) slot
+                retry_local_indices = []   # positions in `results` to patch
+                retry_param_dicts  = []
+
+                for j, sim_idx in enumerate(failed_sim_indices):
+                    for s in range(n_streams):
+                        flat_row   = j * n_streams + s          # row in new_samples
+                        # find the local position in the batch for this (sim, stream)
+                        global_i   = sim_idx * n_streams + s
+                        local_i    = int(np.where(batch_indices == global_i)[0][0])
+
+                        retry_local_indices.append(local_i)
+                        retry_param_dicts.append({k: new_samples[k][flat_row] for k in new_samples.keys()})
+
+                retry_results = Parallel(n_jobs=config.n_workers)(
+                    delayed(_safe_simulate)(param_dict, config, code_units, int(batch_indices[local_i]))
+                    for param_dict, local_i in zip(retry_param_dicts, retry_local_indices)
+                )
+                retry_results = [_normalize_shape(r, n_particles_gala) for r in retry_results]
+
+                # Patch results and prior_samples for the entire triplet
+                for idx, (local_i, param_dict) in enumerate(zip(retry_local_indices, retry_param_dicts)):
+                    results[local_i] = retry_results[idx]
+                    global_i = int(batch_indices[local_i])
+                    for k in new_samples.keys():
+                        prior_samples[k][global_i] = param_dict[k]
+
+                retry_count += 1
+
+            still_failed = [i for i, r in enumerate(results) if np.isnan(r).any()]
+            if still_failed:
+                print(f"[WARNING] {len(still_failed)} simulation(s) still NaN after {max_retries} retries: local indices {still_failed}")
+
+            sim_data_batch = np.stack(results, axis=0)
         # Save each simulation in the batch
         sim_data_projected_batch = sky_projection_astropy(sim_data_batch)
         save_dict['sim_data_carthesian'][batch_indices] = sim_data_batch

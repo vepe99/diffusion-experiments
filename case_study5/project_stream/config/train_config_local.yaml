@@ -125,7 +125,7 @@ augmentations:
 - sample_obs_error
 - apply_obs_error
 # - flip_dirz
-- concatentate_sigma_error_to_sim_data
+# - concatentate_sigma_error_to_sim_data
 - concatenate_magnitudes_to_sim_data
 - concatenate_vlos_mask_to_sim_data
 - concatenate_j_to_sim_data

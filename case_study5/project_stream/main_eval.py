@@ -1,8 +1,8 @@
-# from autocvd import autocvd
-# autocvd(num_gpus = 1)
+from autocvd import autocvd
+autocvd(num_gpus = 1)
 import os
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
+# os.environ["CUDA_VISIBLE_DEVICES"] = ""
 import yaml
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -22,7 +22,7 @@ import logging
 logging.getLogger('bayesflow').setLevel(logging.DEBUG)
 
 from config.EvalConfig import EvalConfig
-from utils.utils_train_jax_new import AugmentationsClass #we will need to use the augmentations on the test_set
+from utils.utils_train_jax import AugmentationsClass #we will need to use the augmentations on the test_set
 
 
 cs = ConfigStore.instance()
@@ -207,6 +207,8 @@ def main(cfg: EvalConfig):
         augmentations.append(augmentations_class.apply_obs_error)
     if "observational_window" in cfg.augmentations:
         augmentations.append(augmentations_class.observational_window)
+    if "observational_window_random" in cfg.augmentations:
+        augmentations.append(augmentations_class.observational_window_random)
     if "observed_n_stars" in cfg.augmentations:
         augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
     if "mask_vlos" in cfg.augmentations:
