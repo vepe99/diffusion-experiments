@@ -30,8 +30,10 @@ def main():
     # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/local/new_aug_jonas_300k_200epoch/streamnorm_standardize/optuna_diffusionmodel_gala_local_cutNGC3201.log"))
     # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/local/300k_200epoch/streamnorm_standardize/optuna_diffusionmodel_gala_local_cutNGC3201.log"))
 
-    storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/random_obswindows_nosigma/300k/optuna_diffusionmodel_gala_cutNGC3201.log"))
+    # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/random_obswindows_nosigma/300k/optuna_diffusionmodel_gala_cutNGC3201.log"))
     # storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/gala/local/random_obswindows/streamnorm_standardize/optuna_diffusionmodel_gala_local_cutNGC3201.log"))
+
+    storage = JournalStorage(JournalFileStorage("../data/hyperparameter_tuning/streamax_new/100k/optuna_diffusionmodel_gala_cutNGC3201.log"))
 
 
     # study_names = optuna.study.get_all_study_names(storage)

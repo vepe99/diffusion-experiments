@@ -331,6 +331,58 @@ def main(cfg: EvalConfig):
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_recovery.pdf'))
     print('Saved global recovery plot')
     plt.show()
+
+    #splititting recovery plot into the three components, each with its 3 parameters
+    global_posterior_nfw = {k: ps[k] for k in list(ps.keys())[:3]}
+    test_data_stream_nfw = {k: test_data[k] for k in list(global_posterior_nfw.keys())}
+    fig_nfw = bf.diagnostics.recovery(
+        estimates=global_posterior_nfw,
+        targets=test_data_stream_nfw,
+        variable_names=cfg.paramater_global_pretty[:3]
+        # variable_names = param_names_global[:3]
+    )
+    for ax in fig_nfw.get_axes():
+        ax.grid(False)
+        for txt in ax.texts:
+            txt.set_bbox(dict(facecolor='white', alpha=0.7, edgecolor='black', boxstyle='round,pad=0.3'))
+    fig_nfw.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_recovery_nfw.pdf'))
+    print('Saved global recovery plot for NFW parameters')
+    plt.show()
+
+    #thin disk
+    global_posterior_thin_disk = {k: ps[k] for k in list(ps.keys())[3:6]}
+    test_data_stream_thin_disk = {k: test_data[k] for k in list(global_posterior_thin_disk.keys())}
+    fig_thin_disk = bf.diagnostics.recovery(
+        estimates=global_posterior_thin_disk,
+        targets=test_data_stream_thin_disk,
+        variable_names=cfg.paramater_global_pretty[3:6]
+        # variable_names = param_names_global[3:6]
+    )
+    for ax in fig_thin_disk.get_axes():
+        ax.grid(False)
+        for txt in ax.texts:
+            txt.set_bbox(dict(facecolor='white', alpha=0.7, edgecolor='black', boxstyle='round,pad=0.3'))
+    fig_thin_disk.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_recovery_thin_disk.pdf'))
+    print('Saved global recovery plot for thin disk parameters')
+    plt.show()
+
+    #thick disk
+    global_posterior_thick_disk = {k: ps[k] for k in list(ps.keys())[6:9]}
+    test_data_stream_thick_disk = {k: test_data[k] for k in list(global_posterior_thick_disk.keys())}
+    fig_thick_disk = bf.diagnostics.recovery(
+        estimates=global_posterior_thick_disk,
+        targets=test_data_stream_thick_disk,
+        variable_names=cfg.paramater_global_pretty[6:9]
+        # variable_names = param_names_global[6:9]
+    )
+    for ax in fig_thick_disk.get_axes():    
+        ax.grid(False)
+        for txt in ax.texts:
+            txt.set_bbox(dict(facecolor='white', alpha=0.7, edgecolor='black', boxstyle='round,pad=0.3'))
+    fig_thick_disk.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_recovery_thick_disk.pdf'))
+    print('Saved global recovery plot for thick disk parameters')
+    plt.show()
+
     #corner plot
     dataset_id = np.array([0])
     fig = bf.diagnostics.plots.pairs_posterior(

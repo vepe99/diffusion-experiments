@@ -56,8 +56,8 @@ paramater_global_pretty:
 parameter_local_pretty:
   # - "$M_{prog}$"
   # - "$a_{prog}$"
-  - "$v_r$"
-  - "$r$"
+  - "$v_R$"
+  - "$R$"
   - "$\\mu_{\\alpha*}$"
   - "$\\mu_{\\delta}$"
 

@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.21.1"
+__generated_with = "0.23.1"
 app = marimo.App()
 
 
@@ -253,10 +253,10 @@ def _(median_e_VHel_per_bin, np, plt, std_e_VHel_per_bin, tbl_data_pandas):
     fig1, ax1 = plt.subplots(figsize=(8, 6))
 
     # Scatter plot of all data
-    ax1.scatter(tbl_data_pandas['Gmag'], tbl_data_pandas['e_VHel'], alpha=0.3, label='Stars')
+    ax1.scatter(tbl_data_pandas['Gmag'], tbl_data_pandas['e_VHel'], alpha=0.3, label='stars')
 
     # Plot median line
-    ax1.plot(bin_centers, median_e_VHel_per_bin.values, color='red', marker='o', label='Median e_VHel per bin')
+    ax1.plot(bin_centers, median_e_VHel_per_bin.values, color='red', marker='o', label='median $err_{V_R}$')
 
     # Plot filled error bars (standard deviation)
     lower = np.maximum(median_e_VHel_per_bin.values - std_e_VHel_per_bin.values, 0)
@@ -268,13 +268,15 @@ def _(median_e_VHel_per_bin, np, plt, std_e_VHel_per_bin, tbl_data_pandas):
         upper,
         color='red',
         alpha=0.2,
-        label='Std Dev'
+        # label='$\\sigma$'
     )
 
-    ax1.set_xlabel('Gmag')
-    ax1.set_ylabel('e_VHel')
+    ax1.set_xlabel('Gmag', fontsize=20)
+    ax1.set_ylabel('$err_{V_R}$', fontsize=20)
     # ax1.set_yscale('log')
-    ax1.legend()
+    ax1.legend(fontsize=25)
+    ax1.set_ylim(-1, 60)
+    ax1.tick_params(axis="both", labelsize=15)
     plt.show()
     return
 

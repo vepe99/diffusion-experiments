@@ -28,6 +28,8 @@ def calibration_ecdf(
     fill_color: str = "grey",
     num_row: int = None,
     num_col: int = None,
+    local_params: bool = False,
+    title_local_params: str = "Stream",
     **kwargs,
 ) -> plt.Figure:
     # Optionally compute and prepend test quantities
@@ -137,7 +139,8 @@ def calibration_ecdf(
             z, L, U, color=fill_color, alpha=0.2,
             # label=rf"{int((1 - alpha) * 100)}$\%$ Confidence Bands"
         )
-        # ax.set_title(title, fontsize=title_fontsize)
+        if local_params:
+            ax.set_title(title_local_params, fontsize=title_fontsize)
         # if i == 0:
         #     ax.legend(fontsize=legend_fontsize, loc=legend_location)
         # AFTER

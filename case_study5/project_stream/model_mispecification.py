@@ -258,8 +258,8 @@ def main(cfg: EvalConfig):
 
         sns.kdeplot(mmd_null, fill=False, linewidth=3, color="#132a70", label=r"$H_0$", bw_adjust=bw_factor)
         plt.xlabel("MMD", fontsize=20)
-        plt.ylabel("")
-        plt.yticks([])
+        plt.ylabel("Density", fontsize=20)
+        # plt.yticks([])
         plt.tick_params(axis="both", which="major", labelsize=16)
         plt.legend(fontsize=14)
         sns.despine()
@@ -268,7 +268,7 @@ def main(cfg: EvalConfig):
     # fig = bf.diagnostics.mmd_hypothesis_test(mmd_null=distance_null, mmd_observed=distance_observed,)
     fig = mmd_hypothesis_test_numpy(mmd_null=distance_null, mmd_observed=distance_observed,)
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'distance_observed_vs_null.pdf'), bbox_inches='tight')
-    print('Plot saved to ', os.path.join(cfg.base_dir, cfg.results_dir, 'distance_observed_vs_null.pdf'))
+    print('Plot saved to ', os.path.join(cfg.base_dir, cfg.results_dir, 'distance_observed_vs_null_new.pdf'))
 
 
 
