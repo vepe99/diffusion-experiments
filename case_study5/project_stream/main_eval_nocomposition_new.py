@@ -70,10 +70,10 @@ def main(cfg: EvalConfig):
     # Filter every key in the dict along the simulation axis
     test_data = {k: v[valid_mask] for k, v in test_data.items()}
     n_simulation = len(valid_mask)
-    print('Remove index of bad simulation')
+    # print('Remove index of bad simulation')
     # bad_index = [5, 16, 23, 26, 33, 39, 90, 99] 
-    bad_index = [1, 10, 66, 70, 99]
-    test_data = {k: np.delete(v, bad_index, axis=0) for k, v in test_data.items()}
+    # bad_index = [1, 10, 66, 70, 99]
+    # test_data = {k: np.delete(v, bad_index, axis=0) for k, v in test_data.items()}
 
     keys_to_drop = set(test_data.keys()) - set(param_names_global) - {sim_data} - set(inference_conditions)
     keys_to_drop = list(keys_to_drop) 

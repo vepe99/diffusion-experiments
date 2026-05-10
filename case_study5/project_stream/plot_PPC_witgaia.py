@@ -118,7 +118,7 @@ cs.store(name="eval_config", node=EvalConfig)
 PHASE_SPACE_LABELS = [
     r'$\alpha$ [deg]',
     r'$\delta$ [deg]',
-    r'$d$ [kpc]',
+    r'$\pi$ [mas]',
     r'$\mu_\alpha$ [mas/yr]',
     r'$\mu_\delta$ [mas/yr]',
     r'$v_{\rm los}$ [km/s]',
@@ -133,8 +133,8 @@ def main(cfg: EvalConfig):
 
     name_to_plot = ['Pal5', 'NGC3201', 'M68']
     path_data = "/export/data/vgiusepp/diffusion_experiments_test_new/diffusion-experiments/case_study5/project_stream/data/streams/"
-    sampling_type = 'data_multistream_gala_posterior_predictive_check/model_54_60k_1000epochs_local2/'
-    name_file = 'ppc_100samples_q16-84.npz'
+    sampling_type = 'data_multistream_gala_posterior_predictive_check/model_54_60k_1000epochs_local2_rotationalcurve/'
+    name_file = 'ppc_500samples_q16-84.npz'
 
     posterior_sample = np.load(f'{path_data}{sampling_type}{name_file}')
     posteriorpredictive_sample = posterior_sample['sim_data_projected']  # (10, 3, 1002, 6)
@@ -192,6 +192,7 @@ def main(cfg: EvalConfig):
     n_aug_particles = aug_data.shape[-2]
     posterior_sample_aug = aug_data.reshape(n_posterior, n_streams, n_aug_particles, 6)
     aug_mask_reshaped   = aug_mask.reshape(n_posterior, n_streams, n_aug_particles)  # (10, 3, N_aug)
+    colors = plt.cm.RdYlBu_r(np.linspace(0, 1, 4))
 
     # ── Corner plots: one per stream ──────────────────────────────────────────
     for i, stream_name in enumerate(name_to_plot):
@@ -209,7 +210,8 @@ def main(cfg: EvalConfig):
 
         n_dims = 5
         fig, axes = plt.subplots(n_dims, n_dims, figsize=(14, 14))
-        fig.suptitle(stream_name, fontsize=16, y=1.01)
+        fig.suptitle(stream_name, fontsize=25, y=1.01)
+       
 
         for row in range(n_dims):
             for col in range(n_dims):
@@ -222,30 +224,34 @@ def main(cfg: EvalConfig):
                 if row == col:
                     # Diagonal: 1-D histograms
                     ax.hist(ppc_all[:, col], bins=40, density=True,
-                            color='steelblue', alpha=0.5, label='PPC')
+                            color=colors[i+1], alpha=0.5, label='PPC')
                     ax.hist(obs[:, col], bins=40, density=True,
-                            color='tomato', alpha=0.7, histtype='step',
+                            color='k', alpha=0.7, histtype='step',
                             linewidth=1.5, label='Gaia')
                     ax.set_yticks([])
                 else:
                     # Off-diagonal: 2-D scatter
                     ax.scatter(ppc_all[:, col], ppc_all[:, row],
-                               s=0.3, alpha=0.3, color='steelblue', rasterized=True)
+                               s=0.3, alpha=0.3, color=colors[i+1], rasterized=True)
                     ax.scatter(obs[:, col], obs[:, row],
-                               s=1.5, alpha=0.8, color='tomato', rasterized=True)
+                               s=1.5, alpha=0.8, color='k', rasterized=True)
 
                 # Axis labels only on the edges
                 if row == n_dims - 1:
-                    ax.set_xlabel(PHASE_SPACE_LABELS[col], fontsize=9)
+                    ax.set_xlabel(PHASE_SPACE_LABELS[col], fontsize=15)
+                    ax.xaxis.set_major_locator(plt.MaxNLocator(4))
+                    ax.tick_params(axis="both", labelsize=15)
                 else:
                     ax.set_xticklabels([])
                 if col == 0 and row != 0:
-                    ax.set_ylabel(PHASE_SPACE_LABELS[row], fontsize=9)
+                    ax.set_ylabel(PHASE_SPACE_LABELS[row], fontsize=15)
+                    ax.yaxis.set_major_locator(plt.MaxNLocator(4))
+                    ax.tick_params(axis="both", labelsize=15)
                 else:
                     ax.set_yticklabels([])
 
         # Legend on the top-left diagonal panel
-        axes[0, 0].legend(fontsize=8, loc='upper right')
+        axes[0, 0].legend(fontsize=20, loc='upper right')
 
         plt.tight_layout()
         out_path = os.path.join(path_data, sampling_type, f'PPC_corner_{stream_name}.pdf')

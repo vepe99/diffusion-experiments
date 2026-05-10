@@ -114,6 +114,88 @@ def _safe_color(cmap_name: str, level: float = 0.70):
         import matplotlib.cm as mcm
         return mcm.get_cmap(cmap_name)(level)
 
+from scipy.ndimage import gaussian_filter
+from scipy.stats import gaussian_kde
+
+
+def _corner_matplotlib(
+    samples: np.ndarray,          # (N, D)
+    labels: list[str],
+    ranges: list[tuple],
+    color,
+    bins: int = 60,
+    smooth1d: float = 0.5,
+    scatter_alpha: float = 0.05,
+    scatter_size: float = 0.5,
+    hist_lw: float = 1.4,
+    figsize_per_cell: float = 2.5,
+    fig: plt.Figure | None = None,
+) -> plt.Figure:
+    from scipy.ndimage import gaussian_filter1d
+
+    n_d = samples.shape[1]
+    if fig is None:
+        fig, axes = plt.subplots(
+            n_d, n_d,
+            figsize=(figsize_per_cell * n_d, figsize_per_cell * n_d),
+            squeeze=False,
+        )
+    else:
+        axes = np.array(fig.subplots(n_d, n_d, squeeze=False))
+
+    for row in range(n_d):
+        for col in range(n_d):
+            ax = axes[row, col]
+
+            # ── hide upper triangle ────────────────────────────────────────
+            if col > row:
+                ax.set_visible(False)
+                continue
+
+            # ── shared range / tick formatting ─────────────────────────────
+            ax.set_xlim(ranges[col])
+            if row != col:
+                ax.set_ylim(ranges[row])
+
+            # labels only on outer edges
+            if row == n_d - 1:
+                ax.set_xlabel(labels[col], fontsize=13)
+            else:
+                ax.set_xticklabels([])
+            if col == 0 and row != 0:
+                ax.set_ylabel(labels[row], fontsize=13)
+            else:
+                ax.set_yticklabels([])
+
+            ax.tick_params(labelsize=9)
+
+            x = samples[:, col]
+            y = samples[:, row]
+
+            # ── diagonal: density-normalised histogram ─────────────────────
+            if col == row:
+                counts, edges = np.histogram(
+                    x, bins=bins, range=ranges[col], density=True, 
+                )
+                if smooth1d > 0:
+                    counts = gaussian_filter1d(counts.astype(float), sigma=smooth1d)
+                centres = 0.5 * (edges[:-1] + edges[1:])
+                ax.step(centres, counts, where="mid", color=color, linewidth=hist_lw, label='Prior')
+                ax.set_ylim(bottom=0)
+
+            # ── off-diagonal: rasterised scatter ──────────────────────────
+            else:
+                ax.scatter(
+                    x, y,
+                    s=scatter_size,
+                    alpha=scatter_alpha,
+                    color=color,
+                    linewidths=0,
+                    rasterized=True,   # key: PDF/SVG won't embed N million vectors
+                )
+
+    fig.subplots_adjust(hspace=0.05, wspace=0.05)
+    return fig
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Main entry point
@@ -192,11 +274,14 @@ def prior_predictive_check(
     # ══════════════════════════════════════════════════════════════════════
     # One figure per stream
     # ══════════════════════════════════════════════════════════════════════
+    colors = plt.cm.RdYlBu_r(np.linspace(0, 1, 4))
     for s_idx in stream_indices:
         sname   = stream_names.get(s_idx, f"stream_{s_idx}")
         cmap    = train_cmaps.get(s_idx, "Blues")
-        c_train = _safe_color(cmap, level=0.68)
-        c_obs   = obs_colors.get(s_idx, "tomato")
+        # c_train = _safe_color(cmap, level=0.68)
+        c_train = colors[s_idx+1]
+        # c_obs   = obs_colors.get(s_idx, "k")
+        c_obs = "k"
 
         print(f"\n── {sname} ──")
 
@@ -264,26 +349,38 @@ def prior_predictive_check(
                 ranges.append((t_min, t_max))
 
         # ── corner plot of the training prior ─────────────────────────────
-        fig = corner.corner(
-            train_samples,
-            labels=labels,
-            range=ranges,
-            bins=bins,
-            smooth=smooth,
-            smooth1d=smooth,
-            color=c_train,
-            plot_datapoints=False,
-            plot_density=True,
-            fill_contours=False,
-            levels=(0.90, 1.0),
-            contourf_kwargs={"alpha": 0.35},
-            contour_kwargs={"linewidths": 1.2},
-            hist_kwargs={"linewidth": 1.4, },
-            label_kwargs={"fontsize": 9},
-            tick_kwargs={"labelsize": 7},
-            fig=plt.figure(figsize=(figsize_per_cell * n_d, figsize_per_cell * n_d)),
-        )
-        fig.suptitle(sname, fontsize=14, fontweight="bold", y=1.005)
+        # fig = corner.corner(
+        #     train_samples,
+        #     labels=labels,
+        #     range=ranges,
+        #     bins=bins,
+        #     smooth=smooth,
+        #     smooth1d=smooth,
+        #     color=c_train,
+        #     plot_datapoints=False,
+        #     plot_density=True,
+        #     fill_contours=False,
+        #     levels=(0.90, 1.0),
+        #     contourf_kwargs={"alpha": 0.35},
+        #     contour_kwargs={"linewidths": 1.2},
+        #     hist_kwargs={"linewidth": 1.4,"density":True },
+        #     label_kwargs={"fontsize": 15},
+        #     tick_kwargs={"labelsize": 15},
+        #     fig=plt.figure(figsize=(figsize_per_cell * n_d, figsize_per_cell * n_d)),
+        # )
+        fig = _corner_matplotlib(
+                train_samples,
+                labels=labels,
+                ranges=ranges,
+                color=c_train,
+                bins=bins,
+                smooth1d=smooth,
+                scatter_alpha=0.5,   # tune to taste — lower for denser clouds
+                scatter_size=0.3,
+                hist_lw=1.4,
+                figsize_per_cell=figsize_per_cell,
+            )
+        fig.suptitle(sname, fontsize=25, fontweight="bold", y=1.005)
 
         # ── retrieve the axes grid that corner built ───────────────────────
         ax_grid = np.array(fig.axes).reshape((n_d, n_d))
@@ -299,14 +396,16 @@ def prior_predictive_check(
                     obs_samples[:, row_i],
                     bins=n_bins_obs,
                     range=ranges[row_i],
-                    density=False,
+                    density=True,
                     histtype="step",
                     color=c_obs,
                     linewidth=2.4,
-                    linestyle="--",
+                    linestyle="-",
                     zorder=5,
+                    label="Gaia"
                 )
-
+                if row_i == 0:
+                    ax_diag.legend(fontsize=15, loc="upper right")
                 # lower triangle: scatter
                 for col_i in range(row_i):
                     ax_grid[row_i, col_i].scatter(
@@ -321,23 +420,23 @@ def prior_predictive_check(
                     )
 
         # ── legend ─────────────────────────────────────────────────────────
-        fig.legend(
-            handles=[
-                Line2D([0], [0], color=c_train, linewidth=3,
-                       label="Training prior"),
-                Line2D([0], [0], color=c_obs, linewidth=2.5,
-                       linestyle="--", label="Observations"),
-            ],
-            loc="upper right",
-            bbox_to_anchor=(1.0, 1.0),
-            fontsize=9,
-            framealpha=0.9,
-        )
+        # fig.legend(
+        #     handles=[
+        #         Line2D([0], [0], color=c_train, linewidth=3,
+        #                label="Training prior"),
+        #         Line2D([0], [0], color=c_obs, linewidth=2.5,
+        #                linestyle="--", label="Observations"),
+        #     ],
+        #     loc="upper right",
+        #     bbox_to_anchor=(1.0, 1.0),
+        #     fontsize=9,
+        #     framealpha=0.9,
+        # )
 
         plt.tight_layout()
 
         dim_tag  = "_".join(map(str, dims_to_show))
-        out_path = os.path.join(path_to_save, f"prior_predictive_{sname}_dims{dim_tag}.png")
+        out_path = os.path.join(path_to_save, f"prior_predictive_{sname}_dims{dim_tag}.pdf")
         fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
         plt.close(fig)
         print(f"  → saved {out_path}")
@@ -811,12 +910,12 @@ def prior_parameters_corner(
 @hydra.main(version_base=None, config_path="config", config_name="eval_config",)
 def main(cfg: EvalConfig):
     base_dir               = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
-    training_data_data_dir = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_streamax_new/"
+    training_data_data_dir = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_gala/"
     observed_data_path     = os.path.join(base_dir, "gaia_observed_streams_6Dwitherrors_cutNGC3201.npz")
-    path_to_save           = os.path.join(base_dir, "plots/prior_predictive_check/streamax_new/")
+    path_to_save           = os.path.join(base_dir, "plots/prior_predictive_check/gala_final/")
 
     # ── Training set ─────────────────────────────────────────────────────────
-    training_set_loaded = dict(np.load(os.path.join(base_dir, training_data_data_dir, "training_data_local_100000.npz")))
+    training_set_loaded = dict(np.load(os.path.join(base_dir, training_data_data_dir, "training_data_300000.npz")))
     training_set = {}
     # for k in ["sim_data_projected", "j"]:
     for k in training_set_loaded.keys():
@@ -896,7 +995,7 @@ def main(cfg: EvalConfig):
     for k in obs_data.keys():
         print(f"{k} shape after augmentation: {obs_data[k].shape}")
 
-    prior_predictive_check(training_set, obs_data, path_to_save, dims_to_show = [0, 1, 2, 3, 4, 5])
+    prior_predictive_check(training_set, obs_data, path_to_save, dims_to_show = [0, 1, 2, 3, 4])
     print("saved at: ", path_to_save)
 
     # ── load / build parameter dict ──────────────────────────────────────────

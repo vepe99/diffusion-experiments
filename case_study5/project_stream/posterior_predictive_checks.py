@@ -7,9 +7,15 @@ import hydra
 from hydra.core.config_store import ConfigStore
 from astropy import units as u
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 from utils.utils_simulate import sample_parameters_parallel, sky_projection_astropy
 from config.SimulatorConfig import SimulatorConfig
+import gala
+from gala.units import galactic
+import gala.potential as gp
+
+
 
 cs = ConfigStore.instance()
 cs.store(name="simulator_config", node=SimulatorConfig)
@@ -34,7 +40,7 @@ cs.store(name="simulator_config", node=SimulatorConfig)
 # percentile of the joint distance distribution — equivalent to the ±1σ band
 # for a Gaussian posterior.
 # ──────────────────────────────────────────────────────────────────────────────
-N_POSTERIOR_SAMPLES = 100  # <── total PPC runs
+N_POSTERIOR_SAMPLES = 500  # <── total PPC runs
 QUANTILE_SAMPLING   = True   # <── set False to fall back to random / mode
 QUANTILE_LOW        = 0.16   # <── lower CDF bound (0.0 = include everything below median)
 QUANTILE_HIGH       = 0.84  # <── upper CDF bound
@@ -365,7 +371,8 @@ def main(cfg: SimulatorConfig):
     # ── Load posteriors ────────────────────────────────────────────────────────
     global_posterior_path = os.path.join(
         cfg.base_dir,
-        '../plots/gala6D_aug/new_hyper/model54_60k_1000epochs/global_posterior.npz'
+        # '../plots/gala6D_aug/new_hyper/model54_60k_1000epochs/global_posterior.npz'
+        '../plots/gala6D/new_hyper/model54_60k_1000epochs/global_posterior.npz'
         # '../hyperparameter_tuning/gala/new_aug_bigheads/model_121/gaiastreams/global_posterior.npz'
         # '../hyperparameter_tuning/gala/300k/model_21/gaiastreams/global_posterior.npz'
     )
@@ -379,6 +386,52 @@ def main(cfg: SimulatorConfig):
     global_posterior = dict(np.load(global_posterior_path, allow_pickle=True))
     print('Loading local posterior from:', local_posterior_path)
     local_posterior  = dict(np.load(local_posterior_path,  allow_pickle=True))
+
+
+
+    #we are going to plot the circular velocity for the global_posterior_mean,
+    parameters_dict = {p: np.mean(global_posterior[p]) for p in global_posterior.keys()}
+    for k in parameters_dict.keys():
+        print(f'{k}: {parameters_dict[k]}')
+    parameters_dict['m_bulge'] = 4501365375.06545
+    parameters_dict['alpha_bulge'] = 1.8
+    parameters_dict['r_bulge'] = 1.9
+    radial_distance = np.linspace(0.1, 30, 100)  # kpc
+    pot = gp.CCompositePotential()
+
+    pot['halo'] = gp.NFWPotential(m     = parameters_dict['m_Triaxial_halo'],
+                                r_s   = parameters_dict['r_Triaxial_halo'],
+                                a     = 1,
+                                b     = 1,
+                                  c     = parameters_dict['q2_Triaxial_halo'],
+                                units = galactic)
+
+    pot['thin_disk'] = gp.MN3ExponentialDiskPotential(m = 4 * np.pi * parameters_dict['rho_thin_disk']*parameters_dict['hr_thin_disk']**2 * parameters_dict['hz_thin_disk'],
+                                                    h_R=parameters_dict['hr_thin_disk'],
+                                                    h_z=parameters_dict['hz_thin_disk'],
+                                                    units=galactic,
+                                                    positive_density=True)
+    pot['thick_disk'] = gp.MN3ExponentialDiskPotential(m = 4 * np.pi * parameters_dict['rho_thick_disk'] *parameters_dict['hr_thick_disk']**2 * parameters_dict['hz_thick_disk'],
+                                                    h_R=parameters_dict['hr_thick_disk'],
+                                                    h_z=parameters_dict['hz_thick_disk'],
+                                                    units=galactic,
+                                                    positive_density=True)
+    pot['bulge'] = gp.PowerLawCutoffPotential(m=parameters_dict['m_bulge'],
+                                            r_c=parameters_dict['r_bulge'],
+                                            alpha=parameters_dict['alpha_bulge'],
+                                            units=galactic)
+    grid = np.linspace(-30., 30., 100)
+    fig = pot.plot_contours(grid=(grid, 0, grid))
+    fig.savefig(os.path.join(cfg.base_dir, cfg.data_dir, 'potential_contours_mean.pdf'), dpi=150, bbox_inches='tight')
+    plt.show()
+
+    fig, ax = pot.plot_rotation_curve(R_grid = radial_distance)
+    fig.savefig(os.path.join(cfg.base_dir, cfg.data_dir, 'rotation_curve_mean.pdf'), dpi=150, bbox_inches='tight')
+    plt.show()
+    print('Plotted potential contours and rotation curve for global posterior mean parameters.')
+    # print('We stop here')
+
+    # exit()
 
     stream_names = list(cfg.target_streams.keys())
     n_streams    = len(stream_names)
@@ -425,9 +478,66 @@ def main(cfg: SimulatorConfig):
     global_draws = _draw_posterior_values(
         global_posterior, list(cfg.priors_global.keys()), n_ppc, use_mode, idx=shared_idx
     )
+    print('global_draws:', global_draws)
     local_draws = _draw_local_posterior_values(
         local_posterior, LOCAL_PARAM_NAMES, stream_names, n_ppc, use_mode, idx=shared_idx
     )
+
+
+    #we are going to get the rotation curve from the global_draws and get the error bars
+    def rotation_curve(draw):
+        pot = gp.CCompositePotential()
+
+        pot['halo'] = gp.NFWPotential(m     = draw['m_Triaxial_halo'],
+                                    r_s   = draw['r_Triaxial_halo'],
+                                    a     = 1,
+                                    b     = 1,
+                                    c     = draw['q2_Triaxial_halo'],
+                                    units = galactic)
+
+        pot['thin_disk'] = gp.MN3ExponentialDiskPotential(m = 4 * np.pi * draw['rho_thin_disk']*draw['hr_thin_disk']**2 * draw['hz_thin_disk'],
+                                                        h_R=draw['hr_thin_disk'],
+                                                        h_z=draw['hz_thin_disk'],
+                                                        units=galactic,
+                                                        positive_density=True)
+        pot['thick_disk'] = gp.MN3ExponentialDiskPotential(m = 4 * np.pi * draw['rho_thick_disk'] *draw['hr_thick_disk']**2 * draw['hz_thick_disk'],
+                                                        h_R=draw['hr_thick_disk'],
+                                                        h_z=draw['hz_thick_disk'],
+                                                        units=galactic,
+                                                        positive_density=True)
+        pot['bulge'] = gp.PowerLawCutoffPotential(m=parameters_dict['m_bulge'],
+                                                r_c=parameters_dict['r_bulge'],
+                                                alpha=parameters_dict['alpha_bulge'],
+                                                units=galactic)
+        rotation_curve_on_grid = pot.circular_velocity(R=radial_distance, z=np.zeros_like(radial_distance))
+        return rotation_curve_on_grid
+
+    rotation_curve_for_plot = []
+    for i in range(len(global_draws['m_Triaxial_halo'])):
+        draw = {k: global_draws[k][i] for k in global_draws.keys()}  # fix: k not j
+        rotation_curve_for_plot.append(rotation_curve(draw))
+
+    rotation_curve_for_plot = np.array(rotation_curve_for_plot)        # shape: (n_draws, n_radii)
+    mean_rotation_curve = np.mean(rotation_curve_for_plot, axis=0)    # fix: axis=0
+    std_rotation_curve  = np.std(rotation_curve_for_plot,  axis=0)
+
+    fig, ax = plt.subplots(figsize=(5, 5))
+    ax.plot(radial_distance, mean_rotation_curve, color='steelblue', label='Mean')
+    ax.fill_between(
+        radial_distance,
+        mean_rotation_curve - 3*std_rotation_curve,
+        mean_rotation_curve + 3*std_rotation_curve,
+        alpha=0.3,
+        color='steelblue',
+        label=r'$\pm 3\sigma$',
+    )
+    ax.set_xlabel('Radius [kpc]')
+    ax.set_ylabel('Circular velocity [km/s]')
+    ax.legend()
+    fig.savefig(os.path.join(cfg.base_dir, cfg.data_dir, 'rotation_curve_sample.pdf'), dpi=150, bbox_inches='tight')
+    print('Saved rotation curve samples')
+
+    exit()
 
     # ── Simulator setup (done once) ───────────────────────────────────────────
     if cfg.simulator == "odisseo":
@@ -489,7 +599,7 @@ def main(cfg: SimulatorConfig):
                 for param, vals in local_draws[stream].items():
                     # if (stream != 'M68') and (param != 'mu_dec'):
                     # if (stream != 'M68'):
-                    if False:
+                    if True:
                         cfg.priors_local[stream][param] = {
                             'type': 'identity',
                             'prior_parameters': [float(vals[ppc_idx])],
@@ -585,6 +695,9 @@ def main(cfg: SimulatorConfig):
     out_path = os.path.join(cfg.base_dir, cfg.data_dir, f'ppc_{n_ppc}samples_{tag}.npz')
     np.savez(out_path, **save_dict)
     print(f'\nSaved to {out_path}')
+
+
+    
 
 
 if __name__ == "__main__":
