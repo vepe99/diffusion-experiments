@@ -28,7 +28,6 @@ dependencies = [
     "numba>=0.63.1",
     "numpy>=1.26.4",
     "optuna",
-    "odisseo",
     "scipy>=1.12.0",
     "tensorflow==2.20.0",
     "torch==2.9.1",
@@ -45,6 +44,5 @@ sbibm = { git = "https://github.com/arrjon/sbibm.git", rev = "dev" }
 bayesflow = { path = "../bayesflow_enviroment_most_recent/bayesflow", editable = true }
 galstreams = {git = "https://github.com/cmateu/galstreams"}
 galpy = {git = "https://github.com/jobovy/galpy.git"}
-odisseo = {path = "/export/home/vgiusepp/Odisseo", editable = true}
 StreaMax = {path = "/export/home/vgiusepp/StreaMAX", editable = true}
 

@@ -4,7 +4,7 @@ model_dir: "models/gala6D/new_hyper/model54_60k_1000epochs"
 # model_dir: "models/streamax_new/normal_mask/modeltest_100k_1000epochs"
 multistream_n_simulation: 100
 # results_dir: "plots/streamax_new/normal_mask/modeltest_100k_1000epochs/100test"
-results_dir: "plots/gala6D/new_hyper/model54_60k_1000epochs/nocomposition_100test_new"
+results_dir: "plots/gala6D/new_hyper/model54_60k_1000epochs/100test_noprior"
 # results_dir: "hyperparameter_tuning/gala/random_obswindows/300k/model_25/100test"
 use_streamax_simulator: False
 
