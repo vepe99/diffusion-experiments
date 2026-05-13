@@ -759,11 +759,11 @@ def compute_standardization(training_data: dict) -> dict[str, dict]:
     }
  
     # ---- r_kpc: mean/std per radial bin ----
-    x = training_data["r_kpc"]                      # (N, 34, 1)
-    stats["r_kpc"] = {
-        "mean": x.mean(axis=0),                     # (34, 1)
-        "std":  x.std(axis=0).clip(min=1e-8),       # (34, 1)
-    }
+    # x = training_data["r_kpc"]                      # (N, 34, 1)
+    # stats["r_kpc"] = {
+    #     "mean": x.mean(axis=0),                     # (34, 1)
+    #     "std":  x.std(axis=0).clip(min=1e-8),       # (34, 1)
+    # }
  
     return stats
  
