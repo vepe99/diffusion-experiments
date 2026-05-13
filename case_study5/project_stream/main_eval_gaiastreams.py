@@ -95,7 +95,7 @@ def main(cfg: EvalConfig):
         print(f"{k} shape after truncation: {test_data[k].shape}")
 
     # print('Test data keys and shape: ', test_data.keys(), test_data[list(test_data.keys())[0]].shape)
-    other_things = ['attention_mask', 'magnitudes', 'vloss_mask']
+    other_things = ['attention_mask', 'magnitudes', 'vlos_mask']
     keys_to_drop = set(test_data.keys()) - set(param_names_global) - {sim_data} - set(inference_conditions) -  set(other_things)
     keys_to_drop = list(keys_to_drop) 
 
@@ -156,9 +156,17 @@ def main(cfg: EvalConfig):
     if "concatenate_j_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatenate_j_to_sim_data)
 
+
+
+    #this one is needed to override v_los error with the std 
+    # if "override_vlos_error_with_real" in cfg.augmentations:
+    #     augmentations.append(augmentations_class.override_vlos_error_with_real)
+
     #reshape the streams dimensions
     test_data[cfg.sim_data] = test_data[cfg.sim_data].reshape(-1, test_data[cfg.sim_data].shape[-2], test_data[cfg.sim_data].shape[-1])
     test_data['j'] = test_data['j'].reshape(-1, 1)
+    for k in test_data.keys():
+        print(f"{k} shape before augmentation: {test_data[k].shape}")
     print('Test data sim shape before augmentation: ', test_data[cfg.sim_data].shape)
     for aug in augmentations:
         print(f"Applying augmentation: {aug.__name__}")
@@ -171,6 +179,11 @@ def main(cfg: EvalConfig):
     for k in test_data.keys():
         print('##########')
         print(f"{k} shape: {test_data[k].shape}")
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111)
+    # vlos_mask = test_data['']
+    # fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'v_losmasked.pdf'))
+    exit()
     with open(os.path.join(cfg.base_dir, cfg.data_dir, '.hydra', 'config.yaml'), "r") as f:
         test_sim_config = yaml.safe_load(f)
 
