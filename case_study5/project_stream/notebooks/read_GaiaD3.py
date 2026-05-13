@@ -146,7 +146,7 @@ def _(name_to_plot, particles, plt):
         _ax = _fig.add_subplot(3, 3, name_to_plot.index(_name) + 1)
         _ax.errorbar(magnitude[~mask_vlos], v_los[~mask_vlos], yerr=e_vhel[~mask_vlos], fmt='.')
         _ax.set_xlabel('G [mag]')
-        _ax.set_ylabel('v_los [km/s]')
+        _ax.set_ylabel('v_R [km/s]')
         _ax.set_title(_name)
     for _name in name_to_plot:
         v_los = particles[_name]['VHel']
@@ -156,7 +156,8 @@ def _(name_to_plot, particles, plt):
         _ax = _fig.add_subplot(3, 3, name_to_plot.index(_name) + 4)
         _ax.scatter(magnitude[~mask_vlos], e_vhel[~mask_vlos])
         _ax.set_xlabel('G [mag]')
-        _ax.set_ylabel('e_vhel [km/s]')
+        _ax.set_ylabel(r'err_vR [km/s]')
+        _ax.set_ylim(-3, 60)
         _ax.set_title(_name)
     for _name in name_to_plot:
         v_los = particles[_name]['VHel']
@@ -259,8 +260,8 @@ def _(median_e_VHel_per_bin, np, plt, std_e_VHel_per_bin, tbl_data_pandas):
     ax1.plot(bin_centers, median_e_VHel_per_bin.values, color='red', marker='o', label='median $err_{V_R}$')
 
     # Plot filled error bars (standard deviation)
-    lower = np.maximum(median_e_VHel_per_bin.values - std_e_VHel_per_bin.values, 0)
-    upper = median_e_VHel_per_bin.values + std_e_VHel_per_bin.values
+    lower = np.maximum(median_e_VHel_per_bin.values - 3*std_e_VHel_per_bin.values, 0)
+    upper = median_e_VHel_per_bin.values + 3*std_e_VHel_per_bin.values
 
     ax1.fill_between(
         bin_centers,
