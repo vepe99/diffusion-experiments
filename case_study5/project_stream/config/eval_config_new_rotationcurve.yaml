@@ -131,7 +131,7 @@ masked_value_vlos:
 augmentations:
 # - "cut_to_300_particles" 
 # Coordinate transforms
-- convert_distance_to_parallax
+# - convert_distance_to_parallax
 # Observational selection
 - observational_window
 # - observational_window_spline
