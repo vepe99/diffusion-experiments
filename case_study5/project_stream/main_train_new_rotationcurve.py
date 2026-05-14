@@ -215,6 +215,7 @@ def main(cfg: TrainConfig):
     )
     workflow_global.approximator.save(os.path.join(model_path, "global_model.keras"))
     # workflow_global.approximator.save_weights(model_path.replace('.keras', '.weights.h5'))
+    #  workflow_global.approximator.save_weights(model_path.replace('.keras', '.weights.h5'))
     loss_plot = bf.diagnostics.plots.loss(
         history,
     )
