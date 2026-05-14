@@ -72,6 +72,7 @@ class FusionNetwork(SummaryNetwork):
     def call(
         self,
         inputs: Mapping[str, Tensor],
+        attention_mask: Tensor = None,
         training: bool = False,
     ) -> Tensor:
         """
@@ -83,7 +84,7 @@ class FusionNetwork(SummaryNetwork):
         training : bool, optional
             Whether the model is in training mode. Default is False.
         """
-        attention_mask = inputs.get("attention_mask", None)
+        # attention_mask = inputs.get("attention_mask", None)
 
         if attention_mask is not None:
             print(f"[FusionNetwork.call] attention_mask shape {attention_mask.shape} -> '{MASK_BACKBONE_KEY}' only")
@@ -125,7 +126,7 @@ class FusionNetwork(SummaryNetwork):
             self.build(keras.tree.map_structure(keras.ops.shape, inputs))
 
 
-        attention_mask = inputs.get("attention_mask", None)
+        attention_mask = kwargs.get("attention_mask", None)
         if attention_mask is not None:
             print(f"[FusionNetwork.compute_metrics] attention_mask shape {attention_mask.shape} -> '{MASK_BACKBONE_KEY}' only")
 
@@ -137,8 +138,8 @@ class FusionNetwork(SummaryNetwork):
             backbone = self.backbones[k]
  
             if isinstance(backbone, SummaryNetwork):
-                extra = {"attention_mask": attention_mask} if (k == MASK_BACKBONE_KEY and attention_mask is not None) else {}
-                metrics_k = backbone.compute_metrics(inputs[k], stage=stage, **extra, **kwargs)
+                kwargs = {"attention_mask": attention_mask} if (k == MASK_BACKBONE_KEY and attention_mask is not None) else {}
+                metrics_k = backbone.compute_metrics(inputs[k], stage=stage, **kwargs)
                 metrics["outputs"].append(metrics_k["outputs"])
                 if "loss" in metrics_k:
                     metrics["loss"].append(metrics_k["loss"])
@@ -259,7 +260,7 @@ class SetTransformer(Transformer):
                 f"{attention_mask.shape}, dtype: {attention_mask.dtype}"
             )
             # print(f"[SetTransformer.call] attention_mask sum values: {attention_mask.sum()}")
-            jax.debug.print("[SetTransformer.call] attention_mask sum: {mask}", mask=attention_mask.sum())
+            # jax.debug.print("[SetTransformer.call] attention_mask sum: {mask}", mask=attention_mask.sum())
         else:
             print("[SetTransformer.call] No attention_mask provided (None).")
 

@@ -1,9 +1,9 @@
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
 data_dir: "streams/data_multistream_gala_new/"
-model_dir: "hyperparameter_tuning/gala/rotationcurve/model_test"
+model_dir: "hyperparameter_tuning/gala/rotationcurve/model_test_60k_1000epochs"
 # model_dir: "hyperparameter_tuning/agama/model_test_fulldataset/"
-multistream_n_simulation: 100
-results_dir: "hyperparameter_tuning/gala/rotationcurve/model_test/nocomposition_100test_new"
+multistream_n_simulation: 1000
+results_dir: "hyperparameter_tuning/gala/rotationcurve/model_test_60k_1000epochs/1000test_new"
 # results_dir: hyperparameter_tuning/agama/model_test_fulldataset/nocomposition_1000test
 use_streamax_simulator: False
 
@@ -129,13 +129,14 @@ masked_value_vlos:
     std: 65.70
 
 augmentations:
+# - "cut_to_300_particles" 
 # Coordinate transforms
 - convert_distance_to_parallax
 # Observational selection
-# - observational_window
+- observational_window
 # - observational_window_spline
-- observational_window_random
-# - observed_n_stars
+# - observational_window_random
+- observed_n_stars
 - compact_to_attended
 # Photometric augmentation
 - sample_magnitudes
@@ -149,6 +150,7 @@ augmentations:
 - concatenate_vlos_mask_to_sim_data
 - concatenate_j_to_sim_data
 - add_noise_to_vcirc
+- log10_vcirc
 
 # error_keys: null #default is ["ra", "dec", "parallax", "mu_ra", "mu_dec"]
 error_keys:

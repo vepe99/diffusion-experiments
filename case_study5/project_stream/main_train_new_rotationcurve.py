@@ -17,6 +17,7 @@ if "KERAS_BACKEND" not in os.environ:
 import bayesflow as bf
 import keras
 
+import matplotlib.pyplot as plt
 
 import logging
 
@@ -60,10 +61,20 @@ def main(cfg: TrainConfig):
     training_data = dict(np.load(train_data_path, allow_pickle=True))
     training_data_rotation_curve = dict(np.load('./data/plots/gala_rotcurv/rotation_curves.npz'))
     
-    training_data['vcirc_kms'] = np.log10(training_data_rotation_curve['vcirc_kms'][:, :, None]) #extra dimension (n_observation, len_r_kpc, 1)
-    training_data['r_kpc'] = np.tile(training_data_rotation_curve['r_kpc'], reps=(training_data['vcirc_kms'].shape[0],1))[:, :, None] #[:, :, None] #extra dimension (n_observation, len_r_kpc, 1)
+    training_data['vcirc_kms'] = training_data_rotation_curve['vcirc_kms'][:, :, None] #extra dimension (n_observation, len_r_kpc, 1)
+    fig = plt.figure(figsize=(10, 6))
+    ax = fig.add_subplot(111)
+    # for i in range(training_data['vcirc_kms'].shape[0]):
+        # ax.plot(training_data_rotation_curve['r_kpc'], training_data['vcirc_kms'][i,:,0], color='gray', alpha=0.1)
+    ax.hist(np.log10(training_data['vcirc_kms'].flatten()), bins=30, alpha=0.1)
+    ax.set_xlabel('Radius (kpc)')
+    ax.set_ylabel('Circular Velocity (km/s)')
+    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, "rotation_curves_hist.png"), dpi=300)
 
-    # training_data = {k: v[:60_000] for k, v in training_data.items()}
+    # exit()
+    # training_data['r_kpc'] = np.tile(training_data_rotation_curve['r_kpc'], reps=(training_data['vcirc_kms'].shape[0],1))[:, :, None] #[:, :, None] #extra dimension (n_observation, len_r_kpc, 1)
+
+    training_data = {k: v[:20_000] for k, v in training_data.items()}
     for k in training_data.keys():
         print(f"{k}: {training_data[k].shape}")
 
@@ -76,7 +87,7 @@ def main(cfg: TrainConfig):
     print(f"Removing {n_removed}/{len(valid_mask)} simulations containing NaN values.")
 
     # Apply the mask to all arrays
-    clean_data = {key: training_data[key][valid_mask] for key in param_names_global + [inference_conditions] + ["vcirc_kms", "r_kpc"]}
+    clean_data = {key: training_data[key][valid_mask] for key in param_names_global + [inference_conditions] + ["vcirc_kms"]}
     clean_data['sim_data_projected'] = sim_data_array[valid_mask]
     training_data = clean_data
 
@@ -85,7 +96,7 @@ def main(cfg: TrainConfig):
         set(training_data.keys())
         - set(param_names_global)
         - {sim_data}
-        - {"vcirc_kms", "r_kpc"}
+        - {"vcirc_kms"}
         - set(inference_conditions)
     )
     keys_to_drop = list(keys_to_drop)
@@ -97,13 +108,13 @@ def main(cfg: TrainConfig):
         .drop(keys_to_drop)
         .rename(inference_conditions, "inference_conditions")
         .concatenate(param_names_global, into="inference_variables")
-        .rename(sim_data, "summary_variables")
+        .rename(sim_data, "input_a")
         .rename('attention_mask', 'summary_attention_mask')
         # .concatenate(['vcirc_kms', 'r_kpc'], into="input_b")
-        # .rename("vcirc_kms", "input_b")
-        # .group(
+        .rename("vcirc_kms", "input_b")
+        .group(
         # ["input_a", "input_b", "attention_mask"], into="summary_variables")  
-        # ["input_a", "input_b",], into="summary_variables")   
+        ["input_a", "input_b",], into="summary_variables")   
     )
     summary_network_a = SetTransformer(
             # summary_dim=cfg.global_model.summary_dim,
@@ -128,7 +139,7 @@ def main(cfg: TrainConfig):
 
     workflow_global = bf.CompositionalWorkflow(
         adapter=adapter,
-        summary_network=summary_network_a,
+        summary_network=summary_network,
         inference_network=bf.networks.DiffusionModel(
             # subnet_kwargs={
             #     "widths": [cfg.global_model.inference_mlp_width]
@@ -136,68 +147,16 @@ def main(cfg: TrainConfig):
             #     "time_embedding_dim": cfg.global_model.inference_time_embedding_dim,
             # }
         ),
-        standardize=["inference_variables",],
+        standardize=["inference_variables", "summary_variables"],
         checkpoint_filepath=model_path,
         checkpoint_name="checkpoint_global_model.keras",
     )
 
-    
-    # if 'standardization_stats.npz' in os.listdir(model_path):
-    #     print("Loading existing standardization stats...")
-    #     # stats = dict(np.load(os.path.join(model_path, 'standardization_stats.npz'), allow_pickle=True))
-    #     stats = dict(np.load(os.path.join(model_path, 'standardization_stats.npz'), allow_pickle=True))
-    #     # Unwrap 0-d object arrays produced by np.load for dict-valued entries
-    #     stats = {k: v.item() if isinstance(v, np.ndarray) and v.ndim == 0 else v
-    #             for k, v in stats.items()}
-    # else:
-    stats = compute_standardization(training_data)
-    save_stats(stats, os.path.join(model_path, "standardization_stats.npz"))
-    
-    #let's calculate mean and std of magnitudes for the additional components
-    magnitudes = [9, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
-    stats['magnitudes'] =  {'mean': np.mean(magnitudes), 'std': np.std(magnitudes)}
-    
-    error_file = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/gaia_DR3_erorr_6D.txt"
-    tbl = ascii.read(error_file, format="tab")
-    tbl.remove_column("Unit")
-
-    mag_bins = []
-    for colname in tbl.colnames[1:]:
-        if "–" in colname or "−" in colname:
-            parts = colname.replace("−", "-").replace("–", "-").split("-")
-            mag_bins.append((float(parts[0]) + float(parts[1])) / 2.0)
-        else:
-            mag_bins.append(float(colname))
-    serror_interp_mag_bins = np.array(mag_bins)
-
-    # Store raw values for JIT-compatible interpolation
-    error_values = {}
-    for row in tbl:
-        quantity = row["Quantity"].strip()
-        values = np.array(
-            np.array([row[col] for col in tbl.colnames[1:]], dtype=float)
-        )
-        error_values[quantity] = values
-
-    # Default behavior is to use only 5 dimensional errors, but allow config override
-    error_keys = ["ra", "dec", "parallax", "mu_ra", "mu_dec"] if cfg.error_keys is None else cfg.error_keys
-    error_values_stacked = np.stack(
-        [error_values[k] for k in error_keys], axis=0
-    )  # shape (5/6, n_mag_bins)
-    error_values_stacked[:2] = error_values_stacked[:2] * u.mas.to(u.deg)
-    
-    stats['sigma_errors'] = {'mean': error_values_stacked.mean(axis=1), 'std': error_values_stacked.std(axis=1)}
-    # stats['vcirc_kms'] = {'mean': training_data['vcirc_kms'].mean(), 'std': training_data['vcirc_kms'].std()}
-    # stats['r_kpc'] = {'mean': training_data['r_kpc'].mean(), 'std': training_data['r_kpc'].std()}
-
-    # for k in stats.keys():
-    #     print('Shape {k}:', stats[k]['mean'].shape, stats[k]['std'].shape)
-    # print(stats)
-    save_stats(stats, os.path.join(model_path, "standardization_stats.npz"))
-
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
 
+    if "cut_to_300_particles" in cfg.augmentations:
+        augmentations.append(augmentations_class.cut_to_300_particles)
     # --- Coordinate transforms (must be first, before any masking) ---
     if "remove_los_velocity" in cfg.augmentations:
         augmentations.append(augmentations_class.remove_los_velocity)
@@ -234,16 +193,8 @@ def main(cfg: TrainConfig):
 
     if "add_noise_to_vcirc" in cfg.augmentations:
         augmentations.append(augmentations_class.add_noise_to_vcirc)
-
-
-
-    # if 'standardization_stats.npz' in os.listdir(model_path):
-    #     print("Loading existing standardization stats...")
-    #     stats = dict(np.load(os.path.join(model_path, 'standardization_stats.npz'), allow_pickle=True))
-    # else:
-    #     stats = compute_standardization(training_data)
-    #     save_stats(stats, os.path.join(model_path, "standardization_stats.npz"))
-    augmentations.append(lambda batch: apply_standardization(batch, stats))
+    if "log10_vcirc" in cfg.augmentations:
+        augmentations.append(augmentations_class.log10_vcirc)
 
         # --- Feature concatenations (must be last) ---
     if "concatentate_sigma_error_to_sim_data" in cfg.augmentations:

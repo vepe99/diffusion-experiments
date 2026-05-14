@@ -97,8 +97,9 @@ N_obs   = len(obs_R)
 r_array = obs_R * u.kpc
 
 # ── Load data ─────────────────────────────────────────────────────────────────
-data     = dict(np.load('./data/streams/data_multistream_gala_new/simulation_multistream_100.npz'))
-N_sample = 1_00
+N = 1000
+data     = dict(np.load(f'./data/streams/data_multistream_gala_new/simulation_multistream_{N}.npz'))
+N_sample = N
 data     = {k: data[k][:N_sample] for k in data.keys()}
 print(f"Loaded {N_sample} samples")
 
@@ -142,19 +143,20 @@ n_accepted = accepted.sum()
 print(f"Accepted {n_accepted} / {N_sample}  ({100*n_accepted/N_sample:.2f} %)")
 
 # ── Save rotation curves + acceptance mask ────────────────────────────────────
-np.savez('./data/plots/gala_rotcurv_multistream/rotation_curves.npz',
+np.savez(f'./data/plots/gala_rotcurv_multistream/{N}/rotation_curves.npz',
          r_kpc=obs_R, vcirc_kms=all_vcirc, accepted=accepted,
          obs_Vc=obs_Vc, obs_sVc=obs_sVc)
-print("Saved rotation curves → ./data/plots/gala_rotcurv_multistream/rotation_curves.npz")
+print(f"Saved rotation curves → ./data/plots/gala_rotcurv_multistream/{N}/rotation_curves.npz")
 
 # ── Rotation-curve plot ───────────────────────────────────────────────────────
 fig, ax = plt.subplots(figsize=(10, 6))
 colors_all = plt.cm.Greys(np.linspace(0.3, 0.6, N_sample))
 colors_acc = plt.cm.viridis(np.linspace(0, 1, n_accepted))
 
+# for i in range(N_sample):
+#     if not accepted[i]:
 for i in range(N_sample):
-    if not accepted[i]:
-        ax.plot(obs_R, all_vcirc[i], color='grey', alpha=0.02, lw=0.4)
+    ax.plot(obs_R, all_vcirc[i], color='grey', alpha=0.5, lw=0.4)
 
 for j, i in enumerate(np.where(accepted)[0]):
     ax.plot(obs_R, all_vcirc[i], color=colors_acc[j], alpha=0.15, lw=0.6)
@@ -164,9 +166,9 @@ ax.errorbar(obs_R, obs_Vc, yerr=3*obs_sVc, fmt='o', color='red',
 ax.set_xlabel('Radius (kpc)')
 ax.set_ylabel('Circular Velocity (km/s)')
 ax.legend()
-fig.savefig('./data/plots/gala_rotcurv_multistream/rotation_curves.png', dpi=300)
+fig.savefig(f'./data/plots/gala_rotcurv_multistream/{N}/rotation_curves.png', dpi=300)
 plt.close(fig)
-print("Saved rotation curve plot → ./data/plots/gala_rotcurv_multistream/rotation_curves.png")
+print(f"Saved rotation curve plot → ./data/plots/gala_rotcurv_multistream/{N}/rotation_curves.png")
 
 # ── Corner plot: prior vs accepted ───────────────────────────────────────────
 param_labels = [r'$m_\mathrm{halo}$', r'$r_\mathrm{halo}$', r'$q_2$',
@@ -204,7 +206,7 @@ fig.legend(handles=[Patch(color='steelblue', alpha=0.5, label='Prior (all)'),
                     Patch(color='darkorange', alpha=0.8, label=f'Accepted (3σ, n={n_accepted})')],
            loc='upper right', bbox_to_anchor=(0.98, 0.98), fontsize=10)
 
-fig.savefig('./data/plots/gala_rotcurv_multistream/corner_prior_vs_accepted.png', dpi=150,
+fig.savefig(f'./data/plots/gala_rotcurv_multistream/{N}/corner_prior_vs_accepted.png', dpi=150,
             bbox_inches='tight')
 plt.close(fig)
-print("Saved corner plot → ./data/plots/gala_rotcurv_multistream/corner_prior_vs_accepted.png")
+print(f"Saved corner plot → ./data/plots/gala_rotcurv_multistream/{N}/corner_prior_vs_accepted.png")
