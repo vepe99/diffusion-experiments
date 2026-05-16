@@ -2,7 +2,7 @@ base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_strea
 data_dir: "streams/data_multistream_gala_new/"
 model_dir: "hyperparameter_tuning/gala/rotationcurve/model_9_test" 
 multistream_n_simulation: 333
-results_dir: "hyperparameter_tuning/gala/rotationcurve/model_9_test/gaiastreams"
+results_dir: "hyperparameter_tuning/gala/rotationcurve/model_9_test/gaiastreams_constrain"
 use_streamax_simulator: True
 
 #training hyperparameters

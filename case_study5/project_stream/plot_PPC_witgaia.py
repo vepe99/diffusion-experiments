@@ -133,8 +133,8 @@ def main(cfg: EvalConfig):
 
     name_to_plot = ['Pal5', 'NGC3201', 'M68']
     path_data = "/export/data/vgiusepp/diffusion_experiments_test_new/diffusion-experiments/case_study5/project_stream/data/streams/"
-    sampling_type = 'data_multistream_gala_posterior_predictive_check/rotationacurve/model_9_test_local200epochs/'
-    name_file = 'ppc_10samples_q16-84.npz'
+    sampling_type = 'data_multistream_gala_posterior_predictive_check/rotationacurve/model_9_test_constrain/'
+    name_file = 'ppc_100samples_q16-84.npz'
 
     posterior_sample = np.load(f'{path_data}{sampling_type}{name_file}')
     posteriorpredictive_sample = posterior_sample['sim_data_projected']  # (10, 3, 1002, 6)
@@ -201,6 +201,10 @@ def main(cfg: EvalConfig):
         # Observed Gaia data for this stream, filtered by attention mask
         obs = sim_data[0, i, attention_mask[i, 0, :], :]  # (N_obs, 6)                         # remove masked v_los (stored as 0)
 
+        # Get observational boundaries directly from the true observations
+        ra_min, ra_max = np.min(obs[:, 0]), np.max(obs[:, 0])
+        dec_min, dec_max = np.min(obs[:, 1]), np.max(obs[:, 1])
+
 
         # Posterior predictive for this stream, each sample masked individually
         ppc_list = []
@@ -208,6 +212,13 @@ def main(cfg: EvalConfig):
             mask_s = aug_mask_reshaped[s, i, :]           # (N_aug,)
             ppc_list.append(posterior_sample_aug[s, i, mask_s, :])  # (N_valid, 6)
         ppc_all = np.concatenate(ppc_list, axis=0)        # (N_ppc_total, 6)
+
+        # Apply observational window cut to the posterior samples
+        spatial_mask = (
+            (ppc_all[:, 0] >= ra_min) & (ppc_all[:, 0] <= ra_max) &
+            (ppc_all[:, 1] >= dec_min) & (ppc_all[:, 1] <= dec_max)
+        )
+        ppc_all = ppc_all[spatial_mask]
 
         n_dims = 5
         fig, axes = plt.subplots(n_dims, n_dims, figsize=(14, 14))

@@ -375,7 +375,7 @@ def main(cfg: SimulatorConfig):
         # '../plots/gala6D/new_hyper/model54_60k_1000epochs/global_posterior.npz'
         # '../hyperparameter_tuning/gala/new_aug_bigheads/model_121/gaiastreams/global_posterior.npz'
         # '../hyperparameter_tuning/gala/300k/model_21/gaiastreams/global_posterior.npz'
-        '../hyperparameter_tuning/gala/rotationcurve/model_9_test/gaiastreams/global_posterior.npz'
+        '../hyperparameter_tuning/gala/rotationcurve/model_9_test/gaiastreams_constrain/global_posterior.npz'
     )
     local_posterior_path = os.path.join(
         cfg.base_dir,
@@ -601,7 +601,7 @@ def main(cfg: SimulatorConfig):
                 for param, vals in local_draws[stream].items():
                     # if (stream != 'M68') and (param != 'mu_dec'):
                     # if (stream != 'M68'):
-                    if True:
+                    if False:
                         cfg.priors_local[stream][param] = {
                             'type': 'identity',
                             'prior_parameters': [float(vals[ppc_idx])],
