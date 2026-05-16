@@ -150,7 +150,7 @@ def objective(trial, cfg):
             try:
                 history = workflow_global.fit_offline(
                     training_data,
-                    epochs=2,
+                    epochs=N_epochs,
                     batch_size=batch_size_training,
                     verbose=2,
                     augmentations=augmentations,
@@ -322,26 +322,35 @@ def objective(trial, cfg):
                     score[k] = -(1-time)*(x[k] - mean) / std**2 
             return score
 
-        test_data_multistream[cfg.sim_data] = test_data_multistream[cfg.sim_data].reshape(-1, len(cfg.target_streams.keys()), test_data_multistream[cfg.sim_data].shape[-2], test_data_multistream[cfg.sim_data].shape[-1])
-        test_data_multistream['vcirc_kms'] = test_data_multistream['vcirc_kms'].reshape(-1, len(cfg.target_streams.keys()), test_data_multistream['vcirc_kms'].shape[-2], test_data_multistream['vcirc_kms'].shape[-1])
-        test_data_multistream['j'] = test_data_multistream['j'].reshape(-1,len(cfg.target_streams.keys()), 1)
+        # test_data_multistream[cfg.sim_data] = test_data_multistream[cfg.sim_data].reshape(-1, len(cfg.target_streams.keys()), test_data_multistream[cfg.sim_data].shape[-2], test_data_multistream[cfg.sim_data].shape[-1])
+        # test_data_multistream['vcirc_kms'] = test_data_multistream['vcirc_kms'].reshape(-1, len(cfg.target_streams.keys()), test_data_multistream['vcirc_kms'].shape[-2], test_data_multistream['vcirc_kms'].shape[-1])
+        # test_data_multistream['j'] = test_data_multistream['j'].reshape(-1,len(cfg.target_streams.keys()), 1)
+
+        # Create temporary reshaped views arrays instead of modifying test_data_multistream directly!
+        n_streams = len(cfg.target_streams.keys())
+        sim_data_comp = test_data_multistream[cfg.sim_data].reshape(
+            -1, n_streams, test_data_multistream[cfg.sim_data].shape[-2], test_data_multistream[cfg.sim_data].shape[-1]
+        )
+        vcirc_kms_comp = test_data_multistream['vcirc_kms'].reshape(
+            -1, n_streams, test_data_multistream['vcirc_kms'].shape[-2], test_data_multistream['vcirc_kms'].shape[-1]
+        )
+        j_comp = test_data_multistream['j'].reshape(-1, n_streams, 1)
 
         # Reshape all data to have a single batch dimension (n_sims * n_streams)
-        n_sims = test_data_multistream[cfg.sim_data].shape[0]
-        n_streams = test_data_multistream[cfg.sim_data].shape[1]
+        n_sims = sim_data_comp.shape[0]
         
-        flat_input_a = test_data_multistream[cfg.sim_data].reshape(
+        flat_input_a = sim_data_comp.reshape(
             n_sims * n_streams, 
-            test_data_multistream[cfg.sim_data].shape[-2], 
-            test_data_multistream[cfg.sim_data].shape[-1]
+            sim_data_comp.shape[-2], 
+            sim_data_comp.shape[-1]
         )
         # Reshape vcirc_kms to match the flattened batch dimension
-        flat_input_b = test_data_multistream["vcirc_kms"].reshape(
+        flat_input_b = vcirc_kms_comp.reshape(
             n_sims * n_streams,
-            test_data_multistream["vcirc_kms"].shape[-2],
-            test_data_multistream["vcirc_kms"].shape[-1]
+            vcirc_kms_comp.shape[-2],
+            vcirc_kms_comp.shape[-1]
         )
-        flat_j = test_data_multistream["j"].reshape(n_sims * n_streams, 1)
+        flat_j = j_comp.reshape(n_sims * n_streams, 1)
         
         # Reshape attention mask to be (batch_size, 1, n_stars)
         flat_mask = test_data_multistream["attention_mask"].reshape(
@@ -391,12 +400,17 @@ def objective(trial, cfg):
                     clear_gpu_memory()
                 else:
                     raise
-        
+        # Before generating compositional diagnostic plots:
+        targets_compositional = {
+            k: test_data_multistream[k][::len(cfg.target_streams.keys())] if k in cfg.parameters_global else test_data_multistream[k]
+            for k in test_data_multistream.keys()
+        }
+
         #plotting compositional
         #true vs predicted recovery plots
         fig = bf.diagnostics.recovery(
             estimates=global_posterior_compositional,
-            targets=test_data_multistream,
+            targets=targets_compositional,
             variable_names=cfg.paramater_global_pretty
             # variable_names = param_names_global
         )
@@ -408,7 +422,7 @@ def objective(trial, cfg):
         #stacked
         fig = calibration_ecdf(
             estimates=global_posterior_compositional,
-            targets=test_data_multistream,
+            targets=targets_compositional,
             difference=True,
             variable_names=cfg.paramater_global_pretty,
             stacked = True,
@@ -421,7 +435,7 @@ def objective(trial, cfg):
         plt.show()
         fig = calibration_ecdf(
             estimates=global_posterior_compositional,
-            targets=test_data_multistream,
+            targets=targets_compositional,
             difference=False,
             variable_names=cfg.paramater_global_pretty,
             stacked = True,
@@ -540,7 +554,7 @@ def objective(trial, cfg):
                         0.50,0.68,0.74,0.87,1.02,1.15,1.45,1.58,1.32,1.71,
                         1.69,2.01,2.50,4.94])              # km/s  (1σ)
         r_array = obs_R * u.kpc
-        N_sample = 1000
+        N_sample = 100
         N_obs = len(obs_R)
         params = ['m_Triaxial_halo','r_Triaxial_halo','q2_Triaxial_halo',
                 'rho_thin_disk','hr_thin_disk','hz_thin_disk',
@@ -580,12 +594,12 @@ def objective(trial, cfg):
             for i in range(N_sample):
                 ax.plot(obs_R, all_vcirc[i], color='grey', alpha=0.5, lw=0.4)
                     
-            ax.errorbar(obs_R, obs_Vc, yerr=3*obs_sVc, fmt='o', color='red',
-                        ms=3, lw=1, capsize=2, label='Observed ±3σ', zorder=5)
-            ax.set_xlabel('Radius (kpc)')
-            ax.set_ylabel('Circular Velocity (km/s)')
-            fig.savefig(os.path.join(results_dir, f'global_rotation_curve.pdf'))
-            plt.close(fig)
+        ax.errorbar(obs_R, obs_Vc, yerr=3*obs_sVc, fmt='o', color='red',
+                    ms=3, lw=1, capsize=2, label='Observed ±3σ', zorder=5)
+        ax.set_xlabel('Radius (kpc)')
+        ax.set_ylabel('Circular Velocity (km/s)')
+        fig.savefig(os.path.join(results_dir, f'global_rotation_curve.pdf'))
+        plt.close(fig)
 
 
         print('shapes of posterior samples: ', {k: v.shape for k, v in ps.items()})
@@ -602,34 +616,41 @@ def objective(trial, cfg):
         #Single stream posteriors
         for stream_name in cfg.target_streams.keys():
             print(f"Starting inference for stream {stream_name}...")
-            test_data_stream = {cfg.sim_data: test_data[cfg.sim_data][:, cfg.target_streams[stream_name], :, :], 
-                                "j": test_data["j"][:, cfg.target_streams[stream_name], :],
-                                "vcirc_kms": test_data["vcirc_kms"][:, cfg.target_streams[stream_name], :, :],
-                                "attention_mask": test_data["attention_mask"][:, cfg.target_streams[stream_name], :],
-                                }
+            
+            # Use test_data_gaia instead of test_data
+            # and map to the exact adapter output names (input_a, input_b, etc.)
+            test_data_stream = {
+                "input_a": test_data_gaia[cfg.sim_data][:, cfg.target_streams[stream_name], :, :], 
+                "j": test_data_gaia["j"][:, cfg.target_streams[stream_name], :],
+                "input_b": test_data_gaia["vcirc_kms"][:, cfg.target_streams[stream_name], :, :],
+            }
+            
+            # The attention mask in test_data_gaia wasn't reshaped over the stream dimension manually, 
+            # so it usually just exists as (n_streams, 1, n_stars). We extract the specific stream:
+            attention_mask_stream = test_data_gaia['attention_mask'][cfg.target_streams[stream_name], :, :].reshape(1, 1, -1)
+            test_data_stream["summary_attention_mask"] = attention_mask_stream
+
             print('test data stream shapes: ', {k: v.shape for k, v in test_data_stream.items()})
             print('we should see also the magnitude and sigma concatenated, and vlos_mask if used')
-            attention_mask_stream = test_data['attention_mask'][cfg.target_streams[stream_name], :, :].reshape(1, -1)
-            print('attention mask stream shape: ', attention_mask_stream.shape)
+
             posterior_stream = workflow_global.sample(
-                                num_samples=cfg.n_samples,
+                                num_samples=1000,
                                 conditions=test_data_stream,
-                                kwargs={'attention_mask': attention_mask_stream}
+                                kwargs={'summary_attention_mask': attention_mask_stream}
                                 )
             ps_stream = posterior_stream.copy()
 
-            np.savez(os.path.join(cfg.base_dir, cfg.results_dir, f'{stream_name}_posterior.npz'), **ps_stream)
+            np.savez(os.path.join(results_dir, f'{stream_name}_posterior.npz'), **ps_stream)
             print(f'Saved posterior samples for stream {stream_name}')
             for k in ps_stream.keys():
                 ps_stream[k] = ps_stream[k].reshape(-1,)
             df_stream = pd.DataFrame(ps_stream) 
             df_stream.columns = list(cfg.paramater_global_pretty)
             c.add_chain(Chain(samples=df_stream, name=f"{stream_name}"))
+            
         c.set_override(ChainConfig(shade=False))
         fig = c.plotter.plot()
         fig.savefig(os.path.join(results_dir, f'global_cornerplot.pdf'))
-
-
 
         return root_mean_squared_error["values"].mean(), calibration_errors["values"].mean()
 
@@ -679,13 +700,15 @@ if __name__ == "__main__":
     base_dir =  '/export/data/vgiusepp/latest_bayesflow/diffusion-experiments/case_study5/project_stream/data/'
     data_dir = 'streams/data_gala/'
     N_simulations = 300_000
+    N_simulations_to_use = 290_000
+    N_epochs = 1000
 
 
     train_data_path = os.path.join(base_dir, data_dir, f"training_data_local_{N_simulations}.npz")
     training_data = dict(np.load(train_data_path, allow_pickle=True))
-    training_data = {k: training_data[k][:290_000] for k in training_data.keys()}
+    training_data = {k: training_data[k][:N_simulations_to_use] for k in training_data.keys()}
     training_data_rotation_curve = dict(np.load('./data/plots/gala_rotcurv/rotation_curves.npz'))
-    training_data['vcirc_kms'] = training_data_rotation_curve['vcirc_kms'][:290_000, :, None] #extra dimension (n_observation, len_r_kpc, 1)
+    training_data['vcirc_kms'] = training_data_rotation_curve['vcirc_kms'][:N_simulations_to_use, :, None] #extra dimension (n_observation, len_r_kpc, 1)
 
 
     augmentations_class = AugmentationsClass(cfg)
@@ -761,14 +784,14 @@ if __name__ == "__main__":
     
     #now we load the multistream test set
     data_dir_multistream = 'streams/data_multistream_gala_new/'
-    N_multistream = 100
+    N_multistream = 333
     test_data_multistream_path = os.path.join(base_dir, data_dir_multistream, f"simulation_multistream_{N_multistream}.npz")
     test_data_multistream = dict(np.load(test_data_multistream_path, allow_pickle=True))
     test_data_multistream_rotation_curve = dict(np.load(f'./data/plots/gala_rotcurv_multistream/{N_multistream}/rotation_curves.npz'))
     test_data_multistream['vcirc_kms'] = test_data_multistream_rotation_curve['vcirc_kms'][:, :, None] #extra dimension (n_observation, len_r_kpc, 1)
 
     test_data_multistream[cfg.sim_data] = test_data_multistream[cfg.sim_data].reshape(-1, test_data_multistream[cfg.sim_data].shape[-2], test_data_multistream[cfg.sim_data].shape[-1])
-    test_data_multistream['vcirc_kms'] = np.tile(test_data_multistream['vcirc_kms'], (3, 1)).reshape(-1, test_data_multistream['vcirc_kms'].shape[-2], test_data_multistream['vcirc_kms'].shape[-1])
+    test_data_multistream['vcirc_kms'] = np.repeat(test_data_multistream['vcirc_kms'], 3, axis=0)
     test_data_multistream['j'] = test_data_multistream['j'].reshape(-1, 1)
     print('Test data sim shape before augmentation: ', test_data_multistream[cfg.sim_data].shape)
     for aug in augmentations:
@@ -776,6 +799,8 @@ if __name__ == "__main__":
         test_data_multistream = aug(test_data_multistream)
     for k in cfg.parameters_global:
         test_data_multistream[k] = np.repeat(test_data_multistream[k], 3, axis=0).reshape(-1, 1)
+    for k in test_data_multistream.keys():
+        test_data_multistream[k] = np.array(test_data_multistream[k])
 
     
     #now we load gaiastream
@@ -799,7 +824,6 @@ if __name__ == "__main__":
     print('Test data vcirc_kms shape after adding to test data: ', test_data_gaia['vcirc_kms'].shape)
 
     augmentations_gaia = []
-    augmentations_gaia.append(augmentations_class.remove_los_velocity)
     augmentations_gaia.append(augmentations_class.sample_obs_error)
     augmentations_gaia.append(augmentations_class.concatentate_sigma_error_to_sim_data)
     augmentations_gaia.append(augmentations_class.concatenate_magnitudes_to_sim_data)
@@ -811,9 +835,9 @@ if __name__ == "__main__":
     n_streams = len(cfg.target_streams.keys())
     test_data_gaia['vcirc_kms'] = np.repeat(test_data_gaia['vcirc_kms'], n_streams, axis=0)
     print('test data vcirc_kms shape after tiling: ', test_data_gaia['vcirc_kms'].shape)
-    test_data['j'] = test_data_gaia['j'].reshape(-1, 1)
+    test_data_gaia['j'] = test_data_gaia['j'].reshape(-1, 1)
     print('Test data sim shape before augmentation: ', test_data_gaia[cfg.sim_data].shape)
-    for aug in augmentations:
+    for aug in augmentations_gaia:
         print(f"Applying augmentation: {aug.__name__}")
         test_data_gaia = aug(test_data_gaia)
         # Manually override the vlos error immediately after sample_obs_error is applied
@@ -837,13 +861,6 @@ if __name__ == "__main__":
     test_data_gaia[cfg.sim_data] = test_data_gaia[cfg.sim_data].reshape(-1, len(cfg.target_streams.keys()), test_data_gaia[cfg.sim_data].shape[-2], test_data_gaia[cfg.sim_data].shape[-1])
     test_data_gaia['vcirc_kms'] = test_data_gaia['vcirc_kms'].reshape(-1, len(cfg.target_streams.keys()), test_data_gaia['vcirc_kms'].shape[-2], test_data_gaia['vcirc_kms'].shape[-1])
     test_data_gaia['j'] = test_data_gaia['j'].reshape(-1,len(cfg.target_streams.keys()), 1)
-
-
-
-
-    
-
-
 
 
     print("Loaded config:", cfg)

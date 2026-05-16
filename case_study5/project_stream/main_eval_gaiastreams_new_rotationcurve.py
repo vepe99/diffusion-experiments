@@ -19,6 +19,7 @@ if "KERAS_BACKEND" not in os.environ:
     os.environ["KERAS_BACKEND"] = "jax"
 import keras
 import bayesflow as bf
+import jax
 
 
 import logging
@@ -127,11 +128,11 @@ def main(cfg: EvalConfig):
             # ),
             # mlp_depths=(cfg.global_model.mlp_depths, cfg.global_model.mlp_depths),
             # mlp_widths=(cfg.global_model.mlp_widths, cfg.global_model.mlp_widths),
-            dropout=cfg.global_model.dropout,
+            # dropout=cfg.global_model.dropout,
         )
     summary_network_b = bf.networks.TimeSeriesTransformer()
     head = keras.Sequential(
-        [bf.networks.MLP(widths=[128, 128]), keras.layers.Dense(units=32)]
+        [bf.networks.MLP(widths=[32, 32, 32]), keras.layers.Dense(units=55)]
     )
     summary_network = FusionNetwork(
         backbones={"input_a": summary_network_a, "input_b": summary_network_b},
@@ -151,22 +152,63 @@ def main(cfg: EvalConfig):
         checkpoint_filepath=model_path,
         checkpoint_name="checkpoint_global_model.keras",
     )
-    workflow_global.approximator = keras.models.load_model(model_path)
+    workflow_global.approximator = keras.saving.load_model(model_path)
     # Augmentation
+
+    augmentations_class.key = jax.random.PRNGKey(42)
+#     augmentations_multistream = []
+
+#     augmentations_multistream.append(augmentations_class.convert_distance_to_parallax)
+
+# # --- Observational selection (window → subsample → compact) ---
+#     augmentations_multistream.append(augmentations_class.observational_window)
+#     augmentations_multistream.append(augmentations_class.subsampling_to_observed_n_stars)
+#     augmentations_multistream.append(augmentations_class.compact_to_attended)
+
+#     augmentations_multistream.append(augmentations_class.sample_magnitudes)
+#     augmentations_multistream.append(augmentations_class.sample_obs_error)
+#     augmentations_multistream.append(augmentations_class.apply_obs_error)
+
+#     augmentations_multistream.append(augmentations_class.mask_vlos)
+
+
+#     augmentations_multistream.append(augmentations_class.add_noise_to_vcirc)
+#     augmentations_multistream.append(augmentations_class.log10_vcirc)
+
+#         # --- Feature concatenations (must be last) ---
+#     augmentations_multistream.append(augmentations_class.concatentate_sigma_error_to_sim_data)
+#     augmentations_multistream.append(augmentations_class.concatenate_magnitudes_to_sim_data)
+#     augmentations_multistream.append(augmentations_class.concatenate_vlos_mask_to_sim_data)
+#     augmentations_multistream.append(augmentations_class.concatenate_j_to_sim_data)
     
+
+#     #trying to get the same random key as in hyperparameter tuning:
+#     #now we load the multistream test set
+#     data_dir_multistream = 'streams/data_multistream_gala_new/'
+#     N_multistream = 333
+#     test_data_multistream_path = os.path.join(cfg.base_dir, data_dir_multistream, f"simulation_multistream_{N_multistream}.npz")
+#     test_data_multistream = dict(np.load(test_data_multistream_path, allow_pickle=True))
+#     test_data_multistream_rotation_curve = dict(np.load(f'./data/plots/gala_rotcurv_multistream/{N_multistream}/rotation_curves.npz'))
+#     test_data_multistream['vcirc_kms'] = test_data_multistream_rotation_curve['vcirc_kms'][:, :, None] #extra dimension (n_observation, len_r_kpc, 1)
+
+#     test_data_multistream[cfg.sim_data] = test_data_multistream[cfg.sim_data].reshape(-1, test_data_multistream[cfg.sim_data].shape[-2], test_data_multistream[cfg.sim_data].shape[-1])
+#     test_data_multistream['vcirc_kms'] = np.repeat(test_data_multistream['vcirc_kms'], 3, axis=0)
+#     test_data_multistream['j'] = test_data_multistream['j'].reshape(-1, 1)
+#     print('Test data sim shape before augmentation: ', test_data_multistream[cfg.sim_data].shape)
+#     for aug in augmentations_multistream:
+#         print(f"Applying augmentation: {aug.__name__}")
+#         test_data_multistream = aug(test_data_multistream)
+#     for k in cfg.parameters_global:
+#         test_data_multistream[k] = np.repeat(test_data_multistream[k], 3, axis=0).reshape(-1, 1)
+#     for k in test_data_multistream.keys():
+#         test_data_multistream[k] = np.array(test_data_multistream[k])
+
+
     augmentations = []
     if "remove_los_velocity" in cfg.augmentations:
         augmentations.append(augmentations_class.remove_los_velocity)
     if "sample_obs_error" in cfg.augmentations:
         augmentations.append(augmentations_class.sample_obs_error)
-    # Inject the real VHel error over the generic interpolated sigmas
-    # augmentations.append(augmentations_class.override_vlos_error_with_real)
-    # if "observational_window" in cfg.augmentations:
-    #     augmentations.append(augmentations_class.observational_window)
-    # if "observational_window_spline" in cfg.augmentations:
-    #     augmentations.append(augmentations_class.observational_window_spline)
-    # if "mask_vlos" in cfg.augmentations:
-    #     augmentations.append(augmentations_class.mask_vlos)
     if "concatentate_sigma_error_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatentate_sigma_error_to_sim_data)
     if "concatenate_magnitudes_to_sim_data" in cfg.augmentations:
@@ -257,11 +299,11 @@ def main(cfg: EvalConfig):
 
     # 1. Create a raw conditions dictionary using pre-adapter keys
     raw_conditions = {
-        cfg.sim_data: flat_input_a,
-        "vcirc_kms": flat_input_b,
-        "attention_mask": flat_mask,
-        "j": flat_j,
-    }
+            cfg.sim_data: flat_input_a,
+            "vcirc_kms": flat_input_b,
+            "attention_mask": flat_mask,
+            "j": flat_j,
+        }
 
     # 2. Use _prepare_conditions to process data through Adapter + SummaryNetwork + Standardizers
     resolved_flat, _, _ = workflow_global.approximator._prepare_conditions(data=raw_conditions)
@@ -380,19 +422,22 @@ def main(cfg: EvalConfig):
     #Single stream posteriors
     for stream_name in cfg.target_streams.keys():
         print(f"Starting inference for stream {stream_name}...")
-        test_data_stream = {cfg.sim_data: test_data[cfg.sim_data][:, cfg.target_streams[stream_name], :, :], 
+        test_data_stream = {"input_a": test_data[cfg.sim_data][:, cfg.target_streams[stream_name], :, :], 
                             "j": test_data["j"][:, cfg.target_streams[stream_name], :],
-                            "vcirc_kms": test_data["vcirc_kms"][:, cfg.target_streams[stream_name], :, :],
-                            "attention_mask": test_data["attention_mask"][:, cfg.target_streams[stream_name], :],
+                            "input_b": test_data["vcirc_kms"][:, cfg.target_streams[stream_name], :, :],
+                            # "attention_mask": test_data["attention_mask"][:, cfg.target_streams[stream_name], :],
                             }
+        attention_mask_stream = test_data['attention_mask'][cfg.target_streams[stream_name], :, :].reshape(1, 1, -1)
+        test_data_stream["summary_attention_mask"] = attention_mask_stream
         print('test data stream shapes: ', {k: v.shape for k, v in test_data_stream.items()})
         print('we should see also the magnitude and sigma concatenated, and vlos_mask if used')
-        attention_mask_stream = test_data['attention_mask'][cfg.target_streams[stream_name], :, :].reshape(1, -1)
+        # attention_mask_stream = test_data['attention_mask'][cfg.target_streams[stream_name], :, :].reshape(1, -1)
+        # attention_mask_stream = test_data['attention_mask'][cfg.target_streams[stream_name], :, :].reshape(1, 1, -1)
         print('attention mask stream shape: ', attention_mask_stream.shape)
         posterior_stream = workflow_global.sample(
                             num_samples=cfg.n_samples,
                             conditions=test_data_stream,
-                            kwargs={'attention_mask': attention_mask_stream}
+                            kwargs={'summary_attention_mask': attention_mask_stream}
                             )
         ps_stream = posterior_stream.copy()
 

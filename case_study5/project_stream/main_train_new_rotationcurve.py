@@ -74,7 +74,7 @@ def main(cfg: TrainConfig):
     # exit()
     # training_data['r_kpc'] = np.tile(training_data_rotation_curve['r_kpc'], reps=(training_data['vcirc_kms'].shape[0],1))[:, :, None] #[:, :, None] #extra dimension (n_observation, len_r_kpc, 1)
 
-    training_data = {k: v[:20_000] for k, v in training_data.items()}
+    # training_data = {k: v[:60_000] for k, v in training_data.items()}
     for k in training_data.keys():
         print(f"{k}: {training_data[k].shape}")
 
@@ -117,6 +117,10 @@ def main(cfg: TrainConfig):
         ["input_a", "input_b",], into="summary_variables")   
     )
     summary_network_a = SetTransformer(
+            summary_dim = 32,
+            embed_dims = (64, 64, 64),
+            num_heads = (4, 4, 4),
+            num_seeds = 6,
             # summary_dim=cfg.global_model.summary_dim,
             # embed_dims=(cfg.global_model.embed_dims, cfg.global_model.embed_dims),
             # num_heads=(
@@ -127,9 +131,14 @@ def main(cfg: TrainConfig):
             # mlp_widths=(cfg.global_model.mlp_widths, cfg.global_model.mlp_widths),
             dropout=cfg.global_model.dropout,
         )
-    summary_network_b = bf.networks.TimeSeriesTransformer()
+    summary_network_b = bf.networks.TimeSeriesTransformer(
+        summary_dim = 32,
+        embed_dims = (64, 64, 64),
+        num_heads = (4, 4, 4),
+
+    )
     head = keras.Sequential(
-        [bf.networks.MLP(widths=[128, 128]), keras.layers.Dense(units=32)]
+        [bf.networks.MLP(widths=[128, 128, 128]), keras.layers.Dense(units=32)]
     )
     summary_network = FusionNetwork(
         backbones={"input_a": summary_network_a, "input_b": summary_network_b},
@@ -140,13 +149,7 @@ def main(cfg: TrainConfig):
     workflow_global = bf.CompositionalWorkflow(
         adapter=adapter,
         summary_network=summary_network,
-        inference_network=bf.networks.DiffusionModel(
-            # subnet_kwargs={
-            #     "widths": [cfg.global_model.inference_mlp_width]
-            #     * cfg.global_model.inference_mlp_depth,
-            #     "time_embedding_dim": cfg.global_model.inference_time_embedding_dim,
-            # }
-        ),
+        inference_network=bf.networks.DiffusionModel(),
         standardize=["inference_variables", "summary_variables"],
         checkpoint_filepath=model_path,
         checkpoint_name="checkpoint_global_model.keras",

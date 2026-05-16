@@ -218,7 +218,7 @@ def main(cfg: EvalConfig):
         augmentations.append(augmentations_class.concatenate_j_to_sim_data)
 
     test_data[cfg.sim_data] = test_data[cfg.sim_data].reshape(-1, test_data[cfg.sim_data].shape[-2], test_data[cfg.sim_data].shape[-1])
-    test_data['vcirc_kms'] = np.tile(test_data['vcirc_kms'], (3, 1)).reshape(-1, test_data['vcirc_kms'].shape[-2], test_data['vcirc_kms'].shape[-1])
+    test_data['vcirc_kms'] = np.repeat(test_data['vcirc_kms'], 3, axis=0)
     test_data['j'] = test_data['j'].reshape(-1, 1)
     print('Test data sim shape before augmentation: ', test_data[cfg.sim_data].shape)
     for aug in augmentations:
