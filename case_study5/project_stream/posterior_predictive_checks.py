@@ -381,7 +381,7 @@ def main(cfg: SimulatorConfig):
         cfg.base_dir,
         # '../hyperparameter_tuning/gala/local/new_aug_jonas_300k_200epoch/streamnorm_standardize/model_79/gaia_121/gaia_local_posterior.npz'
         # '../hyperparameter_tuning/gala/local/jonas/streamnomr_standardize/model_2/gaia_121/gaia_local_posterior.npz'
-        '../hyperparameter_tuning/gala/local/jonas/streamnomr_standardize/model_2/gaia_54/gaia_local_posterior.npz'
+        '../hyperparameter_tuning/gala/local/rotationcurve/model_test_200epochs/global_9/gaia_local_posterior.npz'
     )
     print('Loading global posterior from:', global_posterior_path)
     global_posterior = dict(np.load(global_posterior_path, allow_pickle=True))
@@ -601,7 +601,7 @@ def main(cfg: SimulatorConfig):
                 for param, vals in local_draws[stream].items():
                     # if (stream != 'M68') and (param != 'mu_dec'):
                     # if (stream != 'M68'):
-                    if False:
+                    if True:
                         cfg.priors_local[stream][param] = {
                             'type': 'identity',
                             'prior_parameters': [float(vals[ppc_idx])],

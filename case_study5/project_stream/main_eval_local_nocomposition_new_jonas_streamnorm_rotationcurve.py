@@ -27,7 +27,6 @@ from utils.utils_train_jax_new_rotationcurve import AugmentationsClass
 from utils.custom_summary_network import SetTransformer, FusionNetwork
 
 
-
 cs = ConfigStore.instance()
 cs.store(name="eval_config", node=EvalConfig)
 
@@ -77,10 +76,17 @@ def standardize_by_stream(batch, sim_data, stats):
     observations = (observations - mean) / std
 
     batch[sim_data] = np.array(observations)
+
+    #apply normalization to vcirc_kms, the vcirc_kms should already be in log10 
+    x = jnp.array(batch["vcirc_kms"])  # (N, 34, 1)
+    mean_vcirc = jnp.array(stats["vcirc_kms"].item()["mean_log10vcirc_kms"])  # (34, 1)
+    std_vcirc  = jnp.array(stats["vcirc_kms"].item()["std_log10vcirc_kms"])   # (34, 1)
+    x = (x - mean_vcirc) / std_vcirc
+    batch["vcirc_kms"] = jnp.array(x)
     return batch
 
 
-@hydra.main(version_base=None, config_path="config", config_name="eval_config_local",)
+@hydra.main(version_base=None, config_path="config", config_name="eval_config_local_new_rotationcurve",)
 def main(cfg: EvalConfig):
 
     print(cfg)
@@ -95,23 +101,28 @@ def main(cfg: EvalConfig):
     sim_data = str(cfg.sim_data)
     inference_conditions = str(cfg.inference_conditions[0])
     test_data_path = os.path.join(cfg.base_dir, cfg.data_dir, f'simulation_multistream_{cfg.multistream_n_simulation}.npz')
-    stats = np.load(os.path.join(os.path.dirname(model_path), 'stream_stats.npz'))
+    stats = dict(np.load(os.path.join(os.path.dirname(model_path), 'stream_stats.npz'), allow_pickle=True))
+    # print(stats)
+    # exit()
+
 
     print('Loading test data from ', test_data_path)
     test_data = dict(np.load(test_data_path, allow_pickle=True))
-    keys_to_drop = set(test_data.keys()) - set(param_names_local) - set(param_names_global) - {sim_data} - set(inference_conditions)
+    test_data_rotation_curve = dict(np.load(f'./data/plots/gala_rotcurv_multistream/{cfg.multistream_n_simulation}/rotation_curves.npz'))
+    test_data['vcirc_kms'] = test_data_rotation_curve['vcirc_kms'][:, :, None] #extra dimension (n_observation, len_r_kpc, 1)
+    
+    keys_to_drop = (
+        set(test_data.keys()) 
+        - set(param_names_local) 
+        - set(param_names_global) 
+        - {sim_data} 
+        - {"vcirc_kms"}
+        - set(inference_conditions)
+    )
     keys_to_drop = list(keys_to_drop) 
     inference_conditions = param_names_global + [inference_conditions]
 
-    adapter = (
-        bf.adapters.Adapter()
-        .to_array()
-        .convert_dtype("float64", "float32")
-        .drop(keys_to_drop)
-        .concatenate(param_names_local, into="inference_variables")
-        .rename(sim_data, "summary_variables")
-        .concatenate(inference_conditions, into="inference_conditions")
-    )
+
     with open(os.path.join(cfg.base_dir, cfg.model_dir, '.hydra', 'config.yaml'), "r") as f:
         model_config = yaml.safe_load(f)
     print(model_config)
@@ -130,68 +141,95 @@ def main(cfg: EvalConfig):
     #             }
     # model_config = cfg.local_model
 
-    if cfg.noise_schedule is not None:
-        inference_network = bf.networks.FlowMatching(
-                                                    subnet_kwargs={
-                                                    "widths": [model_config['local_model']['inference_mlp_width']] * model_config['local_model']['inference_mlp_depth'],
-                                                    "time_embedding_dim": model_config['local_model']['inference_time_embedding_dim'],
-                                                    },
-                                                    schedule_kwargs = {**cfg.noise_schedule,},
-                                                    )
-    else:
-        #probably needs to fix it to the training noise schedule 
-        inference_network = bf.networks.FlowMatching(
-            subnet_kwargs={
-                "widths": [model_config['local_model']['inference_mlp_width']] * model_config['local_model']['inference_mlp_depth'],
-                "time_embedding_dim": model_config['local_model']['inference_time_embedding_dim'],
-            },
-        )
-    summary_network = bf.networks.SetTransformer(
-        summary_dim=model_config['local_model']['summary_dim'],
-        embed_dims=(model_config['local_model']['embed_dims'], model_config['local_model']['embed_dims']),
-        num_heads=(model_config['local_model']['num_heads'], model_config['local_model']['num_heads'],),
-        mlp_depths=(model_config['local_model']['mlp_depths'], model_config['local_model']['mlp_depths'],),
-        mlp_widths=(model_config['local_model']['mlp_widths'], model_config['local_model']['mlp_widths'],),
-        dropout=model_config['local_model']['dropout'],
+    adapter = (
+        bf.adapters.Adapter()
+        .to_array()
+        .convert_dtype("float64", "float32")
+        .drop(keys_to_drop)
+        .concatenate(param_names_local, into="inference_variables")
+        .concatenate(inference_conditions, into="inference_conditions")
+        .rename(sim_data, "input_a")
+        .rename('attention_mask', 'summary_attention_mask')
+        .rename("vcirc_kms", "input_b")
+        .group(
+        ["input_a", "input_b",], into="summary_variables")   
     )
-    workflow_local = bf.BasicWorkflow(
+    summary_network_a = SetTransformer(
+            summary_dim = 32,
+            embed_dims = (64, 64),
+            num_heads = (4, 4),
+            num_seeds = 6,
+            dropout=cfg.global_model.dropout,
+        )
+    summary_network_b = bf.networks.TimeSeriesTransformer(
+        summary_dim = 32,
+        embed_dims = (64, 64,),
+        num_heads = (4, 4,),
+
+    )
+    head = keras.Sequential(
+        [bf.networks.MLP(widths=[64, 64]), keras.layers.Dense(units=32)]
+    )
+
+    summary_network = FusionNetwork(
+        backbones={"input_a": summary_network_a, "input_b": summary_network_b},
+        head=head,
+    )
+
+    workflow_local = bf.CompositionalWorkflow(
         adapter=adapter,
         summary_network=summary_network,
-        inference_network=inference_network,
-        # standardize=["inference_variables", "inference_conditions"],
-        standardize=["inference_variables", "summary_variables", "inference_conditions"],
+        inference_network=bf.networks.DiffusionModel(),
+        standardize=["inference_variables", "inference_conditions"],
+        checkpoint_filepath=model_path,
+        checkpoint_name="checkpoint_local_model.keras",
     )
     workflow_local.approximator = keras.models.load_model(model_path) #this override everything 
 
-    # workflow_local.approximator.inference_network.integrate_kwargs.update({
-    # #     'method': cfg.method,
-    #     # 'steps': cfg.steps,
-    #     "max_steps": cfg.max_steps,
-    #     })
-    test_data = {k: test_data[k] for k in cfg.parameters_local + cfg.parameters_global + [cfg.sim_data, "j"] }
+    test_data = {k: test_data[k] for k in cfg.parameters_local + cfg.parameters_global + [cfg.sim_data, "j", "vcirc_kms"] }
     # Augmentation
     augmentations_class = AugmentationsClass(cfg)
     augmentations = []
     if "cut_to_300_particles" in cfg.augmentations:
         augmentations.append(augmentations_class.cut_to_300_particles)
-    if "remove_los_velocity" in cfg.augmentations: #remove this if you want to train with vlos and errors
+    # --- Coordinate transforms (must be first, before any masking) ---
+    if "remove_los_velocity" in cfg.augmentations:
         augmentations.append(augmentations_class.remove_los_velocity)
     if "convert_distance_to_parallax" in cfg.augmentations:
         augmentations.append(augmentations_class.convert_distance_to_parallax)
+
+    # --- Observational selection (window → subsample → compact) ---
+    if "observational_window" in cfg.augmentations:
+        augmentations.append(augmentations_class.observational_window)
+    if "observational_window_spline" in cfg.augmentations:
+        augmentations.append(augmentations_class.observational_window_spline)
+    if "observational_window_random" in cfg.augmentations:
+        augmentations.append(augmentations_class.observational_window_random)
+    if "observed_n_stars" in cfg.augmentations:
+        augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
+    if "compact_to_attended" in cfg.augmentations:
+        augmentations.append(augmentations_class.compact_to_attended)
+
+    # --- Photometric augmentation (magnitudes → errors → apply) ---
     if "sample_magnitudes" in cfg.augmentations:
         augmentations.append(augmentations_class.sample_magnitudes)
     if "sample_obs_error" in cfg.augmentations:
         augmentations.append(augmentations_class.sample_obs_error)
     if "apply_obs_error" in cfg.augmentations:
         augmentations.append(augmentations_class.apply_obs_error)
-    if "observational_window" in cfg.augmentations:
-        augmentations.append(augmentations_class.observational_window)
-    if "observed_n_stars" in cfg.augmentations:
-        augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
+
+    # --- v_los masking (must be after apply_obs_error) ---
     if "mask_vlos" in cfg.augmentations:
         augmentations.append(augmentations_class.mask_vlos)
+
+    # --- Symmetry augmentations ---
     if "flip_dirz" in cfg.augmentations:
         augmentations.append(augmentations_class.flip_dirz)
+
+    if "add_noise_to_vcirc" in cfg.augmentations:
+        augmentations.append(augmentations_class.add_noise_to_vcirc)
+    if "log10_vcirc" in cfg.augmentations:
+        augmentations.append(augmentations_class.log10_vcirc)
     augmentations.append(lambda batch: standardize_by_stream(batch, sim_data=sim_data, stats=stats))  # re-standardize after flip_dirz
 
     if "concatentate_sigma_error_to_sim_data" in cfg.augmentations:
@@ -202,9 +240,10 @@ def main(cfg: EvalConfig):
         augmentations.append(augmentations_class.concatenate_vlos_mask_to_sim_data)
     if "concatenate_j_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatenate_j_to_sim_data)
-        
+
 
     test_data[cfg.sim_data] = test_data[cfg.sim_data].reshape(-1, test_data[cfg.sim_data].shape[-2], test_data[cfg.sim_data].shape[-1])
+    test_data['vcirc_kms'] = np.repeat(test_data['vcirc_kms'], 3, axis=0)
     test_data['j'] = test_data['j'].reshape(-1, 1)
     print('Test data sim shape before augmentation: ', test_data[cfg.sim_data].shape)
     for aug in augmentations:
@@ -215,9 +254,13 @@ def main(cfg: EvalConfig):
 
 
     logging.info("Starting Partial-Pooling (local) inference...")
-    conditions = {cfg.sim_data: test_data[cfg.sim_data],}
-    conditions['j'] = test_data['j']
     # Add this: repeat global params to match the flattened stream dimension
+    conditions = {
+        "input_a": test_data[cfg.sim_data],         # (300, 300, 15)
+        "input_b": test_data["vcirc_kms"],            # (300, 34, 1)  <-- missing
+        "summary_attention_mask": test_data["attention_mask"],      # (300, 1, 300)
+        "j": test_data["j"],                            # (300, 1)
+    }
     n_streams = len(cfg.target_streams)  # = 3
     for param in cfg.parameters_global:
         test_data[param] = np.repeat(test_data[param], n_streams, axis=0)
@@ -226,7 +269,7 @@ def main(cfg: EvalConfig):
                         num_samples=1000,
                         conditions=conditions, 
                         batch_size=cfg.batch_size,
-                        kwargs={'attention_mask': test_data['attention_mask']}
+                        kwargs={'summary_attention_mask': test_data['attention_mask']}
                     )
 
 
@@ -307,24 +350,6 @@ def main(cfg: EvalConfig):
         fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'{stream_name}_calibration_no_diff.pdf'))
         print(f'  Saved {stream_name}_calibration_no_diff.pdf')
         plt.close(fig)
-
-        #calibration plot stacked
-        from utils.utils_plot import calibration_ecdf
-        fig = calibration_ecdf(
-            estimates=ps_stream,
-            targets=test_data_stream,
-            difference=True,
-            variable_names=cfg.parameter_local_pretty,
-            stacked = True,
-            rank_ecdf_color=plt.cm.magma(np.linspace(0, 1, len(cfg.parameter_local_pretty))),
-            local_params = True,
-            title_local_params = f"{stream_name}",
-
-        )
-        for ax in fig.get_axes():
-            ax.grid(False)
-        fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'{stream_name}_nocomposition_calibration_stacked.pdf'))
-        plt.show()
 
         # --- Calibration histograms (split into two groups) ---
         ps_keys = list(ps_stream.keys())

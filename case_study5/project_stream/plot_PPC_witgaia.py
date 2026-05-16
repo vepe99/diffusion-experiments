@@ -133,8 +133,8 @@ def main(cfg: EvalConfig):
 
     name_to_plot = ['Pal5', 'NGC3201', 'M68']
     path_data = "/export/data/vgiusepp/diffusion_experiments_test_new/diffusion-experiments/case_study5/project_stream/data/streams/"
-    sampling_type = 'data_multistream_gala_posterior_predictive_check/rotationacurve/model_9_test/'
-    name_file = 'ppc_100samples_q16-84.npz'
+    sampling_type = 'data_multistream_gala_posterior_predictive_check/rotationacurve/model_9_test_local200epochs/'
+    name_file = 'ppc_10samples_q16-84.npz'
 
     posterior_sample = np.load(f'{path_data}{sampling_type}{name_file}')
     posteriorpredictive_sample = posterior_sample['sim_data_projected']  # (10, 3, 1002, 6)
@@ -148,6 +148,7 @@ def main(cfg: EvalConfig):
         ("convert_distance_to_parallax", augmentations_class.convert_distance_to_parallax),
         ("observational_window",       augmentations_class.observational_window),
         ("observed_n_stars",           augmentations_class.subsampling_to_observed_n_stars),
+        ("compact_to_attended",        augmentations_class.compact_to_attended),
         ("sample_magnitudes",          augmentations_class.sample_magnitudes),
         ("sample_obs_error",           augmentations_class.sample_obs_error),
         ("apply_obs_error",            augmentations_class.apply_obs_error),

@@ -401,7 +401,7 @@ def main(cfg: EvalConfig):
         v_circ_kms = v_circ.to(u.km/u.s).value
         all_vcirc[i] = v_circ_kms
         M_200_samples[i] = pot['halo'].M200().value
-        r_200_samples[i] = pot['halo'].r200().value
+        r_200_samples[i] = pot['halo'].R200().value
         # ── Rotation-curve plot ───────────────────────────────────────────────────────
         
 
