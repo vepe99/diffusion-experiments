@@ -104,7 +104,7 @@ import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 import galstreams
 import corner
-from utils.utils_train_jax import AugmentationsClass
+from utils.utils_train_jax_new_rotationcurve import AugmentationsClass
 
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -124,7 +124,7 @@ PHASE_SPACE_LABELS = [
     r'$v_{\rm los}$ [km/s]',
 ]
 
-@hydra.main(version_base=None, config_path="config", config_name="eval_config")
+@hydra.main(version_base=None, config_path="config", config_name="eval_config_new_rotationcurve",)
 def main(cfg: EvalConfig):
     data = np.load("./data/gaia_observed_streams_6Dwitherrors_cutNGC3201.npz")
     sim_data = data['sim_data_projected']         # (1, 3, 1000, 6)
@@ -133,8 +133,8 @@ def main(cfg: EvalConfig):
 
     name_to_plot = ['Pal5', 'NGC3201', 'M68']
     path_data = "/export/data/vgiusepp/diffusion_experiments_test_new/diffusion-experiments/case_study5/project_stream/data/streams/"
-    sampling_type = 'data_multistream_gala_posterior_predictive_check/model_54_60k_1000epochs_local2_rotationalcurve/'
-    name_file = 'ppc_500samples_q16-84.npz'
+    sampling_type = 'data_multistream_gala_posterior_predictive_check/rotationacurve/model_9_test/'
+    name_file = 'ppc_100samples_q16-84.npz'
 
     posterior_sample = np.load(f'{path_data}{sampling_type}{name_file}')
     posteriorpredictive_sample = posterior_sample['sim_data_projected']  # (10, 3, 1002, 6)
@@ -146,11 +146,11 @@ def main(cfg: EvalConfig):
         ("cut_to_300_particles",       augmentations_class.cut_to_300_particles),
         ("remove_los_velocity",        augmentations_class.remove_los_velocity),
         ("convert_distance_to_parallax", augmentations_class.convert_distance_to_parallax),
+        ("observational_window",       augmentations_class.observational_window),
+        ("observed_n_stars",           augmentations_class.subsampling_to_observed_n_stars),
         ("sample_magnitudes",          augmentations_class.sample_magnitudes),
         ("sample_obs_error",           augmentations_class.sample_obs_error),
         ("apply_obs_error",            augmentations_class.apply_obs_error),
-        ("observational_window",       augmentations_class.observational_window),
-        ("observed_n_stars",           augmentations_class.subsampling_to_observed_n_stars),
         ("mask_vlos",                  augmentations_class.mask_vlos),
     ]:
         if key in cfg.augmentations:

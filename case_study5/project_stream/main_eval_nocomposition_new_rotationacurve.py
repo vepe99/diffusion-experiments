@@ -282,9 +282,9 @@ def main(cfg: EvalConfig):
 
     ps['M_k'] = 4 * np.pi * ps['rho_thick_disk'] * ps['hr_thick_disk']**2 * ps['hz_thick_disk']
     test_data['M_k'] = 4 * np.pi * test_data['rho_thick_disk'] * test_data['hr_thick_disk']**2 * test_data['hz_thick_disk']
-    cfg.paramater_global_pretty = cfg.paramater_global_pretty + ['M_t', 'M_k']
+    cfg.paramater_global_pretty = cfg.paramater_global_pretty + ['$M_t$', '$M_k$']
 # ...existing code...
-    param_names_global = param_names_global + ['M_t', 'M_k']
+    param_names_global = param_names_global + ['$M_t$', '$M_k$']
     np.savez(os.path.join(cfg.base_dir, cfg.results_dir, 'posterior.npz'), **ps)
 
     for k in ps.keys():

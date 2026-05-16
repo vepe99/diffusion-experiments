@@ -3,7 +3,7 @@ data_dir: "streams/data_multistream_gala_new/"
 model_dir: "hyperparameter_tuning/gala/rotationcurve/model_9_test"
 # model_dir: "hyperparameter_tuning/agama/model_test_fulldataset/"
 multistream_n_simulation: 333
-results_dir: "hyperparameter_tuning/gala/rotationcurve/model_9_test/nocomposition_333test"
+results_dir: "hyperparameter_tuning/gala/rotationcurve/model_9_test/333test"
 # results_dir: hyperparameter_tuning/agama/model_test_fulldataset/nocomposition_1000test
 use_streamax_simulator: False
 

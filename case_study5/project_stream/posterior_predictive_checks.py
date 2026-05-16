@@ -40,7 +40,7 @@ cs.store(name="simulator_config", node=SimulatorConfig)
 # percentile of the joint distance distribution — equivalent to the ±1σ band
 # for a Gaussian posterior.
 # ──────────────────────────────────────────────────────────────────────────────
-N_POSTERIOR_SAMPLES = 500  # <── total PPC runs
+N_POSTERIOR_SAMPLES = 100  # <── total PPC runs
 QUANTILE_SAMPLING   = True   # <── set False to fall back to random / mode
 QUANTILE_LOW        = 0.16   # <── lower CDF bound (0.0 = include everything below median)
 QUANTILE_HIGH       = 0.84  # <── upper CDF bound
@@ -372,9 +372,10 @@ def main(cfg: SimulatorConfig):
     global_posterior_path = os.path.join(
         cfg.base_dir,
         # '../plots/gala6D_aug/new_hyper/model54_60k_1000epochs/global_posterior.npz'
-        '../plots/gala6D/new_hyper/model54_60k_1000epochs/global_posterior.npz'
+        # '../plots/gala6D/new_hyper/model54_60k_1000epochs/global_posterior.npz'
         # '../hyperparameter_tuning/gala/new_aug_bigheads/model_121/gaiastreams/global_posterior.npz'
         # '../hyperparameter_tuning/gala/300k/model_21/gaiastreams/global_posterior.npz'
+        '../hyperparameter_tuning/gala/rotationcurve/model_9_test/gaiastreams/global_posterior.npz'
     )
     local_posterior_path = os.path.join(
         cfg.base_dir,
@@ -513,6 +514,7 @@ def main(cfg: SimulatorConfig):
         return rotation_curve_on_grid
 
     rotation_curve_for_plot = []
+    
     for i in range(len(global_draws['m_Triaxial_halo'])):
         draw = {k: global_draws[k][i] for k in global_draws.keys()}  # fix: k not j
         rotation_curve_for_plot.append(rotation_curve(draw))
@@ -537,7 +539,7 @@ def main(cfg: SimulatorConfig):
     fig.savefig(os.path.join(cfg.base_dir, cfg.data_dir, 'rotation_curve_sample.pdf'), dpi=150, bbox_inches='tight')
     print('Saved rotation curve samples')
 
-    exit()
+    # exit()
 
     # ── Simulator setup (done once) ───────────────────────────────────────────
     if cfg.simulator == "odisseo":
@@ -599,7 +601,7 @@ def main(cfg: SimulatorConfig):
                 for param, vals in local_draws[stream].items():
                     # if (stream != 'M68') and (param != 'mu_dec'):
                     # if (stream != 'M68'):
-                    if True:
+                    if False:
                         cfg.priors_local[stream][param] = {
                             'type': 'identity',
                             'prior_parameters': [float(vals[ppc_idx])],
