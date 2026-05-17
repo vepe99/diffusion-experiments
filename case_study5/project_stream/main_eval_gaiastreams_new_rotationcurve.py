@@ -1,8 +1,8 @@
 from autocvd import autocvd
-# autocvd(num_gpus = 1)
+autocvd(num_gpus = 1)
 import os
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
+# os.environ["CUDA_VISIBLE_DEVICES"] = ""
 import yaml
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -423,9 +423,9 @@ def main(cfg: EvalConfig):
     )
                 
     ax.errorbar(obs_R, obs_Vc, yerr=3*obs_sVc, fmt='o', color='red',
-                ms=3, lw=1, capsize=2, label='Observed ±3σ', zorder=5)
-    ax.set_xlabel('Radius (kpc)')
-    ax.set_ylabel('Circular Velocity (km/s)')
+                ms=3, lw=1, capsize=2, label='Zhou et al. (2023) ±3σ', zorder=5)
+    ax.set_xlabel('Radius [kpc]')
+    ax.set_ylabel('Circular Velocity [km/s]')
     ax.legend()
     
                 
@@ -436,33 +436,59 @@ def main(cfg: EvalConfig):
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'global_rotation_curve.pdf'))
     plt.close(fig)
 
-    fig = plt.figure()
-    ax = fig.add_subplot(121)
-    ax.hist(M_200_samples, bins=30, color='blue', alpha=0.7)
-    ax.set_xlabel(r'$M_{200}$ ($M_\odot$)')
-    ax = fig.add_subplot(122)
-    ax.hist(r_200_samples, bins=30, color='green', alpha=0.7)
-    ax.set_xlabel(r'$r_{200}$ (kpc)')
-    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'global_M200_r200.pdf'))
-    plt.close(fig)
+    # fig = plt.figure()
+    # ax = fig.add_subplot(121)
+    # ax.hist(M_200_samples, bins=30, color='blue', alpha=0.7)
+    # ax.set_xlabel(r'$M_{200}$ ($M_\odot$)')
+    # ax = fig.add_subplot(122)
+    # ax.hist(r_200_samples, bins=30, color='green', alpha=0.7)
+    # ax.set_xlabel(r'$r_{200}$ (kpc)')
+    # fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'global_M200_r200.pdf'))
+    # plt.close(fig)
+    df_halo_props = pd.DataFrame({
+        '$M_{200}$ [$M_\odot$]': M_200_samples,
+        '$R_{200}$ [kpc]': r_200_samples
+    })
+    
+    import corner
+    fig_halo = corner.corner(
+        df_halo_props, 
+        color='teal', 
+        labels=df_halo_props.columns,
+        smooth = 1.0, 
+        hist_kwargs={'density': True},
+        contour_kwargs={'linewidths': 1.5}
+    )
+    
+    fig_halo.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_M200_r200.pdf'))
+    plt.close(fig_halo)
 
 
     print('shapes of posterior samples: ', {k: v.shape for k, v in ps.items()})
+    import matplotlib.colors as mcolors
+    colors = plt.cm.RdYlBu_r(np.linspace(0, 1, 4))
+    # colors = [mcolors.to_hex(c) for c in colors]
+    colors = [tuple(c[:3]) for c in colors]
     for k in ps.keys():
         ps[k] = ps[k].reshape(-1,)
     df = pd.DataFrame(ps) 
     print('Df columns before renaming: ', df.columns)
     df.columns = list(cfg.paramater_global_pretty)
     print('Df columns after renaming: ', df.columns)
-    c = ChainConsumer()
-    c.add_chain(Chain(samples=df, name="Global"))
-    # fig = c.plotter.plot()
-    # fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'global_cornerplot.pdf'))
-    # print(f'Saved global corner plot')
-    # plt.show()
+    import corner
+    import matplotlib.lines as mlines
+
+    fig = corner.corner(
+        df, 
+        color=colors[0], 
+        labels=df.columns,
+        hist_kwargs={'density': True},
+        contour_kwargs={'linewidths': 1.5}
+    )
+    legend_handles = [mlines.Line2D([], [], color=colors[0], label='Global')]
 
     #Single stream posteriors
-    for stream_name in cfg.target_streams.keys():
+    for i, stream_name in enumerate(cfg.target_streams.keys()):
         print(f"Starting inference for stream {stream_name}...")
         test_data_stream = {"input_a": test_data[cfg.sim_data][:, cfg.target_streams[stream_name], :, :], 
                             "j": test_data["j"][:, cfg.target_streams[stream_name], :],
@@ -482,9 +508,9 @@ def main(cfg: EvalConfig):
                             kwargs={'summary_attention_mask': attention_mask_stream}
                             )
         ps_stream = posterior_stream.copy()
-        ps_stream['M_t'] = 4 * np.pi * ps_stream['rho_thin_disk'] * ps_stream['hr_thin_disk']**2 * ps_stream['hz_thin_disk']
+        ps_stream['$M_t$'] = 4 * np.pi * ps_stream['rho_thin_disk'] * ps_stream['hr_thin_disk']**2 * ps_stream['hz_thin_disk']
 
-        ps_stream['M_k'] = 4 * np.pi * ps_stream['rho_thick_disk'] * ps_stream['hr_thick_disk']**2 * ps_stream['hz_thick_disk']
+        ps_stream['$M_k$'] = 4 * np.pi * ps_stream['rho_thick_disk'] * ps_stream['hr_thick_disk']**2 * ps_stream['hz_thick_disk']
     # ...existing code...
 
         np.savez(os.path.join(cfg.base_dir, cfg.results_dir, f'{stream_name}_posterior.npz'), **ps_stream)
@@ -493,9 +519,15 @@ def main(cfg: EvalConfig):
             ps_stream[k] = ps_stream[k].reshape(-1,)
         df_stream = pd.DataFrame(ps_stream) 
         df_stream.columns = list(cfg.paramater_global_pretty)
-        c.add_chain(Chain(samples=df_stream, name=f"{stream_name}"))
-    c.set_override(ChainConfig(shade=False))
-    fig = c.plotter.plot()
+        corner.corner(
+            df_stream, 
+            fig=fig, 
+            color=colors[i+1], 
+            hist_kwargs={'density': True},
+            contour_kwargs={'linewidths': 1.5}
+        )
+        legend_handles.append(mlines.Line2D([], [], color=colors[i+1], label=stream_name))
+    fig.legend(handles=legend_handles, loc='upper right', fontsize=18, bbox_to_anchor=(0.95, 0.95))
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'global_cornerplot.pdf'))
     print(f'Saved global corner plot with all streams in pathc: {os.path.join(cfg.base_dir, cfg.results_dir, "global_cornerplot.pdf")}')
 

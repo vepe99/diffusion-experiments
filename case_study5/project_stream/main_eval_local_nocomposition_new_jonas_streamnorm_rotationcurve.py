@@ -351,6 +351,24 @@ def main(cfg: EvalConfig):
         print(f'  Saved {stream_name}_calibration_no_diff.pdf')
         plt.close(fig)
 
+        #calibration plot stacked
+        from utils.utils_plot import calibration_ecdf
+        fig = calibration_ecdf(
+            estimates=ps_stream,
+            targets=test_data_stream,
+            difference=True,
+            variable_names=cfg.parameter_local_pretty,
+            stacked = True,
+            rank_ecdf_color=plt.cm.magma(np.linspace(0, 1, len(cfg.parameter_local_pretty))),
+            local_params = True,
+            title_local_params = f"{stream_name}",
+
+        )
+        for ax in fig.get_axes():
+            ax.grid(False)
+        fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'{stream_name}_nocomposition_calibration_stacked.pdf'))
+        plt.show()
+
         # --- Calibration histograms (split into two groups) ---
         ps_keys = list(ps_stream.keys())
 

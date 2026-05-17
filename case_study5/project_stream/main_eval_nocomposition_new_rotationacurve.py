@@ -277,11 +277,11 @@ def main(cfg: EvalConfig):
 
 
     # ...existing code...
-    ps['M_t'] = 4 * np.pi * ps['rho_thin_disk'] * ps['hr_thin_disk']**2 * ps['hz_thin_disk']
-    test_data['M_t'] = 4 * np.pi * test_data['rho_thin_disk'] * test_data['hr_thin_disk']**2 * test_data['hz_thin_disk']
+    ps['$M_t$'] = 4 * np.pi * ps['rho_thin_disk'] * ps['hr_thin_disk']**2 * ps['hz_thin_disk']
+    test_data['$M_t$'] = 4 * np.pi * test_data['rho_thin_disk'] * test_data['hr_thin_disk']**2 * test_data['hz_thin_disk']
 
-    ps['M_k'] = 4 * np.pi * ps['rho_thick_disk'] * ps['hr_thick_disk']**2 * ps['hz_thick_disk']
-    test_data['M_k'] = 4 * np.pi * test_data['rho_thick_disk'] * test_data['hr_thick_disk']**2 * test_data['hz_thick_disk']
+    ps['$M_k$'] = 4 * np.pi * ps['rho_thick_disk'] * ps['hr_thick_disk']**2 * ps['hz_thick_disk']
+    test_data['$M_k$'] = 4 * np.pi * test_data['rho_thick_disk'] * test_data['hr_thick_disk']**2 * test_data['hz_thick_disk']
     cfg.paramater_global_pretty = cfg.paramater_global_pretty + ['$M_t$', '$M_k$']
 # ...existing code...
     param_names_global = param_names_global + ['$M_t$', '$M_k$']

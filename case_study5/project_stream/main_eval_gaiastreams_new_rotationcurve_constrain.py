@@ -20,7 +20,8 @@ if "KERAS_BACKEND" not in os.environ:
 import keras
 import bayesflow as bf
 import jax
-
+import corner
+import matplotlib.lines as mlines
 
 import logging
 logging.getLogger('bayesflow').setLevel(logging.DEBUG)
@@ -317,7 +318,7 @@ def main(cfg: EvalConfig):
             z = workflow_global.approximator.standardize_layers["inference_variables"](z, forward=False)
         r_nfw = z[..., 1]
         # Constraint is satisfied (<= 0) when r_nfw is within 1 std (5.0) of the mean (16.0)
-        return ((r_nfw - 15.0) / 1.0)**2 - 1.0
+        return ((r_nfw - 15.0) / 3.0)**2 - 3.0
 
     def constrain_m(z):
         if 'inference_variables' in workflow_global.approximator.standardize_layers:
@@ -343,9 +344,27 @@ def main(cfg: EvalConfig):
                         )
     os.makedirs(name= os.path.join(cfg.base_dir, cfg.results_dir), exist_ok=True)
     ps = global_posterior.copy()
-    ps['M_t'] = 4 * np.pi * ps['rho_thin_disk'] * ps['hr_thin_disk']**2 * ps['hz_thin_disk']
+    ps['$M_t$'] = 4 * np.pi * ps['rho_thin_disk'] * ps['hr_thin_disk']**2 * ps['hz_thin_disk']
 
-    ps['M_k'] = 4 * np.pi * ps['rho_thick_disk'] * ps['hr_thick_disk']**2 * ps['hz_thick_disk']
+    ps['$M_k$'] = 4 * np.pi * ps['rho_thick_disk'] * ps['hr_thick_disk']**2 * ps['hz_thick_disk']
+
+    #unconstraind 
+    global_posterior_unconstrained = workflow_global.compositional_sample(
+                        num_samples=cfg.n_samples,
+                        # conditions=None,
+                        summaries=final_summary_outputs,
+                        method=cfg.method,
+                        steps=cfg.steps,
+                        compositional_bridge_d1=1/cfg.inverse_compositional_bridge_d1,
+                        compute_prior_score=prior_global_score,
+                        batch_size=cfg.batch_size,
+                        )
+    os.makedirs(name= os.path.join(cfg.base_dir, cfg.results_dir), exist_ok=True)
+    ps_unconstrained = global_posterior_unconstrained.copy()
+    ps_unconstrained['$M_t$'] = 4 * np.pi * ps_unconstrained['rho_thin_disk'] * ps_unconstrained['hr_thin_disk']**2 * ps_unconstrained['hz_thin_disk']
+
+    ps_unconstrained['$M_k$'] = 4 * np.pi * ps_unconstrained['rho_thick_disk'] * ps_unconstrained['hr_thick_disk']**2 * ps_unconstrained['hz_thick_disk']
+
     cfg.paramater_global_pretty = cfg.paramater_global_pretty + ['$M_t$', '$M_k$']
 # ...existing code...
     param_names_global = param_names_global + ['$M_t$', '$M_k$']
@@ -436,9 +455,9 @@ def main(cfg: EvalConfig):
     )
                 
     ax.errorbar(obs_R, obs_Vc, yerr=3*obs_sVc, fmt='o', color='red',
-                ms=3, lw=1, capsize=2, label='Observed ±3σ', zorder=5)
-    ax.set_xlabel('Radius (kpc)')
-    ax.set_ylabel('Circular Velocity (km/s)')
+                ms=3, lw=1, capsize=2, label='Zhou et al. (2023) ±3σ', zorder=5)
+    ax.set_xlabel('Radius [kpc]')
+    ax.set_ylabel('Circular Velocity [km/s]')
     ax.legend()
     
                 
@@ -449,26 +468,138 @@ def main(cfg: EvalConfig):
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'global_rotation_curve.pdf'))
     plt.close(fig)
 
-    fig = plt.figure()
-    ax = fig.add_subplot(121)
-    ax.hist(M_200_samples, bins=30, color='blue', alpha=0.7)
-    ax.set_xlabel(r'$M_{200}$ ($M_\odot$)')
-    ax = fig.add_subplot(122)
-    ax.hist(r_200_samples, bins=30, color='green', alpha=0.7)
-    ax.set_xlabel(r'$r_{200}$ (kpc)')
-    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'global_M200_r200.pdf'))
-    plt.close(fig)
+
+    df_halo_props = pd.DataFrame({
+        '$M_{200}$ [$M_\odot$]': M_200_samples,
+        '$R_{200}$ [kpc]': r_200_samples
+    })
+
+    fig_halo = corner.corner(
+        df_halo_props, 
+        color='red', 
+        labels=df_halo_props.columns,
+        smooth = 1.0, 
+        hist_kwargs={'density': True},
+        contour_kwargs={'linewidths': 1.5}
+    )
+
+
+
+    M_200_samples_unconstrained = np.zeros(N_sample)
+    r_200_samples_unconstrained = np.zeros(N_sample)
+    all_vcirc_unconstrained  = np.zeros((N_sample, len(r_array)))   # km/s, stored for reuse
+    for k in params:
+        print('Shape posterior samples for ', k, ': ', ps[k].shape)
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    for i in tqdm(range(N_sample)):
+        p = {k: ps_unconstrained[k][0][i] for k in params}
+        # print(f"Sample {i}: ", p)
+
+        pot = gp.CCompositePotential()
+        pot['halo']       = gp.NFWPotential(
+                                m=p['m_Triaxial_halo'][0], r_s=p['r_Triaxial_halo'][0],
+                                a=1, b=1, c=p['q2_Triaxial_halo'][0], units=galactic)
+        pot['thin_disk']  = gp.MN3ExponentialDiskPotential(
+                                m=4*np.pi*p['rho_thin_disk'][0]*p['hr_thin_disk'][0]**2*p['hz_thin_disk'][0],
+                                h_R=p['hr_thin_disk'][0], h_z=p['hz_thin_disk'][0],
+                                units=galactic, positive_density=True)
+        pot['thick_disk'] = gp.MN3ExponentialDiskPotential(
+                                m=4*np.pi*p['rho_thick_disk'][0]*p['hr_thick_disk'][0]**2*p['hz_thick_disk'][0],
+                                h_R=p['hr_thick_disk'][0], h_z=p['hz_thick_disk'][0],
+                                units=galactic, positive_density=True)
+        pot['bulge']      = gp.PowerLawCutoffPotential(
+                                m=test_sim_config['priors_global']['m_bulge']['prior_parameters'][0],
+                                r_c=test_sim_config['priors_global']['r_bulge']['prior_parameters'][0],
+                                alpha=test_sim_config['priors_global']['alpha_bulge']['prior_parameters'][0], 
+                                units=galactic)
+
+        v_circ = pot.circular_velocity(R=r_array, z=np.zeros_like(r_array))
+        v_circ_kms = v_circ.to(u.km/u.s).value
+        all_vcirc_unconstrained[i] = v_circ_kms
+        M_200_samples_unconstrained[i] = pot['halo'].M200().value
+        r_200_samples_unconstrained[i] = pot['halo'].R200().value
+    
+    df_halo_props_unconstrained = pd.DataFrame({
+        '$M_{200}$ [$M_\odot$]': M_200_samples_unconstrained,
+        '$R_{200}$ [kpc]': r_200_samples_unconstrained
+    })
+
+    import matplotlib.colors as mcolors
+    colors = plt.cm.RdYlBu_r(np.linspace(0, 1, 4))
+    corner.corner(
+        df_halo_props_unconstrained, 
+        fig=fig_halo, 
+        color=colors[0], 
+        labels=df_halo_props_unconstrained.columns,
+        smooth = 1.0, 
+        hist_kwargs={'density': True},
+        contour_kwargs={'linewidths': 1.5}
+    )
+    # Add a custom legend to the figure
+    red_line = mlines.Line2D([], [], color='red', label='Constrained')
+    blue_line = mlines.Line2D([], [], color=colors[0], label='Unconstrained')
+    fig_halo.legend(handles=[red_line, blue_line], loc='upper right', fontsize=15, bbox_to_anchor=(0.95, 0.95))
+    fig_halo.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'global_halo_properties_corner.pdf'))
+    plt.close(fig_halo)
+
+
 
 
     print('shapes of posterior samples: ', {k: v.shape for k, v in ps.items()})
+    
     for k in ps.keys():
         ps[k] = ps[k].reshape(-1,)
+        ps_unconstrained[k] = ps_unconstrained[k].reshape(-1,)
     df = pd.DataFrame(ps) 
+    df_unconstrained = pd.DataFrame(ps_unconstrained)
+    # print('Df columns before renaming: ', df.columns)
+    # df.columns = list(cfg.paramater_global_pretty)
+    # df_unconstrained.columns = list(cfg.paramater_global_pretty)
+    # print('Df columns after renaming: ', df.columns)
+    # c = ChainConsumer()
+    # c.add_chain(Chain(samples=df, name="Constrained"))
+    # c.add_chain(Chain(samples=df_unconstrained, name="Unconstrained"))
+
     print('Df columns before renaming: ', df.columns)
     df.columns = list(cfg.paramater_global_pretty)
+    df_unconstrained.columns = list(cfg.paramater_global_pretty)
     print('Df columns after renaming: ', df.columns)
-    c = ChainConsumer()
-    c.add_chain(Chain(samples=df, name="Global"))
+    
+
+
+    # Plot the Constrained samples
+
+    fig = corner.corner(
+        df, 
+        color='red', 
+        labels=df.columns,
+        hist_kwargs={'density': True},
+        contour_kwargs={'linewidths': 1.5}
+    )
+
+    
+    # Plot the Unconstrained samples on the same figure
+    corner.corner(
+        df_unconstrained, 
+        fig=fig, 
+        color=colors[0], 
+        labels=df_unconstrained.columns,
+        hist_kwargs={'density': True},
+        contour_kwargs={'linewidths': 1.5}
+    )
+
+    # Add a custom legend to the figure
+    red_line = mlines.Line2D([], [], color='red', label='Constrained')
+    blue_line = mlines.Line2D([], [], color=colors[0], label='Unconstrained')
+    fig.legend(handles=[red_line, blue_line], loc='upper right', fontsize=15, bbox_to_anchor=(0.95, 0.95))
+
+
+
+
+
+
+
     # fig = c.plotter.plot()
     # fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'global_cornerplot.pdf'))
     # print(f'Saved global corner plot')
@@ -510,8 +641,8 @@ def main(cfg: EvalConfig):
     #     df_stream = pd.DataFrame(ps_stream) 
     #     df_stream.columns = list(cfg.paramater_global_pretty)
     #     c.add_chain(Chain(samples=df_stream, name=f"{stream_name}"))
-    c.set_override(ChainConfig(shade=False))
-    fig = c.plotter.plot()
+    # c.set_override(ChainConfig(shade=False))
+    # fig = c.plotter.plot()
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'global_cornerplot.pdf'))
     print(f'Saved global corner plot with all streams in pathc: {os.path.join(cfg.base_dir, cfg.results_dir, "global_cornerplot.pdf")}')
 
