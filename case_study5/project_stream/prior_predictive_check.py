@@ -910,16 +910,16 @@ def prior_parameters_corner(
 @hydra.main(version_base=None, config_path="config", config_name="eval_config",)
 def main(cfg: EvalConfig):
     base_dir               = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
-    training_data_data_dir = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_gala/"
+    training_data_data_dir = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_agama/"
     observed_data_path     = os.path.join(base_dir, "gaia_observed_streams_6Dwitherrors_cutNGC3201.npz")
-    path_to_save           = os.path.join(base_dir, "plots/prior_predictive_check/gala_final/")
+    path_to_save           = os.path.join(base_dir, "plots/prior_predictive_check/agama/")
 
     # ── Training set ─────────────────────────────────────────────────────────
-    training_set_loaded = dict(np.load(os.path.join(base_dir, training_data_data_dir, "training_data_300000.npz")))
+    training_set_loaded = dict(np.load(os.path.join(base_dir, training_data_data_dir, "training_data_local_300000.npz")))
     training_set = {}
     # for k in ["sim_data_projected", "j"]:
     for k in training_set_loaded.keys():
-        training_set[k] = training_set_loaded[k][0:60_000]   # ← keep as dict, never overwrite
+        training_set[k] = training_set_loaded[k][0:300_000]   # ← keep as dict, never overwrite
         print(f"Training set {k} shape: {training_set[k].shape}")
     # ── Observations ─────────────────────────────────────────────────────────
     observations_loaded = np.load(observed_data_path, allow_pickle=True)
