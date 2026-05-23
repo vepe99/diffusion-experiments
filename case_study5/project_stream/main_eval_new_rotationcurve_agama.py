@@ -125,9 +125,11 @@ def main(cfg: EvalConfig):
     inference_conditions = str(cfg.inference_conditions[0])
     test_data_path = os.path.join(cfg.base_dir, cfg.data_dir, f'simulation_multistream_{cfg.multistream_n_simulation}.npz')
     print('Loading test data from ', test_data_path)
+    augmentations_class = AugmentationsClass(cfg)
+
     test_data = dict(np.load(test_data_path, allow_pickle=True))
     test_data_rotation_curve = dict(np.load(f'./data/plots/agama_rotcurv_multistream/{cfg.multistream_n_simulation}/rotation_curves.npz'))
-    mask_r_kpc = (augmentations_class.obs_R >5.5)&(augmentations_class.obs_R<18.0)
+    mask_r_kpc = (augmentations_class.obs_R >5.5)
     test_data['vcirc_kms'] = test_data_rotation_curve['vcirc_kms'][:, mask_r_kpc, None] #extra dimension (n_observation, len_r_kpc, 1)
     for k in test_data.keys():
         print(f"{k}: {test_data[k].shape}")
@@ -138,7 +140,8 @@ def main(cfg: EvalConfig):
     # Filter every key in the dict along the simulation axis
     test_data = {k: v[valid_mask] for k, v in test_data.items()}
     n_simulation = len(valid_mask)
-    
+    print(f"After removing NaN simulations, {n_simulation} simulations remain.")
+
     keys_to_drop = set(test_data.keys()) - set(param_names_global) - {sim_data} - set(inference_conditions) - set(['vcirc_kms', 'r_kpc'])
     keys_to_drop = list(keys_to_drop) 
     # with open(os.path.join(cfg.base_dir, cfg.model_dir, '.hydra', 'config.yaml'), "r") as f:
@@ -229,7 +232,6 @@ def main(cfg: EvalConfig):
     # test_data = {k: test_data[k][val_index] for k in cfg.parameters_global + [cfg.sim_data, "j"] }
     test_data = {k: test_data[k] for k in cfg.parameters_global + [cfg.sim_data, "j"] + ['vcirc_kms']}
     # Augmentation
-    augmentations_class = AugmentationsClass(cfg)
     augmentations = []
     # --- Coordinate transforms (must be first, before any masking) ---
     if "remove_los_velocity" in cfg.augmentations:
@@ -447,14 +449,11 @@ def main(cfg: EvalConfig):
         # ps['diry_Triaxial_rotated_halo'][mask_posterior] *= -1
     
     # ...existing code...
-    ps['M_t'] = 4 * np.pi * ps['rho_thin_disk'] * ps['hr_thin_disk']**2 * ps['hz_thin_disk']
-    test_data['M_t'] = 4 * np.pi * test_data['rho_thin_disk'] * test_data['hr_thin_disk']**2 * test_data['hz_thin_disk']
+    ps['$M_Disk$'] = 4 * np.pi * ps['Sigma_Disk'] * ps['r_Disk']**2 * ps['z_Disk']
+    test_data['$M_Disk$'] = 4 * np.pi * test_data['Sigma_Disk'] * test_data['r_Disk']**2 * test_data['z_Disk']
 
-    ps['M_k'] = 4 * np.pi * ps['rho_thick_disk'] * ps['hr_thick_disk']**2 * ps['hz_thick_disk']
-    test_data['M_k'] = 4 * np.pi * test_data['rho_thick_disk'] * test_data['hr_thick_disk']**2 * test_data['hz_thick_disk']
-    cfg.paramater_global_pretty = cfg.paramater_global_pretty + ['$M_t$', '$M_k$']
-# ...existing code...
-    param_names_global = param_names_global + ['$M_t$', '$M_k$']
+    cfg.paramater_global_pretty = cfg.paramater_global_pretty + ['$M_D$',]
+    paramater_global_pretty = cfg.paramater_global_pretty
     np.savez(os.path.join(cfg.base_dir, cfg.results_dir, 'posterior.npz'), **ps)
 
     for k in ps.keys():

@@ -34,6 +34,8 @@ import jax
 import jax.numpy as jnp
 
 import agama
+agama.setUnits(length=1, velocity=1, mass=1)
+timeUnitGyr = agama.getUnits()['time'] / 1e3  # time unit is 1 kpc / (1 km/s)
 
 def clear_gpu_memory():
     """Helper function to aggressively clear GPU memory."""
@@ -51,11 +53,11 @@ def objective(trial, cfg):
     #We start to sample the hyperaramas
     #f1 irst SetTransformer
     summary_dim_SetTransformer = trial.suggest_int("SetTransformer_summary_dim", 32, 64)
-    num_attention_blocks_SetTransformer = trial.suggest_int("SetTransformer_num_attention_blocks", 1, 4)
-    num_heads_SetTransformer = trial.suggest_int("SetTransformer_num_heads", 1, 8)
+    num_attention_blocks_SetTransformer = trial.suggest_int("SetTransformer_num_attention_blocks", 2, 6)
+    num_heads_SetTransformer = trial.suggest_int("SetTransformer_num_heads", 3, 8)
     embed_dim_multiplier_SetTransformer = trial.suggest_int("SetTransformer_embed_dim_multiplier", 4, 16)
     embed_dims_SetTransformer = embed_dim_multiplier_SetTransformer * num_heads_SetTransformer  # always divisible, range ~16-128
-    num_seeds = trial.suggest_int("SetTransformer_num_seeds", 2, 6)
+    num_seeds = trial.suggest_int("SetTransformer_num_seeds", 4, 8)
     #go to tuples
     embed_dims_SetTransformer = (embed_dims_SetTransformer,) * num_attention_blocks_SetTransformer
     num_heads_SetTransformer = (num_heads_SetTransformer,) * num_attention_blocks_SetTransformer
@@ -70,8 +72,8 @@ def objective(trial, cfg):
 
     #2 second the TimeSeriesTransformer
     summary_dim_TimeSeriesTransformer = trial.suggest_int("TimeSeriesTransformer_summary_dim", 32, 64)
-    num_attention_blocks_TimeSeriesTransformer = trial.suggest_int("TimeSeriesTransformer_num_attention_blocks", 1, 4)
-    num_heads_TimeSeriesTransformer = trial.suggest_int("TimeSeriesTransformer_num_heads", 1, 8)
+    num_attention_blocks_TimeSeriesTransformer = trial.suggest_int("TimeSeriesTransformer_num_attention_blocks", 2, 6)
+    num_heads_TimeSeriesTransformer = trial.suggest_int("TimeSeriesTransformer_num_heads", 3, 8)
     embed_dim_multiplier_TimeSeriesTransformer = trial.suggest_int("TimeSeriesTransformer_embed_dim_multiplier", 4, 16)
     embed_dims_TimeSeriesTransformer = embed_dim_multiplier_TimeSeriesTransformer * num_heads_TimeSeriesTransformer  # always divisible
     #go to tuples
@@ -545,9 +547,9 @@ def objective(trial, cfg):
         ###############
         
         from astropy import units as u
-        obs_R   = augmentations_class.obs_R[mask_r_kpc]
-        obs_Vc  = augmentations_class.obs_Vc[mask_r_kpc]
-        obs_sVc = augmentations_class.obs_sVc[mask_r_kpc]
+        obs_R   = np.array(augmentations_class.obs_R[mask_r_kpc])
+        obs_Vc  = np.array(augmentations_class.obs_Vc[mask_r_kpc])
+        obs_sVc = np.array(augmentations_class.obs_sVc[mask_r_kpc])
         r_array = obs_R * u.kpc
         N_sample = 100
         N_obs = len(obs_R)
@@ -711,9 +713,9 @@ if __name__ == "__main__":
     # N_simulations = 300_000
     # N_simulations_to_use = 290_000
     # N_epochs = 1500
-    N_simulations = 300_000
-    N_simulations_to_use = 290_000
-    N_epochs = 2000
+    N_simulations = 1_000_000
+    N_simulations_to_use = 960_000
+    N_epochs = 1000
     augmentations_class = AugmentationsClass(cfg)
 
 
@@ -721,7 +723,7 @@ if __name__ == "__main__":
     training_data = dict(np.load(train_data_path, allow_pickle=True))
     training_data = {k: training_data[k][:N_simulations_to_use] for k in training_data.keys()}
     training_data_rotation_curve = dict(np.load('./data/plots/agama_rotcurv/rotation_curves.npz'))
-    mask_r_kpc = (augmentations_class.obs_R >5.5)&(augmentations_class.obs_R<18.0)
+    mask_r_kpc = (augmentations_class.obs_R >5.5)
 
     training_data['vcirc_kms'] = training_data_rotation_curve['vcirc_kms'][:N_simulations_to_use, mask_r_kpc, None] #extra dimension (n_observation, len_r_kpc, 1)
 
@@ -800,8 +802,23 @@ if __name__ == "__main__":
 
 
     test_data = dict(np.load(train_data_path, allow_pickle=True))
-    test_data = {k: test_data[k][-10_000:] for k in test_data.keys()}
-    test_data['vcirc_kms'] = training_data_rotation_curve['vcirc_kms'][-10_000:, mask_r_kpc, None] #extra dimension (n_observation, len_r_kpc, 1)
+    test_data = {k: test_data[k][-40_000:] for k in test_data.keys()}
+    test_data['vcirc_kms'] = training_data_rotation_curve['vcirc_kms'][-40_000:, mask_r_kpc, None] #extra dimension (n_observation, len_r_kpc, 1)
+    #nan cleaning
+    sim_data_array = test_data['sim_data_projected']  # shape: (N, ...)
+    # Build a boolean mask: True where the simulation is NaN-free
+    valid_mask_sim_data = ~np.any(np.isnan(sim_data_array.reshape(sim_data_array.shape[0], -1)), axis=1)
+    valid_mask_vcirc = ~np.any(np.isnan(test_data['vcirc_kms'].reshape(test_data['vcirc_kms'].shape[0], -1)), axis=1)
+    valid_mask = valid_mask_sim_data & valid_mask_vcirc
+
+    n_removed = (~valid_mask).sum()
+    print(f"Removing {n_removed}/{len(valid_mask)} simulations containing NaN values.")
+
+    # Apply the mask to all arrays
+    # Apply the mask to all arrays
+    clean_data = {key: test_data[key][valid_mask] for key in list(cfg.parameters_global) + list(cfg.inference_conditions) + ["vcirc_kms"]}
+    clean_data['sim_data_projected'] = sim_data_array[valid_mask]
+    test_data = clean_data
     
     del training_data_rotation_curve
 
@@ -865,6 +882,7 @@ if __name__ == "__main__":
     test_data_gaia['vcirc_kms'] = augmentations_class.obs_Vc[None, mask_r_kpc, None]
     print('Test data vcirc_kms shape after adding to test data: ', test_data_gaia['vcirc_kms'].shape)
 
+    augmentations_class.key = jax.random.PRNGKey(0)
     augmentations_gaia = []
     augmentations_gaia.append(augmentations_class.sample_obs_error)
     augmentations_gaia.append(augmentations_class.concatentate_sigma_error_to_sim_data)

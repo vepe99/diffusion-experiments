@@ -32,6 +32,59 @@ from utils.utils_train_jax_new_rotationcurve_fixedvlosmask import (Augmentations
                                                      apply_standardization,
                                                      save_stats)#we will need to use the augmentations on the test_set
 
+
+from numpy.polynomial.legendre import leggauss
+
+def M_enc_vec(r, rho0, a1, gamma, n_gl=100):
+    r, rho0, a1, gamma = [np.asarray(v, dtype=np.float64) for v in (r, rho0, a1, gamma)]
+    t_nodes, t_weights = leggauss(n_gl)
+
+    log_lo = np.log(1e-8)
+    # Clamp r/a1 to strictly positive to avoid log(0) or log(negative)
+    ratio = np.clip(r / np.where(a1 > 0, a1, np.nan), 1e-30, None)
+    log_hi = np.log(ratio)[..., np.newaxis]
+
+    log_x = 0.5 * (log_hi - log_lo) * t_nodes + 0.5 * (log_hi + log_lo)
+    x     = np.exp(log_x)
+    jac   = 0.5 * (log_hi - log_lo) * x
+
+    rho0_b  = np.where(rho0 > 0, rho0,  np.nan)[..., np.newaxis]
+    a1_b    = np.where(a1  > 0, a1,    np.nan)[..., np.newaxis]
+    gamma_b = np.clip(gamma, 1e-6, 2.99)[...,         np.newaxis]
+
+    s         = x * a1_b
+    integrand = 4*np.pi * s**2 * rho0_b * x**(-gamma_b) * (1 + x)**(gamma_b - 3)
+
+    return np.sum(t_weights * integrand * jac, axis=-1)
+
+
+def find_r200_vec(rho0, a1, gamma, rho_crit, r_min=1e-3, r_max=1e4,
+                  n_bisect=50, n_gl=100):
+    """
+    Fully vectorized r200 via bisection.
+    rho0, a1, gamma: arrays of any broadcastable shape (...,).
+    Returns r200 of shape (...,).
+    """
+    rho0, a1, gamma = np.broadcast_arrays(
+        *[np.asarray(v, dtype=np.float64) for v in (rho0, a1, gamma)]
+    )
+    lo = np.full(rho0.shape, r_min)
+    hi = np.full(rho0.shape, r_max)
+
+    def f(r):
+        return M_enc_vec(r, rho0, a1, gamma, n_gl) - (800*np.pi/3) * rho_crit * r**3
+
+    for _ in range(n_bisect):          # 50 steps → sub-nanoparsec precision
+        mid   = 0.5 * (lo + hi)
+        f_mid = f(mid)
+        lo    = np.where(f_mid < 0, mid, lo)
+        hi    = np.where(f_mid >= 0, mid, hi)
+
+    return 0.5 * (lo + hi)
+
+
+rho_crit = 1.40e2   # Msun/kpc^3 at z=0
+
 cs = ConfigStore.instance()
 cs.store(name="eval_config", node=EvalConfig)
 
@@ -72,7 +125,7 @@ def main(cfg: EvalConfig):
 
     test_data = dict(np.load(test_data_path, allow_pickle=True))
     test_data_rotation_curve = dict(np.load(f'./data/plots/agama_rotcurv_multistream/{cfg.multistream_n_simulation}/rotation_curves.npz'))
-    mask_r_kpc = (augmentations_class.obs_R >5.5)&(augmentations_class.obs_R<18.0)
+    mask_r_kpc = (augmentations_class.obs_R >5.5)
     test_data['vcirc_kms'] = test_data_rotation_curve['vcirc_kms'][:, mask_r_kpc, None] #extra dimension (n_observation, len_r_kpc, 1)
     for k in test_data.keys():
         print(f"{k}: {test_data[k].shape}")
@@ -279,19 +332,44 @@ def main(cfg: EvalConfig):
 
 
     # ...existing code...
-    ps['$M_t$'] = 4 * np.pi * ps['rho_thin_disk'] * ps['hr_thin_disk']**2 * ps['hz_thin_disk']
-    test_data['$M_t$'] = 4 * np.pi * test_data['rho_thin_disk'] * test_data['hr_thin_disk']**2 * test_data['hz_thin_disk']
+    ps['$M_Disk$'] = 4 * np.pi * ps['Sigma_Disk'] * ps['r_Disk']**2 * ps['z_Disk']
+    test_data['$M_Disk$'] = 4 * np.pi * test_data['Sigma_Disk'] * test_data['r_Disk']**2 * test_data['z_Disk']
 
-    ps['$M_k$'] = 4 * np.pi * ps['rho_thick_disk'] * ps['hr_thick_disk']**2 * ps['hz_thick_disk']
-    test_data['$M_k$'] = 4 * np.pi * test_data['rho_thick_disk'] * test_data['hr_thick_disk']**2 * test_data['hz_thick_disk']
-    cfg.paramater_global_pretty = cfg.paramater_global_pretty + ['$M_t$', '$M_k$']
-# ...existing code...
-    param_names_global = param_names_global + ['$M_t$', '$M_k$']
+    cfg.paramater_global_pretty = cfg.paramater_global_pretty + ['$M_D$',]
+    paramater_global_pretty = cfg.paramater_global_pretty
     np.savez(os.path.join(cfg.base_dir, cfg.results_dir, 'posterior.npz'), **ps)
 
-    for k in ps.keys():
-        print(f"{k}: {ps[k].shape}")
-    print(cfg.paramater_global_pretty )
+
+    # --- r200 from posterior samples ---
+    # ps[param] has shape (n_observations, n_samples): flatten, compute, reshape back
+    # Adjust parameter names below to match your cfg.parameters_global entries
+    # _rho0_ps  = ps['rho_TwoPowerTriaxial_halo'].ravel()        # <-- adjust key name
+    # _a1_ps    = ps['a_TwoPowerTriaxial_halo'].ravel()          # <-- adjust key name
+    # _gamma_ps = ps['gamma_TwoPowerTriaxial_halo'].ravel()       # <-- adjust key name
+
+    # print("Computing r200 and M200 on posterior samples (vectorized)...")
+    # _r200_ps = find_r200_vec(_rho0_ps, _a1_ps, _gamma_ps, rho_crit=rho_crit)
+    # _m200_ps = (800*np.pi/3) * rho_crit * _r200_ps**3
+
+    # ps['$r_{200}$'] = _r200_ps.reshape(ps['rho_TwoPowerTriaxial_halo'].shape)
+    # ps['$M_{200}$'] = _m200_ps.reshape(ps['rho_TwoPowerTriaxial_halo'].shape)
+
+
+    # # --- r200 from true (test) parameters ---
+    # # test_data[param] has shape (n_observations, 1)
+    # _rho0_td  = test_data['rho_TwoPowerTriaxial_halo'].ravel()   # <-- adjust key name
+    # _a1_td    = test_data['a_TwoPowerTriaxial_halo'].ravel()     # <-- adjust key name
+    # _gamma_td = test_data['gamma_TwoPowerTriaxial_halo'].ravel()  # <-- adjust key name
+
+    # print("Computing r200 and M200 on test data (vectorized)...")
+    # _r200_td = find_r200_vec(_rho0_td, _a1_td, _gamma_td, rho_crit=rho_crit)
+    # _m200_td = (800*np.pi/3) * rho_crit * _r200_td**3
+
+    # test_data['$r_{200}$'] = _r200_td.reshape(test_data['rho_TwoPowerTriaxial_halo'].shape)
+    # test_data['$M_{200}$'] = _m200_td.reshape(test_data['rho_TwoPowerTriaxial_halo'].shape)
+
+    # # Register for plotting
+    # cfg.paramater_global_pretty = cfg.paramater_global_pretty + ['$r_{200}$', '$M_{200}$']
     
 
     ###############

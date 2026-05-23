@@ -26,13 +26,13 @@ import logging
 logging.getLogger('bayesflow').setLevel(logging.DEBUG)
 
 from config.EvalConfig import EvalConfig
-from utils.utils_train_jax_new_rotationcurve import AugmentationsClass #we will need to use the augmentations on the test_set
+from utils.utils_train_jax_new_rotationcurve_fixedvlosmask import AugmentationsClass #we will need to use the augmentations on the test_set
 from utils.custom_summary_network import SetTransformer, FusionNetwork
 
 cs = ConfigStore.instance()
 cs.store(name="eval_config", node=EvalConfig)
 
-@hydra.main(version_base=None, config_path="config", config_name="eval_config_gaia_new_rotationcurve",)
+@hydra.main(version_base=None, config_path="config", config_name="eval_config_gaia_new_rotationcurve_agama",)
 def main(cfg: EvalConfig):
 
     print(cfg)
@@ -97,7 +97,8 @@ def main(cfg: EvalConfig):
         print(f"{k} shape after truncation: {test_data[k].shape}")
 
     augmentations_class = AugmentationsClass(cfg)
-    test_data['vcirc_kms'] = augmentations_class.obs_Vc[None, :, None]
+    mask_r_kpc = (augmentations_class.obs_R >5.5)
+    test_data['vcirc_kms'] = augmentations_class.obs_Vc[None,mask_r_kpc, None]
     print('Test data vcirc_kms shape after adding to test data: ', test_data['vcirc_kms'].shape)
 
 
@@ -264,10 +265,12 @@ def main(cfg: EvalConfig):
         score = {}
         
         for k in cfg.parameters_global:
+            print(f"Computing prior score for {k} with type {test_sim_config['priors_global'][k]['type']} at time {time}")
             # print(f"Computing prior score for {k} with type {test_sim_config['priors_global'][k]['type']}")
             if test_sim_config['priors_global'][k]['type'] == 'uniform':
                 score[k] = (1-time)*jnp.zeros_like(x[k])
             elif test_sim_config['priors_global'][k]['type'] == 'normal':
+                print(f"Parameters for normal prior of {k}: mean={test_sim_config['priors_global'][k]['prior_parameters'][0]}, std={test_sim_config['priors_global'][k]['prior_parameters'][1]}")
                 mean = test_sim_config['priors_global'][k]['prior_parameters'][0]
                 std = test_sim_config['priors_global'][k]['prior_parameters'][1]
                 score[k] = -(1-time)*(x[k] - mean) / std**2 
@@ -330,12 +333,6 @@ def main(cfg: EvalConfig):
                         )
     os.makedirs(name= os.path.join(cfg.base_dir, cfg.results_dir), exist_ok=True)
     ps = global_posterior.copy()
-    ps['M_t'] = 4 * np.pi * ps['rho_thin_disk'] * ps['hr_thin_disk']**2 * ps['hz_thin_disk']
-
-    ps['M_k'] = 4 * np.pi * ps['rho_thick_disk'] * ps['hr_thick_disk']**2 * ps['hz_thick_disk']
-    cfg.paramater_global_pretty = cfg.paramater_global_pretty + ['$M_t$', '$M_k$']
-# ...existing code...
-    param_names_global = param_names_global + ['$M_t$', '$M_k$']
     # q_min = 0.5
     # q_max = 1.5
     # r_posterior = np.sqrt(ps['dirx_Triaxial_rotated_halo']**2 + ps['diry_Triaxial_rotated_halo']**2 + ps['dirz_Triaxial_rotated_halo']**2)
@@ -347,61 +344,76 @@ def main(cfg: EvalConfig):
     ###############
     # PLOTS GLOBAL#
     ###############
-    import gala.potential as gp
-    from gala.units import galactic
     from astropy import units as u
-    obs_R   = np.array([5.24,5.74,6.25,6.77,7.23,7.83,8.21,8.78,9.26,9.75,
-                    10.25,10.75,11.25,11.75,12.24,12.74,13.25,13.74,14.23,14.74,
-                    15.23,15.74,16.24,16.74,17.23,17.74,18.35,18.90,19.50,20.41,
-                    21.28,22.39,23.16,24.00])          # kpc
-    obs_Vc  = np.array([225.10,233.53,234.30,233.17,236.19,236.00,233.19,233.15,232.15,231.24,
-                    230.34,230.54,229.11,227.48,226.69,225.56,224.90,223.57,221.10,220.19,
-                    219.59,217.36,216.61,217.28,216.25,213.81,217.53,212.10,210.46,206.69,
-                    207.71,203.72,205.20,200.64]) 
-    obs_sVc = np.array([0.69,0.68,0.62,0.60,0.45,0.29,0.26,0.22,0.17,0.16,
-                    0.17,0.18,0.19,0.20,0.25,0.27,0.27,0.31,0.40,0.43,
-                    0.50,0.68,0.74,0.87,1.02,1.15,1.45,1.58,1.32,1.71,
-                    1.69,2.01,2.50,4.94])              # km/s  (1σ)
-    r_array = np.concatenate([np.linspace(0.1, 5.22, 30), obs_R]) * u.kpc
-    N_sample = 1000
+    obs_R   = augmentations_class.obs_R[mask_r_kpc]
+    obs_Vc  = augmentations_class.obs_Vc[mask_r_kpc]
+    obs_sVc = augmentations_class.obs_sVc[mask_r_kpc]
+    r_array = obs_R * u.kpc
+    N_sample = 100
     N_obs = len(obs_R)
-    params = ['m_Triaxial_halo','r_Triaxial_halo','q2_Triaxial_halo',
-            'rho_thin_disk','hr_thin_disk','hz_thin_disk',
-            'rho_thick_disk','hr_thick_disk','hz_thick_disk',]
-    all_vcirc  = np.zeros((N_sample, len(r_array)))   # km/s, stored for reuse
-    M_200_samples = np.zeros(N_sample)
-    r_200_samples = np.zeros(N_sample)
+    params = ['rho_TwoPowerTriaxial_halo', 'gamma_TwoPowerTriaxial_halo', 
+                'a_TwoPowerTriaxial_halo', 'q_TwoPowerTriaxial_halo', 
+                'r_Disk', 'z_Disk', 'Sigma_Disk']
+    all_vcirc  = np.zeros((N_sample, N_obs))   # km/s, stored for reuse
     for k in params:
         print('Shape posterior samples for ', k, ': ', ps[k].shape)
-    
     fig, ax = plt.subplots(figsize=(10, 6))
-    for i in tqdm(range(N_sample)):
-        p = {k: ps[k][0][i] for k in params}
-        # print(f"Sample {i}: ", p)
 
-        pot = gp.CCompositePotential()
-        pot['halo']       = gp.NFWPotential(
-                                m=p['m_Triaxial_halo'][0], r_s=p['r_Triaxial_halo'][0],
-                                a=1, b=1, c=p['q2_Triaxial_halo'][0], units=galactic)
-        pot['thin_disk']  = gp.MN3ExponentialDiskPotential(
-                                m=4*np.pi*p['rho_thin_disk'][0]*p['hr_thin_disk'][0]**2*p['hz_thin_disk'][0],
-                                h_R=p['hr_thin_disk'][0], h_z=p['hz_thin_disk'][0],
-                                units=galactic, positive_density=True)
-        pot['thick_disk'] = gp.MN3ExponentialDiskPotential(
-                                m=4*np.pi*p['rho_thick_disk'][0]*p['hr_thick_disk'][0]**2*p['hz_thick_disk'][0],
-                                h_R=p['hr_thick_disk'][0], h_z=p['hz_thick_disk'][0],
-                                units=galactic, positive_density=True)
-        pot['bulge']      = gp.PowerLawCutoffPotential(
-                                m=test_sim_config['priors_global']['m_bulge']['prior_parameters'][0],
-                                r_c=test_sim_config['priors_global']['r_bulge']['prior_parameters'][0],
-                                alpha=test_sim_config['priors_global']['alpha_bulge']['prior_parameters'][0], 
-                                units=galactic)
+    # Convert JAX array to standard NumPy array for Agama
+    obs_R_np = np.array(obs_R)
+    points = np.column_stack((obs_R_np, obs_R_np*0, obs_R_np*0))
 
-        v_circ = pot.circular_velocity(R=r_array, z=np.zeros_like(r_array))
-        v_circ_kms = v_circ.to(u.km/u.s).value
-        all_vcirc[i] = v_circ_kms
-        M_200_samples[i] = pot['halo'].M200().value
-        r_200_samples[i] = pot['halo'].R200().value
+    # for i in tqdm(range(N_sample)):
+    #     # Extract purely as standard Python floats!
+    #     p = {k: float(ps[k][0, i, 0]) for k in params}
+    #     print(f"Sample {i}: ", p)
+
+    #     pot_params = [ dict(type='Spheroid', 
+    #                         scaleRadius=75/1e3, 
+    #                         densityNorm=9.6e10,
+    #                         gamma=0, 
+    #                         alpha=1, 
+    #                         beta=1.8, 
+    #                         cutoffStrength=2,
+    #                         outerCutoffRadius=2.1,
+    #                         axisRatioY=1.0,
+    #                         axisRatioZ=0.5), #bulge
+    #                     dict(type='Spheroid', 
+    #                         scaleRadius=p['a_TwoPowerTriaxial_halo'], 
+    #                         densityNorm=p['rho_TwoPowerTriaxial_halo'],
+    #                         gamma=p['gamma_TwoPowerTriaxial_halo'], 
+    #                         alpha=1, 
+    #                         beta=3, #fixed 
+    #                         cutoffStrength=2, #fixed
+    #                         outerCutoffRadius=np.inf, #fixed
+    #                         axisRatioY=1.0, #fixed
+    #                         axisRatioZ=p['q_TwoPowerTriaxial_halo']), #halo
+    #                     dict(type='Disk', 
+    #                         scaleRadius=p['r_Disk'], 
+    #                         scaleHeight=p['z_Disk'], 
+    #                         surfaceDensity=p['Sigma_Disk'],
+    #                         sersicIndex=1, #fixed
+    #                         innerCutoffRadius = 0, #fixed
+    #                         ) #Disk 
+    #                 ]
+    #     pot = agama.Potential(*pot_params) 
+        
+    #     v_circ_kms = np.sqrt(-obs_R_np*pot.force(points)[:,0])
+    #     all_vcirc[i] = v_circ_kms
+
+    # # ── Rotation-curve plot (MOVED OUTSIDE THE TQDM LOOP) ─────────────────────────
+    # for i in range(N_sample):
+    #     ax.plot(obs_R_np, all_vcirc[i], color='grey', alpha=0.5, lw=0.4)
+    
+    # # Calculate and plot the posterior mean and standard deviation
+    # mean_vcirc = np.mean(all_vcirc, axis=0)
+                
+    # ax.errorbar(obs_R, obs_Vc, yerr=3*obs_sVc, fmt='o', color='red',
+    #             ms=3, lw=1, capsize=2, label='Observed ±3σ', zorder=5)
+    # ax.set_xlabel('Radius (kpc)')
+    # ax.set_ylabel('Circular Velocity (km/s)')
+    # fig.savefig(os.path.join(cfg.results_dir, f'global_rotation_curve.pdf'))
+    # plt.close(fig)
         # ── Rotation-curve plot ───────────────────────────────────────────────────────
         
 
@@ -409,10 +421,10 @@ def main(cfg: EvalConfig):
         #     ax.plot(r_array, all_vcirc[i], color='grey', alpha=0.5, lw=0.4)
     
     # Calculate and plot the posterior mean and standard deviation
-    mean_vcirc = np.mean(all_vcirc, axis=0)
-    std_vcirc = np.std(all_vcirc, axis=0)
+    # mean_vcirc = np.mean(all_vcirc, axis=0)
+    # std_vcirc = np.std(all_vcirc, axis=0)
     
-    ax.plot(r_array.value, mean_vcirc, color='blue', lw=2, label='Posterior Mean')
+    # ax.plot(r_array.value, mean_vcirc, color='blue', lw=2, label='Posterior Mean')
     # ax.fill_between(
     #     r_array.value, 
     #     mean_vcirc - 3* std_vcirc, 
@@ -424,44 +436,36 @@ def main(cfg: EvalConfig):
                 
     # ax.errorbar(obs_R, obs_Vc, yerr=3*obs_sVc, fmt='o', color='red',
     #             ms=3, lw=1, capsize=2, label='Zhou et al. (2023) ±3σ', zorder=5)
-    ax.set_xlabel('Radius [kpc]')
-    ax.set_ylabel('Circular Velocity [km/s]')
+    # ax.set_xlabel('Radius [kpc]')
+    # ax.set_ylabel('Circular Velocity [km/s]')
     # ax.legend()
     
                 
-    # ax.errorbar(obs_R, obs_Vc, yerr=obs_sVc, fmt='o', color='red',
-    #             ms=3, lw=1, capsize=2, label='Observed ±3σ', zorder=5)
-    # ax.set_xlabel('Radius (kpc)')
-    # ax.set_ylabel('Circular Velocity (km/s)')
-    fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'global_rotation_curve.pdf'))
-    plt.close(fig)
-
-    # fig = plt.figure()
-    # ax = fig.add_subplot(121)
-    # ax.hist(M_200_samples, bins=30, color='blue', alpha=0.7)
-    # ax.set_xlabel(r'$M_{200}$ ($M_\odot$)')
-    # ax = fig.add_subplot(122)
-    # ax.hist(r_200_samples, bins=30, color='green', alpha=0.7)
-    # ax.set_xlabel(r'$r_{200}$ (kpc)')
-    # fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'global_M200_r200.pdf'))
+    # # ax.errorbar(obs_R, obs_Vc, yerr=obs_sVc, fmt='o', color='red',
+    # #             ms=3, lw=1, capsize=2, label='Observed ±3σ', zorder=5)
+    # # ax.set_xlabel('Radius (kpc)')
+    # # ax.set_ylabel('Circular Velocity (km/s)')
+    # fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'global_rotation_curve.pdf'))
     # plt.close(fig)
-    df_halo_props = pd.DataFrame({
-        '$M_{200}$ [$M_\odot$]': M_200_samples,
-        '$R_{200}$ [kpc]': r_200_samples
-    })
+
+
+    # df_halo_props = pd.DataFrame({
+    #     '$M_{200}$ [$M_\odot$]': M_200_samples,
+    #     '$R_{200}$ [kpc]': r_200_samples
+    # })
     
-    import corner
-    fig_halo = corner.corner(
-        df_halo_props, 
-        color='teal', 
-        labels=df_halo_props.columns,
-        smooth = 1.0, 
-        hist_kwargs={'density': True},
-        contour_kwargs={'linewidths': 1.5}
-    )
+    # import corner
+    # fig_halo = corner.corner(
+    #     df_halo_props, 
+    #     color='teal', 
+    #     labels=df_halo_props.columns,
+    #     smooth = 1.0, 
+    #     hist_kwargs={'density': True},
+    #     contour_kwargs={'linewidths': 1.5}
+    # )
     
-    fig_halo.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_M200_r200.pdf'))
-    plt.close(fig_halo)
+    # fig_halo.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_M200_r200.pdf'))
+    # plt.close(fig_halo)
 
 
     print('shapes of posterior samples: ', {k: v.shape for k, v in ps.items()})
@@ -493,7 +497,7 @@ def main(cfg: EvalConfig):
         test_data_stream = {"input_a": test_data[cfg.sim_data][:, cfg.target_streams[stream_name], :, :], 
                             "j": test_data["j"][:, cfg.target_streams[stream_name], :],
                             "input_b": test_data["vcirc_kms"][:, cfg.target_streams[stream_name], :, :],
-                            # "attention_mask": test_data["attention_mask"][:, cfg.target_streams[stream_name], :],
+                            "attention_mask": test_data["attention_mask"][:, cfg.target_streams[stream_name], :],
                             }
         attention_mask_stream = test_data['attention_mask'][cfg.target_streams[stream_name], :, :].reshape(1, 1, -1)
         test_data_stream["summary_attention_mask"] = attention_mask_stream
@@ -508,9 +512,6 @@ def main(cfg: EvalConfig):
                             kwargs={'summary_attention_mask': attention_mask_stream}
                             )
         ps_stream = posterior_stream.copy()
-        ps_stream['$M_t$'] = 4 * np.pi * ps_stream['rho_thin_disk'] * ps_stream['hr_thin_disk']**2 * ps_stream['hz_thin_disk']
-
-        ps_stream['$M_k$'] = 4 * np.pi * ps_stream['rho_thick_disk'] * ps_stream['hr_thick_disk']**2 * ps_stream['hz_thick_disk']
     # ...existing code...
 
         np.savez(os.path.join(cfg.base_dir, cfg.results_dir, f'{stream_name}_posterior.npz'), **ps_stream)

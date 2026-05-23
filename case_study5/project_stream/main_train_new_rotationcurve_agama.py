@@ -62,21 +62,20 @@ def main(cfg: TrainConfig):
     training_data_rotation_curve = dict(np.load('./data/plots/agama_rotcurv/rotation_curves.npz'))
     augmentations_class = AugmentationsClass(cfg)
 
-    mask_r_kpc = (augmentations_class.obs_R >5.5)&(augmentations_class.obs_R<18.0)
+    mask_r_kpc = (augmentations_class.obs_R >5.5)
     training_data['vcirc_kms'] = training_data_rotation_curve['vcirc_kms'][:, mask_r_kpc, None] #extra dimension (n_observation, len_r_kpc, 1)
     fig = plt.figure(figsize=(10, 6))
     ax = fig.add_subplot(111)
     # for i in range(training_data['vcirc_kms'].shape[0]):
         # ax.plot(training_data_rotation_curve['r_kpc'], training_data['vcirc_kms'][i,:,0], color='gray', alpha=0.1)
     ax.hist(np.log10(training_data['vcirc_kms'].flatten()), bins=30, alpha=0.1)
-    ax.set_xlabel('Radius (kpc)')
-    ax.set_ylabel('Circular Velocity (km/s)')
+    ax.set_xlabel('Circular Velocity (km/s)')
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, "rotation_curves_hist.png"), dpi=300)
 
     # exit()
     # training_data['r_kpc'] = np.tile(training_data_rotation_curve['r_kpc'], reps=(training_data['vcirc_kms'].shape[0],1))[:, :, None] #[:, :, None] #extra dimension (n_observation, len_r_kpc, 1)
 
-    training_data = {k: v[:20_000] for k, v in training_data.items()}
+    # training_data = {k: v[:20_000] for k, v in training_data.items()}
     for k in training_data.keys():
         print(f"{k}: {training_data[k].shape}")
 
@@ -92,6 +91,9 @@ def main(cfg: TrainConfig):
     clean_data = {key: training_data[key][valid_mask] for key in param_names_global + [inference_conditions] + ["vcirc_kms"]}
     clean_data['sim_data_projected'] = sim_data_array[valid_mask]
     training_data = clean_data
+
+    validation_data = {k: v[-30000:] for k, v in training_data.items()}
+    training_data = {k: v[:-30000] for k, v in training_data.items()}
 
     print("Training data keys", training_data.keys())
     keys_to_drop = (
@@ -122,7 +124,7 @@ def main(cfg: TrainConfig):
             summary_dim = 32,
             embed_dims = (64, 64, 64),
             num_heads = (4, 4, 4),
-            num_seeds = 6,
+            num_seeds = 8,
             # summary_dim=cfg.global_model.summary_dim,
             # embed_dims=(cfg.global_model.embed_dims, cfg.global_model.embed_dims),
             # num_heads=(
@@ -135,8 +137,8 @@ def main(cfg: TrainConfig):
         )
     summary_network_b = bf.networks.TimeSeriesTransformer(
         summary_dim = 32,
-        embed_dims = (64, 64, 64),
-        num_heads = (4, 4, 4),
+        embed_dims = (40, 40, 40, ),
+        num_heads = (2, 2, 2, ),
 
     )
     head = keras.Sequential(
@@ -210,8 +212,14 @@ def main(cfg: TrainConfig):
     if "concatenate_j_to_sim_data" in cfg.augmentations:
         augmentations.append(augmentations_class.concatenate_j_to_sim_data)
     
+    for aug in augmentations:
+        print(f"Applying augmentation: {aug.__name__}")
+        validation_data = aug(validation_data)
+    validation_data = {k: np.array(v) for k, v in validation_data.items()}
+    
     history = workflow_global.fit_offline(
         training_data,
+        validation_data=validation_data,
         epochs=cfg.n_epochs,
         batch_size=cfg.batch_size,
         verbose=cfg.verbose,

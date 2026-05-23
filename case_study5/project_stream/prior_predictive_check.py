@@ -12,7 +12,7 @@ import matplotlib.cm as mcm
 from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-from utils.utils_train_jax_new import AugmentationsClass #we will need to use the augmentations on the test_set
+from utils.utils_train_jax_new_rotationcurve_fixedvlosmask import AugmentationsClass #we will need to use the augmentations on the test_set
 from config.EvalConfig import EvalConfig
 import hydra
 from hydra.core.config_store import ConfigStore
@@ -907,7 +907,7 @@ def prior_parameters_corner(
         print(f"\n  → saved {out_path}")
 
 
-@hydra.main(version_base=None, config_path="config", config_name="eval_config",)
+@hydra.main(version_base=None, config_path="config", config_name="eval_config_new_rotationcurve_agama",)
 def main(cfg: EvalConfig):
     base_dir               = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/"
     training_data_data_dir = "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams/data_agama/"
@@ -915,11 +915,11 @@ def main(cfg: EvalConfig):
     path_to_save           = os.path.join(base_dir, "plots/prior_predictive_check/agama/")
 
     # ── Training set ─────────────────────────────────────────────────────────
-    training_set_loaded = dict(np.load(os.path.join(base_dir, training_data_data_dir, "training_data_local_300000.npz")))
+    training_set_loaded = dict(np.load(os.path.join(base_dir, training_data_data_dir, "training_data_local_1000000.npz")))
     training_set = {}
     # for k in ["sim_data_projected", "j"]:
     for k in training_set_loaded.keys():
-        training_set[k] = training_set_loaded[k][0:300_000]   # ← keep as dict, never overwrite
+        training_set[k] = training_set_loaded[k][0:1_000_000]   # ← keep as dict, never overwrite
         print(f"Training set {k} shape: {training_set[k].shape}")
     # ── Observations ─────────────────────────────────────────────────────────
     observations_loaded = np.load(observed_data_path, allow_pickle=True)
@@ -934,24 +934,37 @@ def main(cfg: EvalConfig):
     augmentations = []
     if "cut_to_300_particles" in cfg.augmentations:
         augmentations.append(augmentations_class.cut_to_300_particles)
+    # --- Coordinate transforms (must be first, before any masking) ---
     if "remove_los_velocity" in cfg.augmentations:
         augmentations.append(augmentations_class.remove_los_velocity)
     if "convert_distance_to_parallax" in cfg.augmentations:
         augmentations.append(augmentations_class.convert_distance_to_parallax)
-    if "sample_magnitudes" in cfg.augmentations:
-        augmentations.append(augmentations_class.sample_magnitudes)
-    if "sample_obs_error" in cfg.augmentations:
-        augmentations.append(augmentations_class.sample_obs_error)
-    if "apply_obs_error" in cfg.augmentations:  
-        augmentations.append(augmentations_class.apply_obs_error)
+
+    # --- Observational selection (window → subsample → compact) ---
     if "observational_window" in cfg.augmentations:
         augmentations.append(augmentations_class.observational_window)
+    if "observational_window_spline" in cfg.augmentations:
+        augmentations.append(augmentations_class.observational_window_spline)
     if "observational_window_random" in cfg.augmentations:
         augmentations.append(augmentations_class.observational_window_random)
     if "observed_n_stars" in cfg.augmentations:
         augmentations.append(augmentations_class.subsampling_to_observed_n_stars)
+    if "compact_to_attended" in cfg.augmentations:
+        augmentations.append(augmentations_class.compact_to_attended)
+
+    # --- Photometric augmentation (magnitudes → errors → apply) ---
+    if "sample_magnitudes" in cfg.augmentations:
+        augmentations.append(augmentations_class.sample_magnitudes)
+    if "sample_obs_error" in cfg.augmentations:
+        augmentations.append(augmentations_class.sample_obs_error)
+    if "apply_obs_error" in cfg.augmentations:
+        augmentations.append(augmentations_class.apply_obs_error)
+
+    # --- v_los masking (must be after apply_obs_error) ---
     if "mask_vlos" in cfg.augmentations:
         augmentations.append(augmentations_class.mask_vlos)
+
+    # --- Symmetry augmentations ---
     if "flip_dirz" in cfg.augmentations:
         augmentations.append(augmentations_class.flip_dirz)
 
