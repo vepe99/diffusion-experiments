@@ -1,3 +1,5 @@
+from matplotlib import ticker
+
 from autocvd import autocvd
 autocvd(num_gpus = 1)
 import os
@@ -487,9 +489,16 @@ def main(cfg: EvalConfig):
         color=colors[0], 
         labels=df.columns,
         hist_kwargs={'density': True},
-        contour_kwargs={'linewidths': 1.5}
+        contour_kwargs={'linewidths': 1.5},
+        label_kwargs = {'fontsize': 25},
     )
+
+    
     legend_handles = [mlines.Line2D([], [], color=colors[0], label='Global')]
+    for ax in fig.get_axes():
+        ax.tick_params(axis='both', labelsize=15)
+        ax.xaxis.set_major_locator(ticker.MaxNLocator(3))
+        ax.yaxis.set_major_locator(ticker.MaxNLocator(3))
 
     #Single stream posteriors
     for i, stream_name in enumerate(cfg.target_streams.keys()):
@@ -528,6 +537,8 @@ def main(cfg: EvalConfig):
             contour_kwargs={'linewidths': 1.5}
         )
         legend_handles.append(mlines.Line2D([], [], color=colors[i+1], label=stream_name))
+            # Adjust tick label size post-hoc
+
     fig.legend(handles=legend_handles, loc='upper right', fontsize=18, bbox_to_anchor=(0.95, 0.95))
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'global_cornerplot.pdf'))
     print(f'Saved global corner plot with all streams in pathc: {os.path.join(cfg.base_dir, cfg.results_dir, "global_cornerplot.pdf")}')

@@ -375,13 +375,14 @@ def main(cfg: SimulatorConfig):
         # '../plots/gala6D/new_hyper/model54_60k_1000epochs/global_posterior.npz'
         # '../hyperparameter_tuning/gala/new_aug_bigheads/model_121/gaiastreams/global_posterior.npz'
         # '../hyperparameter_tuning/gala/300k/model_21/gaiastreams/global_posterior.npz'
-        '../hyperparameter_tuning/gala/rotationcurve/model_9_test/gaiastreams/global_posterior.npz'
+        # '../hyperparameter_tuning/gala/rotationcurve/model_9_test/gaiastreams/global_posterior.npz',
+        '../hyperparameter_tuning/agama/rotationcurve/model_5/gaiastreams/global_posterior.npz'
     )
     local_posterior_path = os.path.join(
         cfg.base_dir,
         # '../hyperparameter_tuning/gala/local/new_aug_jonas_300k_200epoch/streamnorm_standardize/model_79/gaia_121/gaia_local_posterior.npz'
         # '../hyperparameter_tuning/gala/local/jonas/streamnomr_standardize/model_2/gaia_121/gaia_local_posterior.npz'
-        '../hyperparameter_tuning/gala/local/rotationcurve/model_test_1000epochs/global_9/gaia_local_posterior.npz'
+        '../hyperparameter_tuning/agama/local/rotationcurve/model_base_250epochs/global_5/gaia_local_posterior.npz'
     )
     print('Loading global posterior from:', global_posterior_path)
     global_posterior = dict(np.load(global_posterior_path, allow_pickle=True))

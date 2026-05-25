@@ -2,9 +2,8 @@ base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_strea
 data_dir: "streams/data_multistream_agama/"
 model_dir: "hyperparameter_tuning/agama/rotationcurve/model_5"
 # model_dir: "hyperparameter_tuning/agama/model_test_fulldataset/"
-multistream_n_simulation: 1000
-results_dir: "hyperparameter_tuning/agama/rotationcurve/model_5/nocomposition_1000test"
-# results_dir: hyperparameter_tuning/agama/model_test_fulldataset/nocomposition_1000test
+multistream_n_simulation: 333
+results_dir: "hyperparameter_tuning/agama/rotationcurve/model_5/333test"
 use_streamax_simulator: False
 
 #training hyperparameters
