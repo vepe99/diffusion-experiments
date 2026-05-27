@@ -134,7 +134,7 @@ def main(cfg: EvalConfig):
     name_to_plot = ['Pal5', 'NGC3201', 'M68']
     path_data = "/export/data/vgiusepp/diffusion_experiments_test_new/diffusion-experiments/case_study5/project_stream/data/streams/"
     # sampling_type = 'data_multistream_gala_posterior_predictive_check/rotationacurve/model_9_test/'
-    sampling_type = "data_multistream_agama_rotationcurve_posterior_predictive_check/rotationacurve/model_5_modelbase500/"
+    sampling_type = "data_multistream_agama_rotationcurve_posterior_predictive_check/rotationacurve/model_5_modelbase250_new/"
 
     # name_file = 'ppc_100samples_q16-84.npz'
     name_file = 'ppc_500samples_q5-95.npz'

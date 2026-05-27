@@ -1167,7 +1167,7 @@ def main(cfg: SimulatorConfig):
     )
     local_posterior_path = os.path.join(
         cfg.base_dir,
-        '../hyperparameter_tuning/agama/local/rotationcurve/model_base_500epochs/global_5/gaia_local_posterior.npz'
+        '../hyperparameter_tuning/agama/local/rotationcurve/model_base_250epochs/global_5/gaia_local_posterior.npz'
     )
     print('Loading global posterior from:', global_posterior_path)
     global_posterior = dict(np.load(global_posterior_path, allow_pickle=True))
@@ -1175,7 +1175,7 @@ def main(cfg: SimulatorConfig):
     local_posterior  = dict(np.load(local_posterior_path,  allow_pickle=True))
 
     # ── Rotation-curve grid (shared by all plots below) ───────────────────────
-    radial_distance = np.linspace(0.01, 26, 500)                    # kpc
+    radial_distance = np.linspace(0.01, 100, 500)                    # kpc
     obs_R    = radial_distance
     points   = np.column_stack((obs_R,
                                 np.zeros_like(obs_R),
@@ -1286,23 +1286,28 @@ def main(cfg: SimulatorConfig):
 
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.plot(radial_distance, mean_rot_curve, color='steelblue',
-            label='Full-posterior mean')
+            label='MAP'
+            )
     ax.fill_between(
         radial_distance,
         mean_rot_curve - 3 * std_rot_curve,
         mean_rot_curve + 3 * std_rot_curve,
         alpha=0.3, color='steelblue',
-        label=rf'$\pm3\sigma$ (Mahalanobis band [{QUANTILE_LOW:.0%}, {QUANTILE_HIGH:.0%}])',
+        # label=rf'$\pm3\sigma$ (Mahalanobis band [{QUANTILE_LOW:.0%}, {QUANTILE_HIGH:.0%}])',
     )
     ax.errorbar(obs_R_plot, obs_Vc_plot, yerr=obs_sVc_plot * 3,
-                fmt='.', color='red', label='Observed')
+                fmt='.', color='red', label='Zhou et al. 2023')
     ax.set_xlabel('Radius [kpc]')
     ax.set_ylabel('Circular velocity [km/s]')
-    ax.set_xlim(0, 26)
-    ax.set_ylim(0, 300)
-    ax.legend()
+    # ax.set_xlim(0, 26)
+    ax.set_ylim(50, 250)
+    ax.legend(loc='lower right')
     fig.savefig(os.path.join(cfg.base_dir, cfg.data_dir, 'rotation_curve_sample.pdf'),
                 dpi=150, bbox_inches='tight')
+    np.savez(os.path.join(cfg.base_dir, cfg.data_dir, 'rotation_curve_data.npz'), 
+             radial_distance=radial_distance, 
+             mean_rot_curve=mean_rot_curve, 
+             std_rot_curve=std_rot_curve)
     print('Saved rotation curve band plot.')
 
     # ── Simulator setup ───────────────────────────────────────────────────────

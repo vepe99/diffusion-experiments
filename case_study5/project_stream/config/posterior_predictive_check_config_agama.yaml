@@ -1,7 +1,7 @@
 
 base_dir: "/export/home/vgiusepp/diffusion-experiments/case_study5/project_stream/data/streams"
 # data_dir: "data_multistream_gala_posterior_predictive_check/model_121_300k_local79_quantile/"
-data_dir: "data_multistream_agama_rotationcurve_posterior_predictive_check/rotationacurve/model_5_modelbase500/"
+data_dir: "data_multistream_agama_rotationcurve_posterior_predictive_check/rotationacurve/model_5_modelbase250_new_Huang/"
 simulator: "agama" #odisseo, gala, galax
 n_simulations: 500
 batch_size: 10
