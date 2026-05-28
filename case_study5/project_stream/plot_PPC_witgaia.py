@@ -253,15 +253,15 @@ def main(cfg: EvalConfig):
 
                 # Axis labels only on the edges
                 if row == n_dims - 1:
-                    ax.set_xlabel(PHASE_SPACE_LABELS[col], fontsize=15)
+                    ax.set_xlabel(PHASE_SPACE_LABELS[col], fontsize=20)
                     ax.xaxis.set_major_locator(plt.MaxNLocator(4))
-                    ax.tick_params(axis="both", labelsize=15)
+                    ax.tick_params(axis="both", labelsize=20)
                 else:
                     ax.set_xticklabels([])
                 if col == 0 and row != 0:
-                    ax.set_ylabel(PHASE_SPACE_LABELS[row], fontsize=15)
+                    ax.set_ylabel(PHASE_SPACE_LABELS[row], fontsize=20)
                     ax.yaxis.set_major_locator(plt.MaxNLocator(4))
-                    ax.tick_params(axis="both", labelsize=15)
+                    ax.tick_params(axis="both", labelsize=20)
                 else:
                     ax.set_yticklabels([])
 

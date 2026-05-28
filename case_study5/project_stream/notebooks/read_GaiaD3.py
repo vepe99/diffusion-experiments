@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.23.1"
+__generated_with = "0.23.8"
 app = marimo.App()
 
 
@@ -20,7 +20,7 @@ def _():
     import matplotlib.pyplot as plt
     from scipy.stats import gaussian_kde
     import galstreams
-
+    plt.rcParams["savefig.format"] = 'svg'
     return ascii, galstreams, gaussian_kde, np, pd, plt
 
 
@@ -247,17 +247,27 @@ def _(np, pd, tbl_data_pandas):
 
 
 @app.cell
+def _(median_e_VHel_per_bin, std_e_VHel_per_bin):
+    median_e_VHel_per_bin.values[-1] =median_e_VHel_per_bin.values[-2]
+    std_e_VHel_per_bin.values[-1] = std_e_VHel_per_bin.values[-2]
+
+    return
+
+
+@app.cell
 def _(median_e_VHel_per_bin, np, plt, std_e_VHel_per_bin, tbl_data_pandas):
     # Get bin centers for plotting
     bin_centers = [interval.left + (interval.right - interval.left)/2 for interval in median_e_VHel_per_bin.index]
+    # bin_centers[-1] = 20.0
+    bin_centers = np.array(bin_centers) - 0.5
 
     fig1, ax1 = plt.subplots(figsize=(8, 6))
 
     # Scatter plot of all data
-    ax1.scatter(tbl_data_pandas['Gmag'], tbl_data_pandas['e_VHel'], alpha=0.3, label='stars')
+    ax1.scatter(tbl_data_pandas['Gmag'], tbl_data_pandas['e_VHel'], alpha=0.3, label='data')
 
     # Plot median line
-    ax1.plot(bin_centers, median_e_VHel_per_bin.values, color='red', marker='o', label='median $err_{V_R}$')
+    ax1.plot(bin_centers, median_e_VHel_per_bin.values, color='red', marker='o', label='median')
 
     # Plot filled error bars (standard deviation)
     lower = np.maximum(median_e_VHel_per_bin.values - 3*std_e_VHel_per_bin.values, 0)
@@ -272,13 +282,25 @@ def _(median_e_VHel_per_bin, np, plt, std_e_VHel_per_bin, tbl_data_pandas):
         # label='$\\sigma$'
     )
 
-    ax1.set_xlabel('Gmag', fontsize=20)
-    ax1.set_ylabel('$err_{V_R}$', fontsize=20)
+    ax1.set_xlabel('G [mag]', fontsize=20)
+    ax1.set_ylabel('$err_{V_R}$ [km/s]', fontsize=20)
     # ax1.set_yscale('log')
     ax1.legend(fontsize=25)
     ax1.set_ylim(-1, 60)
     ax1.tick_params(axis="both", labelsize=15)
+    fig1.savefig('vR_errorfunction_magnitude.pdf')
     plt.show()
+    return (bin_centers,)
+
+
+@app.cell
+def _(bin_centers):
+    bin_centers
+    return
+
+
+@app.cell
+def _():
     return
 
 
@@ -512,7 +534,7 @@ def _(np, particles):
     print(f'sim_data_projected shape: {sim_data_projected.shape}')
     print(f'attention_mask shape: {_attention_mask.shape}')
     print(f'j: {_j}')
-    np.savez('../data/gaia_observed_streams.npz', j=_j, sim_data_projected=sim_data_projected, attention_mask=_attention_mask)
+    # np.savez('../data/gaia_observed_streams.npz', j=_j, sim_data_projected=sim_data_projected, attention_mask=_attention_mask)
     print('Saved to ../data/gaia_observed_streams.npz')
     return
 

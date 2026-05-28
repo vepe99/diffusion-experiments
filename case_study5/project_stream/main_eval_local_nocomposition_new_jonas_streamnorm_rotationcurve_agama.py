@@ -310,6 +310,9 @@ def main(cfg: EvalConfig):
     # Add this: reshape local params from (100, 3, ...) to (300, ...)
     for param in cfg.parameters_local:
         test_data[param] = test_data[param].reshape(-1, *test_data[param].shape[2:])
+
+    import matplotlib.colors as mcolors
+    colors = plt.cm.RdYlBu_r(np.linspace(0, 1, 4))
     
     for stream_name, j_idx in cfg.target_streams.items():
         print(f'\n===== Generating plots for {stream_name} (j={j_idx}) =====')
@@ -322,16 +325,23 @@ def main(cfg: EvalConfig):
         print(f'  test_data shapes: { {k: v.shape for k, v in test_data_stream.items()} }')
         print(f'  ps shapes:        { {k: v.shape for k, v in ps_stream.items()} }')
 
+
         # --- Recovery ---
         fig = bf.diagnostics.recovery(
             estimates=ps_stream,
             targets=test_data_stream,
-            variable_names=cfg.parameter_local_pretty
+            variable_names=cfg.parameter_local_pretty,
+            color = colors[j_idx+1],
+            label_fontsize = 30,
+            title_fontsize = 40,
+            metric_fontsize = 35,
+            tick_fontsize = 25,
+            xlabel = "Truth",
         )
         for ax in fig.get_axes():
             ax.grid(False)
             for txt in ax.texts:
-                txt.set_bbox(dict(facecolor='white', alpha=0.7, edgecolor='black', boxstyle='round,pad=0.3'))
+                txt.set_bbox(dict(facecolor='white', alpha=0.7, edgecolor='black', boxstyle='round,pad=0.15'))
         fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, f'{stream_name}_recovery.pdf'))
         print(f'  Saved {stream_name}_recovery.pdf')
         plt.close(fig)

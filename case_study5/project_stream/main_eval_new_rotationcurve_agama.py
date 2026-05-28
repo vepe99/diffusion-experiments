@@ -459,7 +459,9 @@ def main(cfg: EvalConfig):
     for k in ps.keys():
         print(f"{k}: {ps[k].shape}")
     print(cfg.paramater_global_pretty )
-        
+    
+    import matplotlib.colors as mcolors
+    colors = plt.cm.RdYlBu_r(np.linspace(0, 1, 4))
     ###############
     # PLOTS GLOBAL#
     ###############
@@ -467,13 +469,21 @@ def main(cfg: EvalConfig):
     fig = bf.diagnostics.recovery(
         estimates=ps,
         targets=test_data,
-        variable_names=cfg.paramater_global_pretty
-        # variable_names = param_names_global
-    )
+        variable_names=cfg.paramater_global_pretty,
+        color = colors[0],
+        label_fontsize = 30,
+        title_fontsize = 40,
+        metric_fontsize = 35,
+        tick_fontsize = 25,
+        xlabel = "Truth",
+        )
     for ax in fig.get_axes():
         ax.grid(False)
         for txt in ax.texts:
-            txt.set_bbox(dict(facecolor='white', alpha=0.7, edgecolor='black', boxstyle='round,pad=0.3'))
+            txt.set_bbox(dict(facecolor='white', alpha=0.7, edgecolor='black', boxstyle='round,pad=0.15'))
+        # Fix the scientific notation exponent size on both axes
+        ax.xaxis.get_offset_text().set_fontsize(25)
+        ax.yaxis.get_offset_text().set_fontsize(25)
     fig.savefig(os.path.join(cfg.base_dir, cfg.results_dir, 'global_recovery.pdf'))
     print('Saved global recovery plot')
     plt.show()

@@ -3,7 +3,7 @@ data_dir: "streams/data_multistream_agama/"
 model_dir: "hyperparameter_tuning/agama/rotationcurve/model_5"
 # model_dir: "hyperparameter_tuning/agama/model_test_fulldataset/"
 multistream_n_simulation: 333
-results_dir: "hyperparameter_tuning/agama/rotationcurve/model_5/333test"
+results_dir: "hyperparameter_tuning/agama/rotationcurve/model_5/nocomposition_333test_new"
 use_streamax_simulator: False
 
 #training hyperparameters
