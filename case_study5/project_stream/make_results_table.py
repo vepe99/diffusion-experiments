@@ -72,6 +72,16 @@ _DATA_DIR = Path(
 DEFAULT_POSTERIOR = _DATA_DIR / "global_posterior.npz"
 DEFAULT_M200R200 = _DATA_DIR / "global_M200_R200.pdf.npz"
 
+# local (per-stream) kinematic posterior: a single file holding all streams
+# stacked along axis 1.  Unlike the global potential parameters, these are
+# inferred per stream, so they have a value in each stream column but none in
+# the compositional "Combined" column.
+DEFAULT_LOCAL_POSTERIOR = Path(
+    "/export/data/vgiusepp/latest_bayesflow/diffusion-experiments/"
+    "case_study5/project_stream/data/hyperparameter_tuning/agama/local/"
+    "rotationcurve/model_base_250epochs/global_5/gaia_local_posterior.npz"
+)
+
 # ── parameter rows: (npz key, latex label, unit factor) ──────────────────────
 # `factor` multiplies the stored value to reach the unit shown in the table.
 PARAMS = [
@@ -90,6 +100,24 @@ STREAM_FILES = {
     "NGC~3201": "NGC3201_posterior.npz",
     "M68": "M68_posterior.npz",
     "Combined": "global_posterior.npz",
+}
+
+# local (per-stream) kinematic parameter rows: (npz key, latex label, factor).
+# Read from the single local posterior file, sliced per stream.
+LOCAL_PARAMS = [
+    ("vr", r"$v_r$ [$\mathrm{km\,s^{-1}}$]", 1.0),
+    ("r", r"$R$ [kpc]", 1.0),
+    ("mu_ra_cosdec", r"$\mu_{\alpha*}$ [$\mathrm{mas\,yr^{-1}}$]", 1.0),
+    ("mu_dec", r"$\mu_{\delta}$ [$\mathrm{mas\,yr^{-1}}$]", 1.0),
+]
+
+# stream-axis index (axis 1) of the local posterior for each table column.
+# Combined has no local counterpart -> None (rendered as a dash).
+STREAM_INDEX = {
+    "Pal~5": 0,
+    "NGC~3201": 1,
+    "M68": 2,
+    "Combined": None,
 }
 
 
@@ -298,6 +326,8 @@ def main():
                     help="global_posterior.npz (defines the data directory)")
     ap.add_argument("--m200r200", type=Path, default=DEFAULT_M200R200,
                     help="global_M200_R200.pdf.npz")
+    ap.add_argument("--local-posterior", type=Path, default=DEFAULT_LOCAL_POSTERIOR,
+                    help="gaia_local_posterior.npz with per-stream local parameters")
     ap.add_argument("--out", type=Path, default=None,
                     help="output .tex path (default: results_table.tex next to posterior)")
     args = ap.parse_args()
@@ -337,6 +367,24 @@ def main():
         else:
             stats["Mdisk"][col] = None
 
+    # local (per-stream) kinematic parameters: a single file holds all streams
+    # stacked along axis 1 (Pal5=0, NGC3201=1, M68=2).  Values exist per stream
+    # but not for the compositional Combined column.
+    if args.local_posterior.exists():
+        local = np.load(args.local_posterior, allow_pickle=True)
+    else:
+        print(f"[warn] missing {args.local_posterior}; local rows left as placeholders")
+        local = None
+    for key, _, factor in LOCAL_PARAMS:
+        stats[key] = {}
+        for col in columns:
+            j = STREAM_INDEX.get(col)
+            if local is not None and j is not None and key in local.files:
+                stats[key][col] = summarize(local[key][0, j].ravel(), factor,
+                                            f"{col}/{key}")
+            else:
+                stats[key][col] = None
+
     # M200 / R200: only the Combined (global) inference is available
     m200r200 = np.load(args.m200r200, allow_pickle=True)
     stats["M200"] = {c: None for c in columns}
@@ -348,7 +396,8 @@ def main():
     print(f"\nData directory: {data_dir}\n")
     row_labels = [(k, lbl) for k, lbl, _ in PARAMS] + [
         ("Mdisk", r"Mdisk [10^10 Msun]"),
-        ("M200", r"M200 [10^12 Msun]"), ("R200", r"R200 [kpc]")]
+        ("M200", r"M200 [10^12 Msun]"), ("R200", r"R200 [kpc]")] + [
+        (k, lbl) for k, lbl, _ in LOCAL_PARAMS]
     header = f"{'parameter':<28}" + "".join(f"{c:>26}" for c in columns)
     print(header)
     print("-" * len(header))
@@ -369,8 +418,9 @@ def main():
         r"        \caption{Posterior constraints on the global Milky Way potential",
         r"            parameters from the Gaia data: median and 16th--84th percentile interval",
         r"            of the marginal posterior for each single-stream inference and for the",
-        r"            compositional (combined) one. The last rows report the derived total",
-        r"            disk mass and virial quantities.}",
+        r"            compositional (combined) one. The middle rows report the derived total",
+        r"            disk mass and virial quantities; the last rows report the per-stream",
+        r"            local (kinematic) parameters, which have no compositional counterpart.}",
         r"        \label{tab:results}",
         r"        \centering",
         r"        \renewcommand{\arraystretch}{1.4}",
@@ -385,6 +435,9 @@ def main():
     lines.append(row(r"$M_{\mathrm{disk}}$ [$10^{10}\,\mathrm{M_\odot}$]", "Mdisk"))
     lines.append(row(r"$M_{200}$ [$10^{12}\,\mathrm{M_\odot}$]", "M200"))
     lines.append(row(r"$R_{200}$ [kpc]", "R200"))
+    lines.append(r"            \hline")
+    for key, lbl, _ in LOCAL_PARAMS:
+        lines.append(row(lbl, key))
     lines += [
         r"            \hline",
         r"        \end{tabular}",
