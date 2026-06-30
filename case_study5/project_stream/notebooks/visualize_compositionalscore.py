@@ -128,13 +128,13 @@ def _():
                 comp = COMPS[ci]
                 ax.plot(comp['cx'], comp['cy'], 'X', color=colors[ci+1],
                         markeredgecolor='black',
-                        markersize=15, markeredgewidth=2.0, zorder=-1)
+                        markersize=30, markeredgewidth=2.0, zorder=0)
         else:
             for ci in range(3):
                 comp = COMPS[ci]
                 ax.plot(comp['cx'], comp['cy'], 'X', color=colors[ci+1],
                         markeredgecolor='black',
-                        markersize=15, markeredgewidth=2.0, zorder=-1)
+                        markersize=20, markeredgewidth=2.0, zorder=-1)
 
 
 
