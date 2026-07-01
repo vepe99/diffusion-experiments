@@ -222,6 +222,75 @@ def vcirc_at(p, R):
     return np.sqrt(v2)
 
 
+# default spherical radius [kpc] for the total enclosed-mass column
+MASS_RADIUS_KPC = 20.0
+
+
+def enclosed_mass_samples(posterior, R_kpc, n_samples=None, seed=0):
+    """Total mass [Msun] inside a sphere of radius ``R_kpc`` for every posterior
+    draw of the full (bulge + halo + disk) potential.
+
+    Uses agama's ``Potential.enclosedMass`` (spherical enclosed mass) on the
+    same composite potential as the rotation curve, so this is the total
+    dynamical mass within ``R_kpc``.  All 7 potential parameters are drawn from
+    the posterior (the bulge is fixed).  Non-finite / failed draws are dropped.
+    """
+    import agama
+    agama.setUnits(length=1, velocity=1, mass=1)
+    keys = [k for k, _, _ in PARAMS]
+    samples = np.column_stack([posterior[k].ravel() for k in keys])  # (Ntot, 7)
+    ntot = samples.shape[0]
+    n = ntot if n_samples is None else min(n_samples, ntot)
+    idx = (np.arange(ntot) if n == ntot
+           else np.random.default_rng(seed).choice(ntot, size=n, replace=False))
+
+    out = np.full(n, np.nan)
+    for c, i in enumerate(idx):
+        p = {k: float(samples[i, j]) for j, k in enumerate(keys)}
+        try:
+            out[c] = float(_build_full_potential(p).enclosedMass(R_kpc))
+        except Exception:
+            continue
+    out = out[np.isfinite(out)]
+    print(f"    M(<{R_kpc:g} kpc): used {out.size}/{n} posterior draws")
+    return out
+
+
+def write_mass_within(mass_samples, R_kpc, out_dir):
+    """Persist the total enclosed-mass-within-R distributions per column.
+
+    ``mass_samples`` maps each table column to its array of M(<R) draws (or
+    None).  Writes ``mass_within_<R>kpc.txt`` / ``.npz`` into ``out_dir`` with
+    the 16/50/84th percentiles and the KDE-mode summary, in 10^11 Msun.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    levels = (16, 50, 84)
+    L = []
+    L.append(f"Total enclosed mass within a sphere of radius R = {R_kpc:g} kpc")
+    L.append("=" * 70)
+    L.append("M(<R) = enclosedMass(R) of the full bulge+halo+disk potential,")
+    L.append("per inference column (all 7 potential parameters drawn from the")
+    L.append("posterior; the bulge is fixed).  Values in 10^11 Msun.")
+    L.append("")
+    L.append(f"  {'column':<12}{'p16':>12}{'p50':>12}{'p84':>12}"
+             f"{'KDE mode':>12}{'+err':>12}{'-err':>12}")
+    save = {}
+    for col, m in mass_samples.items():
+        if m is None or len(m) == 0:
+            continue
+        p16, p50, p84 = np.percentile(m, levels) / 1e11
+        mode, minus, plus = summarize(m, 1.0e-11, f"{col}/M(<{R_kpc:g}kpc)")
+        L.append(f"  {col:<12}{p16:>12.4f}{p50:>12.4f}{p84:>12.4f}"
+                 f"{mode:>12.4f}{plus:>12.4f}{minus:>12.4f}")
+        save[f"M_within_samples_{col}"] = m
+    txt = "\n".join(L) + "\n"
+    txt_path = out_dir / f"mass_within_{R_kpc:g}kpc.txt"
+    txt_path.write_text(txt)
+    np.savez(out_dir / f"mass_within_{R_kpc:g}kpc.npz", R_kpc=R_kpc, **save)
+    print(txt)
+    print(f"Enclosed mass within {R_kpc:g} kpc written to:\n    {txt_path}")
+
+
 def vcirc_components_at(p, R):
     """Per-component circular velocity [km/s] at radii R [kpc].
 
@@ -746,6 +815,12 @@ def main():
     ap.add_argument("--solar-radius", type=float, default=SOLAR_RADIUS_KPC,
                     help="Galactocentric solar radius [kpc] for the local halo "
                          f"density (default: {SOLAR_RADIUS_KPC})")
+    ap.add_argument("--mass-radius", type=float, default=MASS_RADIUS_KPC,
+                    help="spherical radius [kpc] for the total enclosed-mass "
+                         f"row M(<R) (default: {MASS_RADIUS_KPC})")
+    ap.add_argument("--mass-nsamples", type=int, default=None,
+                    help="cap the number of posterior draws used for the total "
+                         "enclosed-mass row (default: use all)")
     args = ap.parse_args()
 
     data_dir = args.posterior.parent
@@ -808,11 +883,30 @@ def main():
     stats["M200"]["Combined"] = summarize(m200r200["M200"], 1.0e-12, "Combined/M200")  # 10^12 M_sun
     stats["R200"]["Combined"] = summarize(m200r200["R200"], 1.0, "Combined/R200")       # kpc
 
+    # derived total enclosed mass within R = mass_radius kpc of the full
+    # (bulge+halo+disk) potential, computed per column from each posterior (all
+    # 7 potential params are present in every column).  Sample arrays are kept
+    # so the Combined block can write a detailed per-column summary file.
+    R_mass = args.mass_radius
+    print(f"\nTotal enclosed mass within R = {R_mass:g} kpc (full potential):")
+    mass_samples = {}
+    stats["Mwithin"] = {}
+    for col in columns:
+        d = posteriors[col]
+        if d is not None:
+            ms = enclosed_mass_samples(d, R_mass, n_samples=args.mass_nsamples)
+            mass_samples[col] = ms
+            stats["Mwithin"][col] = summarize(ms, 1.0e-11, f"{col}/M(<{R_mass:g}kpc)")  # 10^11 M_sun
+        else:
+            mass_samples[col] = None
+            stats["Mwithin"][col] = None
+
     # ── plain-text summary to stdout ─────────────────────────────────────────
     print(f"\nData directory: {data_dir}\n")
     row_labels = [(k, lbl) for k, lbl, _ in PARAMS] + [
         ("Mdisk", r"Mdisk [10^10 Msun]"),
-        ("M200", r"M200 [10^12 Msun]"), ("R200", r"R200 [kpc]")] + [
+        ("M200", r"M200 [10^12 Msun]"), ("R200", r"R200 [kpc]"),
+        ("Mwithin", f"M(<{R_mass:g} kpc) [10^11 Msun]")] + [
         (k, lbl) for k, lbl, _ in LOCAL_PARAMS]
     header = f"{'parameter':<28}" + "".join(f"{c:>26}" for c in columns)
     print(header)
@@ -851,6 +945,8 @@ def main():
     lines.append(row(r"$M_{\mathrm{disk}}$ [$10^{10}\,\mathrm{M_\odot}$]", "Mdisk"))
     lines.append(row(r"$M_{200}$ [$10^{12}\,\mathrm{M_\odot}$]", "M200"))
     lines.append(row(r"$R_{200}$ [kpc]", "R200"))
+    lines.append(row(rf"$M(<{R_mass:g}\,\mathrm{{kpc}})$ [$10^{{11}}\,\mathrm{{M_\odot}}$]",
+                     "Mwithin"))
     lines.append(r"            \hline")
     for key, lbl, _ in LOCAL_PARAMS:
         lines.append(row(lbl, key))
@@ -922,6 +1018,10 @@ def main():
         recompute_halo_solar_density(posteriors["Combined"], results_dir,
                                      R_sun=args.solar_radius,
                                      n_samples=args.m200_nsamples)
+
+        # total enclosed mass within R = mass_radius kpc (per-column detail);
+        # reuses the sample arrays already computed for the table row
+        write_mass_within(mass_samples, R_mass, results_dir)
 
 
 if __name__ == "__main__":
