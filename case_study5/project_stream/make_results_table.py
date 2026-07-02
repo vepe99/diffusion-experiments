@@ -485,6 +485,124 @@ def plot_vcirc(combined, out_pdf):
     print(f"\nRotation curve written to: {out_pdf}")
 
 
+# per-stream rotation-curve colours, matching
+# main_eval_gaiastreams_new_rotationcurve_agama.py, where
+# colors = plt.cm.RdYlBu_r(np.linspace(0, 1, 4)) and the streams are drawn with
+# colors[i+1] in cfg.target_streams order (Pal5, NGC3201, M68); colors[0] is the
+# Global posterior.  We reproduce the same sampling so the colours line up.
+def _stream_colors():
+    import matplotlib.pyplot as plt
+    cols = plt.cm.RdYlBu_r(np.linspace(0, 1, 4))
+    return {
+        "Combined": tuple(cols[0][:3]),
+        "Pal~5":    tuple(cols[1][:3]),
+        "NGC~3201": tuple(cols[2][:3]),
+        "M68":      tuple(cols[3][:3]),
+    }
+
+# pretty legend labels for the per-stream rotation-curve plot
+STREAM_LABELS = {"Combined": "Global", "Pal~5": "Pal 5",
+                 "NGC~3201": "NGC 3201", "M68": "M68"}
+
+
+def plot_vcirc_streams(posteriors, out_pdf):
+    """Rotation curve predicted by the Global (Combined) posterior and by each
+    single-stream posterior (Pal5, NGC3201, M68) vs Zhou+2023 and Huang+2016.
+
+    Same two-panel linear/log layout and same observations as ``plot_vcirc``,
+    but instead of decomposing the Combined posterior per component, it overlays
+    the total rotation curve inferred by the Global posterior and by each stream
+    separately: a median line plus its 16th--84th percentile band, coloured to
+    match main_eval_gaiastreams_new_rotationcurve_agama.py.
+    """
+    import agama
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import matplotlib.ticker as mticker
+
+    agama.setUnits(length=1, velocity=1, mass=1)
+
+    colors = _stream_colors()
+    split = 30.0
+    R_grid = np.logspace(np.log10(0.1), np.log10(100.0), 400)
+
+    # per-radius p16/p50/p84 of the rotation-curve ensemble for each stream that
+    # has a posterior (skip missing ones with a warning)
+    stream_cols = [c for c in ("Combined", "Pal~5", "NGC~3201", "M68")
+                   if posteriors.get(c) is not None]
+    ensembles = {}
+    for col in stream_cols:
+        print(f"  rotation-curve ensemble for {STREAM_LABELS[col]}:")
+        ensembles[col] = vcirc_ensemble(posteriors[col], R_grid)
+
+    fig, (ax_lin, ax_log) = plt.subplots(
+        1, 2, sharey=True, figsize=(5, 3),
+        gridspec_kw={"width_ratios": [3, 2], "wspace": 0},
+    )
+
+    # the model curve is drawn past the split on each side (xlim clips it
+    # invisibly) so there is no gap at the linear/log boundary
+    map_extend = 35.0       # linear panel draws the curve up to this radius
+    map_extend_log = 28.0   # log panel draws the curve down to this radius
+    for ax, xmin, xmax, xscale, mlo, mhi in [
+        (ax_lin, 0.1, split, "linear", 0.1, map_extend),
+        (ax_log, split, 99.9, "log", map_extend_log, 99.9),
+    ]:
+        m = (R_grid >= mlo) & (R_grid <= mhi)
+        for col in stream_cols:
+            band_lo, v_med, band_hi = ensembles[col]
+            ax.plot(R_grid[m], v_med[m], color=colors[col], lw=1.5,
+                    label=STREAM_LABELS[col])
+            ax.fill_between(R_grid[m], band_lo[m], band_hi[m],
+                            alpha=0.25, color=colors[col], lw=0)
+
+        mz = (OBS_R >= xmin) & (OBS_R <= xmax)
+        ax.errorbar(OBS_R[mz], OBS_VC[mz], yerr=OBS_SVC[mz],
+                    fmt='o', color='crimson', ms=1.5, lw=1, capsize=1,
+                    label='Zhou et al. 2023')
+
+        # only show Huang points beyond R > 30 kpc
+        mh = (HUANG_R >= xmin) & (HUANG_R <= xmax) & (HUANG_R > 30.0)
+        ax.errorbar(HUANG_R[mh], HUANG_VC[mh], yerr=HUANG_SVC[mh],
+                    fmt='o', color='purple', ms=1.5, lw=1, capsize=1,
+                    label='Huang et al. 2016')
+
+        ax.set_xscale(xscale)
+        ax.set_xlim(xmin, xmax)
+        ax.set_ylim(100, 260)
+
+    # tick / spine cosmetics to match the paper figure
+    ax_log.set_xticks([40, 60, 80, 100])
+    ax_log.get_xaxis().set_major_formatter(mticker.ScalarFormatter())
+    ax_log.xaxis.set_minor_locator(mticker.NullLocator())
+    ax_lin.set_xticks([5, 15, 25, 30])
+    ax_lin.get_xaxis().set_major_formatter(mticker.ScalarFormatter())
+    ax_lin.spines["right"].set_visible(False)
+    ax_log.spines["left"].set_visible(False)
+    ax_log.tick_params(axis='y', left=False)
+    ax_lin.axvline(split, color='k', lw=1.5, ls='--', clip_on=False, zorder=5)
+
+    fig.supxlabel('$R$ [kpc]', fontsize=12, x=0.55, y=0.1)
+    ax_lin.set_ylabel('$V_C$ [km/s]', fontsize=12)
+
+    handles, labels = [], []
+    for ax in (ax_lin, ax_log):
+        for h, l in zip(*ax.get_legend_handles_labels()):
+            if l not in labels:
+                handles.append(h); labels.append(l)
+    ax_lin.legend(handles, labels, loc='lower left',
+                  bbox_to_anchor=(0.02, 0.02), bbox_transform=ax_lin.transAxes,
+                  fontsize=6, ncol=2, columnspacing=1.0, handlelength=1.6,
+                  framealpha=0.85)
+
+    plt.tight_layout()
+    plt.subplots_adjust(wspace=0.0)
+    fig.savefig(out_pdf, dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    print(f"\nPer-stream rotation curve written to: {out_pdf}")
+
+
 # halo parameters M200/R200 depend on (the spherical-overdensity criterion is
 # evaluated on the halo-only potential).
 HALO_KEYS = ("rho_TwoPowerTriaxial_halo", "a_TwoPowerTriaxial_halo",
@@ -970,6 +1088,10 @@ def main():
         results_dir.mkdir(parents=True, exist_ok=True)
         print(f"\nWriting requested results to: {results_dir}")
         plot_vcirc(posteriors["Combined"], results_dir / "vcirc_components.pdf")
+
+        # rotation curve predicted by each single-stream posterior (Pal5,
+        # NGC3201, M68), same layout / observations as vcirc_components.pdf
+        plot_vcirc_streams(posteriors, results_dir / "vcirc_streams.pdf")
 
         # paper virial definition (ellipsoidal halo mass, H0 = 71 km/s/Mpc):
         # M200 = (4pi/3) r200^3 * 200 * rho_crit = 4pi q_h int_0^r200 s^2 rho_h ds.
