@@ -11,8 +11,16 @@ For every parameter we report:
 
 The 7 potential parameters are read, per stream, from the *_posterior.npz files
 (Pal5, NGC3201, M68) and from global_posterior.npz (the compositional /
-"Combined" inference).  The derived virial quantities M200 and R200 are read
-from global_M200_R200.pdf.npz and are only available for the Combined column.
+"Combined" inference).  The derived virial quantities M200, R200 and c200 and
+the local dark-matter density rho_NFW(R_sun) are recomputed for EVERY column
+(each single-stream posterior and the Combined one) under the total-potential
+definition: spherical overdensity of the full bulge+halo+disk model wrt
+200 rho_crit, H0 = 70 km/s/Mpc (tags "total_H0-70_<stream>"; the Combined one
+also produces the M200/R200 histogram).  The old halo-only values in
+global_M200_R200.pdf.npz are kept as a fallback / comparison reference.
+
+The recomputed-results subfolder is wiped at the start of every run, so it
+only ever contains files that the current run produces.
 
 Usage
 -----
@@ -22,6 +30,7 @@ Usage
 """
 
 import argparse
+import shutil
 from math import floor, log10
 from pathlib import Path
 
@@ -106,7 +115,7 @@ STREAM_FILES = {
 # local (per-stream) kinematic parameter rows: (npz key, latex label, factor).
 # Read from the single local posterior file, sliced per stream.
 LOCAL_PARAMS = [
-    ("vr", r"$v_r$ [$\mathrm{km\,s^{-1}}$]", 1.0),
+    ("vr", r"$v_R$ [$\mathrm{km\,s^{-1}}$]", 1.0),
     ("r", r"$R$ [kpc]", 1.0),
     ("mu_ra_cosdec", r"$\mu_{\alpha*}$ [$\mathrm{mas\,yr^{-1}}$]", 1.0),
     ("mu_dec", r"$\mu_{\delta}$ [$\mathrm{mas\,yr^{-1}}$]", 1.0),
@@ -603,10 +612,10 @@ def plot_vcirc_streams(posteriors, out_pdf):
     print(f"\nPer-stream rotation curve written to: {out_pdf}")
 
 
-# halo parameters M200/R200 depend on (the spherical-overdensity criterion is
-# evaluated on the halo-only potential).
-HALO_KEYS = ("rho_TwoPowerTriaxial_halo", "a_TwoPowerTriaxial_halo",
-             "gamma_TwoPowerTriaxial_halo", "q_TwoPowerTriaxial_halo")
+# all 7 potential parameters are drawn for the M200/R200 recomputation: the
+# halo-only definitions read just the halo keys from the parameter dict, the
+# total-potential definition also needs the disk (the bulge is fixed).
+M200_KEYS = tuple(k for k, _, _ in PARAMS)
 
 
 def _import_worker():
@@ -659,6 +668,42 @@ def m200_r200_ellipsoidal(p, rho_crit, c=200.0):
     x0, x1 = np.log(S[i]), np.log(S[i + 1])
     R200 = float(np.exp(x0 + (0.0 - g[i]) * (x1 - x0) / (g[i + 1] - g[i])))
     return R200, float(4.0 / 3.0 * np.pi * R200 ** 3 * c * rho_crit)
+
+
+def m200_r200_spherical_equivalent(p, rho_crit, c=200.0):
+    r"""galpy / gala halo convention: the flattening q is ignored entirely and
+    the virial quantities are those of the spherical halo with the same rho0,
+    a, gamma.  This is exactly what galpy does when a TriaxialNFWPotential is
+    built from (mvir, conc) -- it maps them through a *spherical* NFWPotential
+    -- and what gala's NFWPotential.c200()/M200()/R200() return (they use only
+    m and r_s, never the axis ratios), both wrt the critical density
+    (galpy: rvir(wrtcrit=True); gala: 200 rho_c always).  Unlike galpy/gala,
+    which assume a pure NFW (gamma = 1) profile, the fitted inner slope gamma
+    is kept.  Returns (R200, M200)."""
+    p1 = dict(p)
+    p1["q_TwoPowerTriaxial_halo"] = 1.0
+    return m200_r200_ellipsoidal(p1, rho_crit, c=c)
+
+
+def m200_r200_total(p, rho_crit, c=200.0, r_search=(5.0, 3000.0)):
+    r"""Spherical overdensity on the TOTAL (bulge + halo + disk) potential:
+    r200 solves M_tot(<r) / (4/3 pi r^3) = c rho_crit with M_tot the mass of
+    the full composite potential inside a sphere (agama enclosedMass), and
+    M200 = M_tot(<r200).  This is the standard observational M200c -- the
+    total dynamical mass of the Galaxy, baryons included -- and the quantity
+    most Milky Way mass papers quote.  Returns (R200, M200); NaNs when the
+    bracket fails."""
+    from scipy.optimize import brentq
+    pot = _build_full_potential(p)
+
+    def overdensity(r):
+        return pot.enclosedMass(r) / (4.0 / 3.0 * np.pi * r ** 3) / rho_crit - c
+
+    lo, hi = r_search
+    if overdensity(lo) * overdensity(hi) > 0:
+        return np.nan, np.nan
+    R200 = float(brentq(overdensity, lo, hi, rtol=1e-5))
+    return R200, float(pot.enclosedMass(R200))
 
 
 def _plot_m200_r200_hist(R200_s, M200_s, out_pdf):
@@ -714,7 +759,7 @@ def recompute_m200_r200(combined, out_dir, per_sample, tag, meta,
     agama.setUnits(length=1, velocity=1, mass=1)   # needed by the spherical fn
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    S = {k: combined[k].ravel() for k in HALO_KEYS}
+    S = {k: combined[k].ravel() for k in M200_KEYS}
     ntot = next(iter(S.values())).size
     n = ntot if n_samples is None else min(n_samples, ntot)
     idx = (np.arange(ntot) if n == ntot
@@ -725,19 +770,24 @@ def recompute_m200_r200(combined, out_dir, per_sample, tag, meta,
     R200_s = np.full(n, np.nan)
     M200_s = np.full(n, np.nan)
     for c, i in enumerate(idx):
-        p = {k: float(S[k][i]) for k in HALO_KEYS}
+        p = {k: float(S[k][i]) for k in M200_KEYS}
         R200_s[c], M200_s[c] = per_sample(p)
     finite = np.isfinite(R200_s) & np.isfinite(M200_s)
     R200_s, M200_s = R200_s[finite], M200_s[finite]
+    # concentration c200 = R200 / a_halo, the definition used by both galpy
+    # (Potential.conc = rvir/scale) and gala (NFWPotential.c200)
+    c200_s = R200_s / S["a_TwoPowerTriaxial_halo"][idx][finite]
     print(f"    method 1 (sample): used {finite.sum()}/{n} posterior draws")
 
-    # ── method 2: plug the marginal percentiles of the halo parameters ────────
+    # ── method 2: plug the marginal percentiles of the parameters ─────────────
     levels = (16, 50, 84)
-    param_pct = {k: dict(zip(levels, np.percentile(S[k], levels))) for k in HALO_KEYS}
+    param_pct = {k: dict(zip(levels, np.percentile(S[k], levels))) for k in M200_KEYS}
     method2 = {}
     for lvl in levels:
-        p = {k: float(param_pct[k][lvl]) for k in HALO_KEYS}
+        p = {k: float(param_pct[k][lvl]) for k in M200_KEYS}
         method2[lvl] = per_sample(p)
+    c200_method2 = {lvl: method2[lvl][0] / param_pct["a_TwoPowerTriaxial_halo"][lvl]
+                    for lvl in levels}
     print("    method 2 (percentile): evaluated p16/p50/p84 parameter vectors")
 
     # ── precomputed values currently used by the table (for reference) ────────
@@ -752,19 +802,22 @@ def recompute_m200_r200(combined, out_dir, per_sample, tag, meta,
     np.savez(
         npz_path,
         H0=meta["H0"], rho_crit=meta["rho_crit"], definition=meta["definition"],
-        M200_samples=M200_s, R200_samples=R200_s,
+        M200_samples=M200_s, R200_samples=R200_s, c200_samples=c200_s,
         levels=np.array(levels),
         M200_method2=np.array([method2[l][1] for l in levels]),
         R200_method2=np.array([method2[l][0] for l in levels]),
+        c200_method2=np.array([c200_method2[l] for l in levels]),
         **{f"param_pct_{k}": np.array([param_pct[k][l] for l in levels])
-           for k in HALO_KEYS},
+           for k in M200_KEYS},
     )
 
     # ── human-readable summary ────────────────────────────────────────────────
     m_p16, m_p50, m_p84 = np.percentile(M200_s, levels) / 1e12  # 10^12 Msun
     r_p16, r_p50, r_p84 = np.percentile(R200_s, levels)         # kpc
+    c_p16, c_p50, c_p84 = np.percentile(c200_s, levels)
     m_mode, m_minus, m_plus = summarize(M200_s, 1.0e-12, f"{tag}/M200")
     r_mode, r_minus, r_plus = summarize(R200_s, 1.0, f"{tag}/R200")
+    c_mode, c_minus, c_plus = summarize(c200_s, 1.0, f"{tag}/c200")
 
     L = []
     L.append("Recomputation of M200 and R200 from the Combined (global) posterior")
@@ -775,9 +828,9 @@ def recompute_m200_r200(combined, out_dir, per_sample, tag, meta,
              f"rho_crit = {meta['rho_crit']:.4g} Msun/kpc^3")
     L.append(f"posterior draws used: {finite.sum()}/{n} (out of {ntot} available)")
     L.append("")
-    L.append("Marginal percentiles of the halo parameters (inputs to method 2):")
+    L.append("Marginal percentiles of the potential parameters (inputs to method 2):")
     L.append(f"    {'parameter':<32}{'p16':>14}{'p50':>14}{'p84':>14}")
-    for k in HALO_KEYS:
+    for k in M200_KEYS:
         v16, v50, v84 = (param_pct[k][l] for l in levels)
         L.append(f"    {k:<32}{v16:>14.5g}{v50:>14.5g}{v84:>14.5g}")
     L.append("")
@@ -805,6 +858,15 @@ def recompute_m200_r200(combined, out_dir, per_sample, tag, meta,
         L.append(f"    precomputed file       p16/p50/p84 : "
                  f"{pre['R200'][0]:.2f} / {pre['R200'][1]:.2f} / {pre['R200'][2]:.2f}")
     L.append("")
+    L.append("c200 = R200 / a_halo  (galpy Potential.conc, gala NFWPotential.c200):")
+    L.append(f"    method 1 (sample)      p16/p50/p84 : "
+             f"{c_p16:.2f} / {c_p50:.2f} / {c_p84:.2f}")
+    L.append(f"    method 1 (sample)      KDE mode +/- : "
+             f"{c_mode:.2f}  (+{c_plus:.2f} / -{c_minus:.2f})")
+    L.append(f"    method 2 (percentile)  p16/p50/p84 : "
+             f"{c200_method2[16]:.2f} / {c200_method2[50]:.2f} / "
+             f"{c200_method2[84]:.2f}")
+    L.append("")
     L.append("(precomputed file = global_M200_R200.pdf.npz, the values the "
              "results table reports; spherical mass, H0 ~ 67.4)")
     txt = "\n".join(L) + "\n"
@@ -817,7 +879,7 @@ def recompute_m200_r200(combined, out_dir, per_sample, tag, meta,
     if make_plot:
         _plot_m200_r200_hist(R200_s, M200_s, out_dir / f"M200_R200_{tag}.pdf")
 
-    return dict(M200_samples=M200_s, R200_samples=R200_s,
+    return dict(M200_samples=M200_s, R200_samples=R200_s, c200_samples=c200_s,
                 method2=method2, param_pct=param_pct, meta=meta)
 
 
@@ -841,8 +903,8 @@ def halo_density_major_axis(rho0, a, gamma, s):
     return rho0 * (s / a) ** (-gamma) * (1.0 + s / a) ** (gamma - 3.0)
 
 
-def recompute_halo_solar_density(combined, out_dir, R_sun=SOLAR_RADIUS_KPC,
-                                 n_samples=None, seed=0):
+def recompute_halo_solar_density(posterior, out_dir, R_sun=SOLAR_RADIUS_KPC,
+                                 n_samples=None, seed=0, tag="Combined"):
     """Halo (dark-matter) density at the solar radius, rho_h(R_sun), propagated
     two ways and saved.  It is independent of the M200/R200 virial definition
     (just the density profile), and reported in both Msun/kpc^3 and GeV/cm^3:
@@ -850,11 +912,14 @@ def recompute_halo_solar_density(combined, out_dir, R_sun=SOLAR_RADIUS_KPC,
       * method 1 (sample)     : rho_h(R_sun) for every posterior draw -> summary.
       * method 2 (percentile) : rho_h(R_sun) from the p16/p50/p84 parameter
         vectors of (rho0, a, gamma).
+
+    ``tag`` names the inference column the posterior belongs to (Pal5, NGC3201,
+    M68 or Combined) and suffixes the output files.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     keys = ("rho_TwoPowerTriaxial_halo", "a_TwoPowerTriaxial_halo",
             "gamma_TwoPowerTriaxial_halo")
-    S = {k: combined[k].ravel() for k in keys}
+    S = {k: posterior[k].ravel() for k in keys}
     ntot = next(iter(S.values())).size
     n = ntot if n_samples is None else min(n_samples, ntot)
     idx = (np.arange(ntot) if n == ntot
@@ -875,7 +940,7 @@ def recompute_halo_solar_density(combined, out_dir, R_sun=SOLAR_RADIUS_KPC,
         for j, lvl in enumerate(levels)}
 
     p16, p50, p84 = np.percentile(rho_sun, levels)
-    mode, minus, plus = summarize(rho_sun, 1.0, "halo/rho_sun")
+    mode, minus, plus = summarize(rho_sun, 1.0, f"{tag}/rho_sun")
     pc = MSUN_KPC3_TO_MSUN_PC3      # Msun/kpc^3 -> Msun/pc^3
     g = MSUN_KPC3_TO_GEV_CM3        # Msun/kpc^3 -> GeV/cm^3
 
@@ -885,6 +950,7 @@ def recompute_halo_solar_density(combined, out_dir, R_sun=SOLAR_RADIUS_KPC,
     L = []
     L.append(f"Halo (dark-matter) density at the solar radius R_sun = {R_sun:.3f} kpc")
     L.append("=" * 70)
+    L.append(f"inference column: {tag}")
     L.append("rho_h(R_sun) = rho0 (R/a)^-gamma (1+R/a)^(gamma-3)  [major axis, z=0]")
     L.append(f"posterior draws used: {rho_sun.size}/{n} (out of {ntot} available)")
     L.append("")
@@ -901,9 +967,9 @@ def recompute_halo_solar_density(combined, out_dir, R_sun=SOLAR_RADIUS_KPC,
     L.append("")
     txt = "\n".join(L) + "\n"
 
-    txt_path = out_dir / "halo_solar_density.txt"
+    txt_path = out_dir / f"halo_solar_density_{tag}.txt"
     txt_path.write_text(txt)
-    np.savez(out_dir / "halo_solar_density.npz",
+    np.savez(out_dir / f"halo_solar_density_{tag}.npz",
              R_sun=R_sun, rho_sun_samples=rho_sun,
              levels=np.array(levels),
              rho_sun_sample_pct_msun_kpc3=np.array([p16, p50, p84]),
@@ -994,12 +1060,60 @@ def main():
             else:
                 stats[key][col] = None
 
-    # M200 / R200: only the Combined (global) inference is available
-    m200r200 = np.load(args.m200r200, allow_pickle=True)
+    # M200 / R200 / c200 and the local halo (dark-matter) density rho_h(R_sun):
+    # recomputed for EVERY column (each single-stream posterior and the
+    # Combined one).  The table reports the total-potential definition
+    # (spherical overdensity of the full bulge+halo+disk model wrt 200
+    # rho_crit, H0 = 70 km/s/Mpc); the Combined recomputation also produces
+    # the M200/R200 histogram.  The old halo-only precomputed file is the
+    # fallback for the Combined column when its posterior is missing.
+    results_dir = data_dir / args.results_subdir
+    if results_dir.exists():
+        shutil.rmtree(results_dir)
+        print(f"[clean] removed previous {results_dir}")
     stats["M200"] = {c: None for c in columns}
     stats["R200"] = {c: None for c in columns}
-    stats["M200"]["Combined"] = summarize(m200r200["M200"], 1.0e-12, "Combined/M200")  # 10^12 M_sun
-    stats["R200"]["Combined"] = summarize(m200r200["R200"], 1.0, "Combined/R200")       # kpc
+    stats["c200"] = {c: None for c in columns}
+    stats["rho_sun"] = {c: None for c in columns}
+    rho_crit_70 = _import_worker()._rho_crit(70e-3)
+    for col in columns:
+        d = posteriors[col]
+        if d is None:
+            continue
+        slug = col.replace("~", "")
+        virial = recompute_m200_r200(
+            d, results_dir,
+            per_sample=lambda p: m200_r200_total(p, rho_crit_70),
+            tag=f"total_H0-70_{slug}",
+            meta=dict(definition="spherical overdensity on the total "
+                                 "bulge+halo+disk potential, c=200 wrt "
+                                 "rho_crit (standard observational M200c, "
+                                 f"baryons included; table value, {slug} "
+                                 "posterior"
+                                 + ("; histogram" if col == "Combined" else "")
+                                 + ")",
+                      H0=70e-3, rho_crit=rho_crit_70),
+            m200r200_file=(args.m200r200 if col == "Combined" else None),
+            n_samples=args.m200_nsamples,
+            make_plot=(col == "Combined"))
+        stats["M200"][col] = summarize(virial["M200_samples"], 1.0e-12,
+                                       f"{col}/M200")  # 10^12 M_sun
+        stats["R200"][col] = summarize(virial["R200_samples"], 1.0,
+                                       f"{col}/R200")  # kpc
+        stats["c200"][col] = summarize(virial["c200_samples"], 1.0,
+                                       f"{col}/c200")  # R200 / a_halo
+
+        # local halo (dark-matter) density at the solar radius, in Msun/pc^3
+        solar = recompute_halo_solar_density(
+            d, results_dir, R_sun=args.solar_radius,
+            n_samples=args.m200_nsamples, tag=slug)
+        stats["rho_sun"][col] = summarize(solar["rho_sun_samples"],
+                                          MSUN_KPC3_TO_MSUN_PC3,
+                                          f"{col}/rho_sun")
+    if stats["M200"]["Combined"] is None and args.m200r200.exists():
+        m200r200 = np.load(args.m200r200, allow_pickle=True)
+        stats["M200"]["Combined"] = summarize(m200r200["M200"], 1.0e-12, "Combined/M200")
+        stats["R200"]["Combined"] = summarize(m200r200["R200"], 1.0, "Combined/R200")
 
     # derived total enclosed mass within R = mass_radius kpc of the full
     # (bulge+halo+disk) potential, computed per column from each posterior (all
@@ -1022,9 +1136,11 @@ def main():
     # ── plain-text summary to stdout ─────────────────────────────────────────
     print(f"\nData directory: {data_dir}\n")
     row_labels = [(k, lbl) for k, lbl, _ in PARAMS] + [
+        ("Mwithin", f"M(<{R_mass:g} kpc) [10^11 Msun]"),
         ("Mdisk", r"Mdisk [10^10 Msun]"),
         ("M200", r"M200 [10^12 Msun]"), ("R200", r"R200 [kpc]"),
-        ("Mwithin", f"M(<{R_mass:g} kpc) [10^11 Msun]")] + [
+        ("c200", r"c200 = R200/a_halo"),
+        ("rho_sun", r"rho_NFW(R_sun) [Msun/pc^3]")] + [
         (k, lbl) for k, lbl, _ in LOCAL_PARAMS]
     header = f"{'parameter':<28}" + "".join(f"{c:>26}" for c in columns)
     print(header)
@@ -1042,16 +1158,23 @@ def main():
             fmt(stats[key][c]) for c in columns) + r" \\[4pt]"
 
     lines = [
-        r"\begin{table}",
+        r"\begin{table*}",
         r"        \caption{Posterior constraints on the global Milky Way potential",
         r"            parameters from the Gaia data: median and 16th--84th percentile interval",
         r"            of the marginal posterior for each single-stream inference and for the",
         r"            compositional (combined) one. The middle rows report the derived total",
-        r"            disk mass and virial quantities; the last rows report the per-stream",
-        r"            local (kinematic) parameters, which have no compositional counterpart.}",
+        rf"            disk mass, the total mass within {R_mass:g} kpc, the virial quantities",
+        r"            $M_{200}$, $R_{200}$ and $c_{200}=R_{200}/a_{\mathrm{NFW}}$ (defined by",
+        r"            the radius where the average interior density of the full",
+        r"            bulge + halo + disk model equals $200\rho_c$ with",
+        r"            $H_0 = 70\,\mathrm{km\,s^{-1}\,Mpc^{-1}}$) and the local dark-matter",
+        rf"            density $\rho_{{\mathrm{{NFW}},\odot}}$ at $R_\odot = {args.solar_radius:g}$\,kpc;",
+        r"            the last rows report the per-stream local (kinematic) parameters,",
+        r"            which have no compositional counterpart.}",
         r"        \label{tab:results}",
         r"        \centering",
-        r"        \renewcommand{\arraystretch}{1.4}",
+        r"        \renewcommand{\arraystretch}{1.1}",
+        r"        {\scriptsize",
         r"        \begin{tabular}{l c c c c}",
         r"            \hline\hline",
         r"            Parameter                                            & Pal~5 & NGC~3201 & M68 & Combined \\[4pt]",
@@ -1060,18 +1183,21 @@ def main():
     for key, lbl, _ in PARAMS:
         lines.append(row(lbl, key))
     lines.append(r"            \hline")
+    lines.append(row(rf"$M(<{R_mass:g}\,\mathrm{{kpc}})$ [$10^{{11}}\,\mathrm{{M_\odot}}$]",
+                     "Mwithin"))
     lines.append(row(r"$M_{\mathrm{disk}}$ [$10^{10}\,\mathrm{M_\odot}$]", "Mdisk"))
     lines.append(row(r"$M_{200}$ [$10^{12}\,\mathrm{M_\odot}$]", "M200"))
     lines.append(row(r"$R_{200}$ [kpc]", "R200"))
-    lines.append(row(rf"$M(<{R_mass:g}\,\mathrm{{kpc}})$ [$10^{{11}}\,\mathrm{{M_\odot}}$]",
-                     "Mwithin"))
+    lines.append(row(r"$c_{200}$", "c200"))
+    lines.append(row(r"$\rho_{\mathrm{NFW},\odot}$ [$\mathrm{M_\odot\,pc^{-3}}$]", "rho_sun"))
     lines.append(r"            \hline")
     for key, lbl, _ in LOCAL_PARAMS:
         lines.append(row(lbl, key))
     lines += [
         r"            \hline",
         r"        \end{tabular}",
-        r"    \end{table}",
+        r"        }",
+        r"    \end{table*}",
     ]
     tex = "\n".join(lines) + "\n"
 
@@ -1084,7 +1210,6 @@ def main():
     # 2) recomputation of M200/R200 from the posterior sample and from the
     #    p16/p50/p84 of the parameters, under two virial-mass definitions
     if posteriors["Combined"] is not None:
-        results_dir = data_dir / args.results_subdir
         results_dir.mkdir(parents=True, exist_ok=True)
         print(f"\nWriting requested results to: {results_dir}")
         plot_vcirc(posteriors["Combined"], results_dir / "vcirc_components.pdf")
@@ -1136,10 +1261,43 @@ def main():
             m200r200_file=args.m200r200, n_samples=args.m200_nsamples,
             make_plot=False)
 
-        # local halo (dark-matter) density at the solar radius
-        recompute_halo_solar_density(posteriors["Combined"], results_dir,
-                                     R_sun=args.solar_radius,
-                                     n_samples=args.m200_nsamples)
+        # galpy / gala halo convention: flattening q ignored (virial quantities
+        # of the spherical halo with the same rho0, a, gamma), wrt the critical
+        # density.  With q ~ 0.77 this is the single largest reason the paper /
+        # pipeline definitions sit below what galpy or gala would report for
+        # the same halo parameters (~ +35% in M200 at the posterior median).
+        for H0 in (71e-3, 67.4e-3):
+            rc = worker._rho_crit(H0)
+            recompute_m200_r200(
+                posteriors["Combined"], results_dir,
+                per_sample=lambda p, rc=rc: m200_r200_spherical_equivalent(p, rc),
+                tag=f"sphequiv_H0-{H0*1e3:g}",
+                meta=dict(definition="spherical-equivalent halo (q -> 1), "
+                                     "c=200 wrt rho_crit (galpy rvir/conc with "
+                                     "wrtcrit=True; gala NFWPotential.M200/"
+                                     "R200/c200 -- both ignore the axis ratios)",
+                          H0=H0, rho_crit=rc),
+                m200r200_file=args.m200r200, n_samples=args.m200_nsamples,
+                make_plot=False)
+
+        # standard observational M200c: spherical overdensity on the TOTAL
+        # bulge+halo+disk potential, so the virial mass includes the baryons.
+        # The per-stream table / histogram values (tags total_H0-70_<stream>)
+        # are computed earlier, before the table is written; these two are
+        # cosmology comparisons (Combined posterior only).
+        for H0 in (71e-3, 67.4e-3):
+            rc = worker._rho_crit(H0)
+            recompute_m200_r200(
+                posteriors["Combined"], results_dir,
+                per_sample=lambda p, rc=rc: m200_r200_total(p, rc),
+                tag=f"total_H0-{H0*1e3:g}",
+                meta=dict(definition="spherical overdensity on the total "
+                                     "bulge+halo+disk potential, c=200 wrt "
+                                     "rho_crit (standard observational M200c, "
+                                     "baryons included)",
+                          H0=H0, rho_crit=rc),
+                m200r200_file=args.m200r200, n_samples=args.m200_nsamples,
+                make_plot=False)
 
         # total enclosed mass within R = mass_radius kpc (per-column detail);
         # reuses the sample arrays already computed for the table row
