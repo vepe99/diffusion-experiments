@@ -36,6 +36,8 @@ dependencies = [
     "pyzmq>=27.1.0",
     "StreaMax",
     "scikit-learn",
+    "tarp",
+    "deprecation",
 ]
 
 
