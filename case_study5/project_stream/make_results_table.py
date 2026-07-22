@@ -321,10 +321,17 @@ def vcirc_components_at(p, R):
     return out
 
 
-def vcirc_ensemble(combined, R_grid, n_samples=None, seed=0):
-    """Per-radius (p16, p50, p84) of vcirc over Combined posterior draws.
+def vcirc_curves(combined, R_grid, n_samples=None, seed=0):
+    """Raw posterior-predictive circular-velocity curves over posterior draws.
 
-    n_samples=None uses every available posterior sample.
+    Evaluates vcirc(R_grid) for each (optionally subsampled) posterior draw of
+    the full bulge+halo+disk potential and returns
+    ``(curves, n_requested)`` where ``curves`` is the (Ndraws_ok, len(R_grid))
+    array of finite curves (draws that fail or give non-finite curves are
+    dropped) and ``n_requested`` is how many draws were attempted.  This is the
+    shared building block behind both the plotted 16th--84th band
+    (``vcirc_ensemble``) and the posterior-predictive calibration check
+    (``calibrate_vcirc``).
     """
     keys = [k for k, _, _ in PARAMS]
     samples = np.column_stack([combined[k].ravel() for k in keys])  # (Ntot, 7)
@@ -341,7 +348,15 @@ def vcirc_ensemble(combined, R_grid, n_samples=None, seed=0):
             continue
         if np.all(np.isfinite(v)):
             curves.append(v)
-    curves = np.asarray(curves)
+    return np.asarray(curves), n
+
+
+def vcirc_ensemble(combined, R_grid, n_samples=None, seed=0):
+    """Per-radius (p16, p50, p84) of vcirc over Combined posterior draws.
+
+    n_samples=None uses every available posterior sample.
+    """
+    curves, n = vcirc_curves(combined, R_grid, n_samples=n_samples, seed=seed)
     print(f"    used {len(curves)}/{n} posterior draws for the band")
     p16, p50, p84 = np.percentile(curves, [16, 50, 84], axis=0)
     return p16, p50, p84
@@ -610,6 +625,194 @@ def plot_vcirc_streams(posteriors, out_pdf):
     fig.savefig(out_pdf, dpi=150, bbox_inches='tight')
     plt.close(fig)
     print(f"\nPer-stream rotation curve written to: {out_pdf}")
+
+
+def calibrate_vcirc(combined, out_dir, obs_r=OBS_R, obs_vc=OBS_VC, obs_svc=OBS_SVC,
+                    n_samples=None, seed=0, tag="Zhou2023", n_levels=101):
+    """Posterior-predictive calibration of the rotation curve against the data.
+
+    Checks whether the Global (Combined) posterior-predictive rotation curve is
+    *calibrated* with respect to the observed Zhou+2023 points: if the model is
+    well calibrated, the central q credible band of the predictive should
+    contain a fraction q of the data for every q (so, in particular, the 68%
+    band should contain ~68% of the points).
+
+    The predictive for an *observation* folds the measurement error into the
+    model: for every posterior draw of vcirc(R_j) we add one Gaussian noise
+    realisation N(0, sigma_j), so the predictive distribution at radius R_j is
+    the model vcirc ensemble convolved with the observational noise.  For each
+    data point we then compute the probability-integral transform (PIT)
+
+        u_j = P_pred( V <= V_obs,j )                     (fraction of predictive
+                                                          draws at or below V_obs)
+
+    which is Uniform(0,1) under perfect calibration.  From the PIT values:
+
+      * central-interval coverage: the observation lies inside the central q
+        band iff (1-q)/2 <= u_j <= (1+q)/2, so the empirical coverage at level q
+        is the fraction of points whose PIT falls in that window;
+      * PIT ECDF: the empirical CDF of the u_j should track the diagonal ("the
+        p-th percentile holds p% of the data").
+
+    Writes ``calibration_vcirc.pdf`` (two panels: coverage curve and PIT ECDF),
+    ``calibration_vcirc.txt`` and ``calibration_vcirc.npz`` into ``out_dir``, and
+    returns a summary dict.
+    """
+    import agama
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    agama.setUnits(length=1, velocity=1, mass=1)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rng = np.random.default_rng(seed)
+
+    print(f"\nCalibrating the rotation curve against {tag} "
+          f"({obs_r.size} points):")
+    curves, n_req = vcirc_curves(combined, obs_r, n_samples=n_samples, seed=seed)
+    ndraw, npt = curves.shape
+    print(f"    used {ndraw}/{n_req} posterior draws, {npt} data points")
+
+    # posterior-predictive for the observation = model vcirc + measurement
+    # noise: one Gaussian N(0, sigma_j) realisation per posterior draw
+    noise = rng.standard_normal(curves.shape) * obs_svc[None, :]
+    pred = curves + noise                               # (ndraw, npt)
+
+    # PIT: fraction of predictive draws at or below the observed value (the
+    # continuous noise makes exact ties vanishingly unlikely)
+    pit = np.mean(pred <= obs_vc[None, :], axis=0)      # (npt,)
+
+    # central-interval coverage curve
+    levels = np.linspace(0.0, 1.0, n_levels)
+    cover = np.array([np.mean((pit >= (1.0 - q) / 2.0) & (pit <= (1.0 + q) / 2.0))
+                      for q in levels])
+    # 1-sigma binomial spread expected around the diagonal for npt points
+    binom = np.sqrt(levels * (1.0 - levels) / npt)
+
+    # headline check: the 68% band
+    q68 = 0.68
+    cover68 = float(np.mean((pit >= (1.0 - q68) / 2.0) & (pit <= (1.0 + q68) / 2.0)))
+    n68 = int(round(cover68 * npt))
+
+    # PIT ECDF and a Kolmogorov-Smirnov distance from uniform
+    pit_sorted = np.sort(pit)
+    ecdf = np.arange(1, npt + 1) / npt
+    ks = float(np.max(np.abs(pit_sorted - ecdf)))
+
+    print(f"    68% band contains {cover68*100:.1f}% of the data "
+          f"({n68}/{npt} points; target 68%)")
+
+    # correlation of PIT with radius: a flat, near-constant PIT means a coherent
+    # (radially global) model offset rather than radially structured miscalib.
+    r_pit_corr = float(np.corrcoef(obs_r, pit)[0, 1]) if npt > 1 else float("nan")
+    print(f"    corr(R, PIT) = {r_pit_corr:+.3f} "
+          f"(~0 with a high mean PIT => coherent offset at all radii)")
+
+    # ── figure: coverage curve + PIT ECDF + PIT vs R ─────────────────────────
+    fig, (ax_c, ax_p, ax_r) = plt.subplots(1, 3, figsize=(10.5, 3.2))
+
+    ax_c.fill_between(levels, np.clip(levels - binom, 0, 1),
+                      np.clip(levels + binom, 0, 1), color="0.8", lw=0,
+                      label=r"$\pm1\sigma$ (binomial, $n=%d$)" % npt)
+    ax_c.plot([0, 1], [0, 1], color="k", lw=1, ls="--", label="perfect calibration")
+    ax_c.plot(levels, cover, color="blue", lw=1.6, label="empirical coverage")
+    ax_c.axvline(q68, color="crimson", lw=1, ls=":")
+    ax_c.plot(q68, cover68, "o", color="crimson", ms=5,
+              label=rf"68%% band: {cover68*100:.0f}%%")
+    ax_c.set_xlim(0, 1); ax_c.set_ylim(0, 1)
+    ax_c.set_xlabel("nominal central credible level $q$")
+    ax_c.set_ylabel("fraction of data inside central $q$ band")
+    ax_c.set_title("Coverage", fontsize=10)
+    ax_c.legend(fontsize=6.5, loc="upper left")
+
+    ax_p.plot([0, 1], [0, 1], color="k", lw=1, ls="--", label="Uniform(0,1)")
+    ax_p.step(np.concatenate([[0.0], pit_sorted, [1.0]]),
+              np.concatenate([[0.0], ecdf, [1.0]]), where="post",
+              color="blue", lw=1.6, label="PIT ECDF")
+    ax_p.set_xlim(0, 1); ax_p.set_ylim(0, 1)
+    ax_p.set_xlabel("PIT value $u$")
+    ax_p.set_ylabel("empirical CDF")
+    ax_p.set_title(f"PIT reliability (KS = {ks:.3f})", fontsize=10)
+    ax_p.legend(fontsize=6.5, loc="upper left")
+
+    # PIT vs radius: reveals whether the offset is radially structured or a
+    # coherent global shift.  The 0.16/0.50/0.84 guides mark the central-68%
+    # band edges and the median of a calibrated Uniform PIT.
+    ax_r.axhspan(0.16, 0.84, color="0.85", lw=0, label="central 68% (calibrated)")
+    for y, ls in ((0.5, "--"), (0.16, ":"), (0.84, ":")):
+        ax_r.axhline(y, color="k", lw=0.8, ls=ls)
+    ax_r.plot(obs_r, pit, "o", color="blue", ms=4)
+    ax_r.set_xlim(obs_r.min() - 0.5, obs_r.max() + 0.5)
+    ax_r.set_ylim(0, 1)
+    ax_r.set_xlabel("R [kpc]")
+    ax_r.set_ylabel("PIT value $u$")
+    ax_r.set_title(f"PIT vs radius (corr = {r_pit_corr:+.2f})", fontsize=10)
+    ax_r.legend(fontsize=6.5, loc="lower right")
+
+    fig.suptitle(f"Rotation-curve posterior-predictive calibration vs {tag}",
+                 fontsize=11)
+    fig.tight_layout()
+    out_pdf = out_dir / "calibration_vcirc.pdf"
+    fig.savefig(out_pdf, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+    # ── text summary ─────────────────────────────────────────────────────────
+    report_q = (0.5, 0.68, 0.90, 0.95)
+    L = []
+    L.append("Posterior-predictive calibration of the rotation curve")
+    L.append("=" * 70)
+    L.append(f"data                 : {tag} ({npt} points, "
+             f"R = {obs_r.min():.2f}-{obs_r.max():.2f} kpc)")
+    L.append(f"posterior draws used : {ndraw}/{n_req}")
+    L.append("predictive           : model vcirc ensemble + N(0, sigma_obs) "
+             "measurement noise")
+    L.append("")
+    L.append("Central-interval coverage (fraction of data inside the central "
+             "q predictive band):")
+    L.append(f"    {'nominal q':>12}{'empirical':>12}{'count':>12}"
+             f"{'+/-1sig band':>16}")
+    for q in report_q:
+        emp = float(np.mean((pit >= (1.0 - q) / 2.0) & (pit <= (1.0 + q) / 2.0)))
+        cnt = int(round(emp * npt))
+        b = np.sqrt(q * (1.0 - q) / npt)
+        L.append(f"    {q:>12.2f}{emp:>12.3f}{cnt:>8d}/{npt:<3d}"
+                 f"   [{max(0,q-b):.3f}, {min(1,q+b):.3f}]")
+    L.append("")
+    L.append(f">>> 68% band contains {cover68*100:.1f}% of the data "
+             f"({n68}/{npt}); well-calibrated target is 68%.")
+    L.append("")
+    L.append("PIT diagnostics (Uniform(0,1) under perfect calibration):")
+    L.append(f"    mean   PIT = {pit.mean():.3f}  (0.500 ideal)")
+    L.append(f"    median PIT = {np.median(pit):.3f}  (0.500 ideal)")
+    L.append(f"    KS distance from uniform = {ks:.3f}")
+    L.append(f"    corr(R, PIT) = {r_pit_corr:+.3f}")
+    L.append("")
+    L.append("Radial structure:")
+    L.append("    A near-zero corr(R, PIT) together with a high, roughly constant")
+    L.append("    mean PIT indicates a COHERENT (radially global) offset -- the data")
+    L.append("    sit in the same tail of the predictive at every radius -- rather")
+    L.append("    than radially structured miscalibration.  See the PIT-vs-R panel.")
+    L.append("")
+    L.append("CAVEAT -- points are NOT independent:")
+    L.append("    each posterior draw is a single smooth rotation curve, so a draw")
+    L.append("    that runs low runs low at every radius.  The 34 PIT values are")
+    L.append("    therefore strongly correlated across R (few effective independent")
+    L.append("    constraints, not 34).  The +/-1sigma binomial band and the KS")
+    L.append("    distance above assume independence and are consequently TOO")
+    L.append("    OPTIMISTIC; treat them as qualitative.  The coherent-offset")
+    L.append("    signal (mean PIT far from 0.5 at all radii) is the robust finding.")
+    L.append("")
+    txt = "\n".join(L) + "\n"
+
+    txt_path = out_dir / "calibration_vcirc.txt"
+    txt_path.write_text(txt)
+    np.savez(out_dir / "calibration_vcirc.npz",
+             obs_r=obs_r, obs_vc=obs_vc, obs_svc=obs_svc,
+             pit=pit, levels=levels, coverage=cover, binom_1sig=binom,
+             cover68=cover68, ks=ks, r_pit_corr=r_pit_corr, ndraw=ndraw, tag=tag)
+    print(txt)
+    print(f"Calibration written to:\n    {out_pdf}\n    {txt_path}")
+    return dict(pit=pit, levels=levels, coverage=cover, cover68=cover68, ks=ks)
 
 
 # all 7 potential parameters are drawn for the M200/R200 recomputation: the
@@ -1005,10 +1208,34 @@ def main():
     ap.add_argument("--mass-nsamples", type=int, default=None,
                     help="cap the number of posterior draws used for the total "
                          "enclosed-mass row (default: use all)")
+    ap.add_argument("--calib-nsamples", type=int, default=None,
+                    help="cap the number of posterior draws used for the "
+                         "rotation-curve calibration check (default: use all)")
+    ap.add_argument("--only-calibration", action="store_true",
+                    help="fast path: skip the whole table / M200 recomputation "
+                         "and only run the rotation-curve posterior-predictive "
+                         "calibration on the Combined posterior, writing "
+                         "calibration_vcirc.* into the results subfolder "
+                         "(existing files in that subfolder are left untouched)")
     args = ap.parse_args()
 
     data_dir = args.posterior.parent
     out_path = args.out or (data_dir / "results_table.tex")
+
+    # ── fast path: rotation-curve calibration only ───────────────────────────
+    # Loads just the Combined (global) posterior and runs calibrate_vcirc,
+    # writing into the results subfolder without wiping it, so it can be re-run
+    # cheaply after a full run.
+    if args.only_calibration:
+        results_dir = data_dir / args.results_subdir
+        combined_path = data_dir / STREAM_FILES["Combined"]
+        if not combined_path.exists():
+            raise SystemExit(f"[error] Combined posterior not found: {combined_path}")
+        combined = np.load(combined_path, allow_pickle=True)
+        results_dir.mkdir(parents=True, exist_ok=True)
+        print(f"[only-calibration] {combined_path}\n              -> {results_dir}")
+        calibrate_vcirc(combined, results_dir, n_samples=args.calib_nsamples)
+        return
 
     columns = list(STREAM_FILES.keys())
 
@@ -1217,6 +1444,13 @@ def main():
         # rotation curve predicted by each single-stream posterior (Pal5,
         # NGC3201, M68), same layout / observations as vcirc_components.pdf
         plot_vcirc_streams(posteriors, results_dir / "vcirc_streams.pdf")
+
+        # posterior-predictive calibration of the Global rotation curve against
+        # the Zhou+2023 data: does the central q band contain a fraction q of
+        # the points (in particular, does the 68% band hold ~68%)?  Produces
+        # calibration_vcirc.pdf/.txt/.npz.
+        calibrate_vcirc(posteriors["Combined"], results_dir,
+                        n_samples=args.calib_nsamples)
 
         # paper virial definition (ellipsoidal halo mass, H0 = 71 km/s/Mpc):
         # M200 = (4pi/3) r200^3 * 200 * rho_crit = 4pi q_h int_0^r200 s^2 rho_h ds.
